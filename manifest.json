@@ -1,1 +1,8 @@
-{"name":"水泳コーチ・タイム管理","short_name":"水泳タイム管理","start_url":"./","display":"standalone","background_color":"#eef7fc","theme_color":"#087fd1","lang":"ja","icons":[]}
+{
+  "name":"水泳コーチ・タイム管理",
+  "short_name":"水泳タイム",
+  "start_url":"./",
+  "display":"standalone",
+  "background_color":"#eef7fc",
+  "theme_color":"#0b84d8"
+}
