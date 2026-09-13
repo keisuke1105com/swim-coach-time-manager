@@ -43,6 +43,74 @@ function sec(t){
   return Number.isFinite(n)?n:NaN;
 }
 
+function formatTimeInput(){
+  const el=$('#itime');
+  if(!el)return;
+
+  let t=String(el.value||'').trim();
+  if(!t)return;
+
+  t=t.replace(/：/g,':').replace(/。/g,'.');
+
+  const dots=(t.match(/\./g)||[]).length;
+  if(!t.includes(':') && dots===2){
+    const p=t.split('.');
+    if(p.length===3){
+      el.value=p[0]+':'+p[1]+'.'+p[2];
+    }
+  }
+
+  preview();
+}  
+function formatTimeInput(){
+  const el=$('#itime');
+  if(!el)return;
+
+  let t=String(el.value||'').trim();
+  if(!t)return;
+
+  t=t.replace(/：/g,':').replace(/。/g,'.');
+
+  // 1.13.64 → 1:13.64
+  const dots=(t.match(/\./g)||[]).length;
+  if(!t.includes(':') && dots===2){
+    const p=t.split('.');
+    if(p.length===3){
+      el.value=p[0]+':'+p[1]+'.'+p[2];
+    }
+  }
+
+  preview();
+}
+  t=String(t).trim();
+  if(!t)return NaN;
+
+  // 全角記号を半角へ
+  t=t.replace(/：/g,':').replace(/。/g,'.');
+
+  // iPhone入力対応
+  // 例 1.13.64 → 1:13.64
+  const dots=(t.match(/\./g)||[]).length;
+  if(!t.includes(':') && dots===2){
+    const p=t.split('.');
+    t=p[0]+':'+p[1]+'.'+p[2];
+  }
+
+  // 1:13.64 → 秒へ変換
+  let p=t.split(':');
+  if(p.length===2){
+    const m=Number(p[0]);
+    const s=Number(p[1]);
+    return Number.isFinite(m)&&Number.isFinite(s)
+      ? m*60+s
+      : NaN;
+  }
+
+  // 50mなど 32.45 はそのまま秒
+  const n=Number(t);
+  return Number.isFinite(n)?n:NaN;
+}
+
 function fmt(v){if(v==null||isNaN(v))return '-';let m=Math.floor(v/60),s=v-m*60;return (m?m+':':'')+s.toFixed(2).padStart(m?5:0,'0')}
 function playerById(id){return PLAYERS.find(x=>x.id===id)}
 function standard(playerId,stroke,distance,course){let p=playerById(playerId);if(!p)return null;let x=STANDARDS.find(x=>x.event===stroke&&parseInt(x.distance)===Number(distance)&&x.division===p.age_group);if(!x)return null;return p.gender==='男子'?(course==='長水路'?x.maleLC:x.maleSC):(course==='長水路'?x.femaleLC:x.femaleSC)}
@@ -436,5 +504,5 @@ async function migrateLocalV3(){
   renderHome();
 }
 function go(tab){$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis()}
-$$('.tabs button').forEach(b=>b.onclick=()=>go(b.dataset.tab));init();
+$$('.tabs button').forEach(b=>b.onclick=()=>go(b.dataset.tab));document.addEventListener('blur',e=>{if(e.target&&e.target.id==='itime')formatTimeInput()},true);init();
 </script></body></html>
