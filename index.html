@@ -70,7 +70,7 @@ function tokyoScStandard(playerId,stroke,distance){
 
   const event=String(stroke||'').trim();
   const dist=Number(distance);
-
+console.log('東京SC確認', {gender, age, event, dist, total:window.TOKYO_SC_STANDARDS.length});
   const x=window.TOKYO_SC_STANDARDS.find(r=>
     String(r.gender).trim()===gender &&
     String(r.age).trim()===age &&
