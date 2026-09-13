@@ -39,8 +39,204 @@ function renderPlayers(){ $('#players').innerHTML=`<div class="card"><div class=
 function showAddPlayer(p=null){$('#playerForm').innerHTML=`<div class="result"><h3>${p?'選手編集':'新しい選手'}</h3><div class="field"><label>氏名</label><input id="pn" value="${p?.name||''}"></div><div class="field"><label>区分</label><select id="pd">${['9歳以下','10歳','11歳','12歳','13歳','14歳','15〜16歳','CS'].map(x=>`<option ${p?.age_group===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>性別</label><select id="pg"><option ${p?.gender==='男子'?'selected':''}>男子</option><option ${p?.gender==='女子'?'selected':''}>女子</option></select></div><div class="field"><label>生年月日（任意）</label><input id="pb" type="date" value="${p?.birth_date||''}"></div><div class="field"><label>チーム・メモ（任意）</label><input id="pt" value="${p?.team||''}"></div><div class="actions"><button onclick="savePlayer('${p?.id||''}')">保存</button><button class="secondary" onclick="$('#playerForm').innerHTML=''">キャンセル</button></div></div>`}
 async function savePlayer(id=''){let payload={name:$('#pn').value.trim(),age_group:$('#pd').value,gender:$('#pg').value,birth_date:$('#pb').value||null,team:$('#pt').value.trim()||null,active:true};if(!payload.name){alert('氏名を入力してください');return}if(!id)payload.sort_order=(PLAYERS.reduce((m,p)=>Math.max(m,p.sort_order||0),0)+1);let q=id?sb.from('swimmers').update(payload).eq('id',id):sb.from('swimmers').insert(payload);let {error}=await q;if(error){alert(error.message);return}await loadCloud();renderPlayers();renderHome()}
 async function removePlayer(id){if(!confirm('この選手を一覧から外しますか？過去記録は残ります。'))return;let {error}=await sb.from('swimmers').update({active:false}).eq('id',id);if(error)alert(error.message);else{await loadCloud();renderPlayers();renderHome()}}
-function filterPlayers(){let q=($('#pq')?.value||'').toLowerCase();$('#plist').innerHTML=PLAYERS.filter(p=>p.name.toLowerCase().includes(q)).map(p=>{let n=records.filter(r=>r.swimmer_id===p.id).length,j=records.filter(r=>r.swimmer_id===p.id&&r.is_jo_qualified).length;return `<div class="row"><div><b>${p.name}</b><br><span class="muted">${p.age_group||'-'}・${p.gender||'-'}・${n}件</span></div><div>${j?'<span class="badge">JO突破あり</span> ':''}<button class="secondary" onclick="selectedPlayerId='${p.id}';go('input')">入力</button> <button class="secondary" onclick='showAddPlayer(${JSON.stringify(p)})'>編集</button> <button class="danger" onclick="removePlayer('${p.id}')">外す</button></div></div>`}).join('')||'<p class="muted">選手がいません。</p>'}
-function renderInput(){if(!selectedPlayerId)selectedPlayerId=PLAYERS[0]?.id||'';if(!PLAYERS.length){$('#input').innerHTML='<div class="card"><h2>⏱️ タイム入力</h2><p>先に選手を登録してください。</p></div>';return}$('#input').innerHTML=`<div class="card"><h2>⏱️ タイム入力</h2><div class="field"><label>選手</label><select id="ip" onchange="selectedPlayerId=this.value;preview()">${PLAYERS.map(p=>`<option value="${p.id}" ${p.id===selectedPlayerId?'selected':''}>${p.name}</option>`).join('')}</select></div><div class="field"><label>種目</label><div class="eventgrid">${strokes.map(e=>`<button class="${e===selectedStroke?'active':''}" onclick="setStroke('${e}')">${e}</button>`).join('')}</div></div><div class="field"><label>距離</label><div class="eventgrid">${distances.map(d=>`<button class="${d===selectedDistance?'active':''}" onclick="setDistance(${d})">${d}m</button>`).join('')}</div></div><div class="field"><label>水路</label><div class="eventgrid"><button class="${selectedCourse==='長水路'?'active':''}" onclick="setCourse('長水路')">長水路</button><button class="${selectedCourse==='短水路'?'active':''}" onclick="setCourse('短水路')">短水路</button></div></div><div class="field"><label>タイム</label><input class="time" id="itime" inputmode="decimal" placeholder="1:02.35" oninput="preview()"></div><div class="field"><label>大会名（任意）</label><input id="ime" placeholder="○○大会"></div><div id="preview"></div><button style="width:100%;font-size:18px" onclick="addRecord()">記録を保存</button></div>`;preview()}
+function filterPlayers(){let q=($('#pq')?.value||'').toLowerCase();$('#plist').innerHTML=PLAYERS.filter(p=>p.name.toLowerCase().includes(q)).map(p=>{let n=records.filter(r=>r.swimmer_id===p.id).length,j=records.filter(r=>r.swimmer_id===p.id&&r.is_jo_qualified).length;return `<div class="row"><div><b>${p.name}</b><br><span class="muted">${p.age_group||'-'}・${p.gender||'-'}・${n}件</span></div><div>${j?'<span class="badge">JO突破あり</span> ':''}<button class="secondary" onclick="showPlayerDetail('${p.id}')">詳細</button><button class="secondary" onclick="selectedPlayerId='${p.id}';go('input')">入力</button> <button class="secondary" onclick='showAddPlayer(${JSON.stringify(p)})'>編集</button> <button class="danger" onclick="removePlayer('${p.id}')">外す</button></div></div>`}).join('')||'<p class="muted">選手がいません。</p>'}
+function showPlayerDetail(id){
+  let p=playerById(id);
+  if(!p)return;
+
+  let rs=records
+    .filter(r=>r.swimmer_id===id)
+    .sort((a,b)=>
+      String(a.record_date||'').localeCompare(String(b.record_date||''))
+    );
+
+  let bestMap={};
+
+  rs.forEach(r=>{
+    let key=`${r.stroke}|${r.distance}|${r.course}`;
+
+    if(
+      !bestMap[key] ||
+      Number(r.time_seconds)<Number(bestMap[key].time_seconds)
+    ){
+      bestMap[key]=r;
+    }
+  });
+
+  let bests=Object.values(bestMap).sort((a,b)=>{
+    if(a.stroke!==b.stroke)return a.stroke.localeCompare(b.stroke,'ja');
+    if(Number(a.distance)!==Number(b.distance)){
+      return Number(a.distance)-Number(b.distance);
+    }
+    return a.course.localeCompare(b.course,'ja');
+  });
+
+  let joCount=bests.filter(r=>{
+    let st=standard(
+      id,
+      r.stroke,
+      r.distance,
+      r.course
+    );
+    return st!=null && Number(r.time_seconds)<=st;
+  }).length;
+
+  let bestHtml=bests.map(r=>{
+    let st=standard(
+      id,
+      r.stroke,
+      r.distance,
+      r.course
+    );
+
+    let s=Number(r.time_seconds);
+    let jo=st!=null && s<=st;
+    let diff=st!=null ? s-st : null;
+
+    let joText='JO標準なし';
+
+    if(st!=null){
+      joText=jo
+        ? `🏆 JO突破 ${Math.abs(diff).toFixed(2)}秒`
+        : `JOまであと ${diff.toFixed(2)}秒`;
+    }
+
+    return `
+      <div class="row">
+        <div>
+          <b>${r.stroke} ${r.distance}m</b><br>
+          <span class="muted">${r.course}</span><br>
+          <span class="muted">${joText}</span>
+        </div>
+        <div style="text-align:right">
+          <b style="font-size:20px">${fmt(s)}</b><br>
+          ${jo?'<span class="badge">JO突破</span>':''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  let pastBest={};
+
+  let history=rs.map(r=>{
+    let key=`${r.stroke}|${r.distance}|${r.course}`;
+    let s=Number(r.time_seconds);
+    let previous=pastBest[key];
+
+    let improvement='';
+
+    if(previous==null){
+      improvement='初回記録';
+      pastBest[key]=s;
+    }else if(s<previous){
+      improvement=`🔥 ${(previous-s).toFixed(2)}秒更新`;
+      pastBest[key]=s;
+    }
+
+    return {
+      ...r,
+      improvement
+    };
+  }).reverse();
+
+  let historyHtml=history.map(r=>`
+    <div class="row">
+      <div>
+        <b>${r.record_date||''}</b><br>
+        <span class="muted">
+          ${r.stroke} ${r.distance}m・${r.course}
+        </span>
+        ${r.meet_name
+          ? `<br><span class="muted">${r.meet_name}</span>`
+          : ''
+        }
+        ${r.improvement
+          ? `<br><span class="badge">${r.improvement}</span>`
+          : ''
+        }
+      </div>
+      <div style="text-align:right">
+        <b>${fmt(r.time_seconds)}</b><br>
+        ${r.is_jo_qualified
+          ? '<span class="badge">JO突破</span>'
+          : ''
+        }
+      </div>
+    </div>
+  `).join('');
+
+  $('#players').innerHTML=`
+    <div class="card">
+
+      <button
+        class="secondary"
+        onclick="renderPlayers()"
+        style="margin-bottom:14px"
+      >
+        ← 選手一覧へ戻る
+      </button>
+
+      <h2>🏊 ${p.name}</h2>
+
+      <p class="muted">
+        ${p.age_group||'-'} ・
+        ${p.gender||'-'}
+        ${p.team?' ・ '+p.team:''}
+      </p>
+
+      <div class="grid">
+
+        <div class="card">
+          <div class="label">記録数</div>
+          <div class="stat">${rs.length}</div>
+        </div>
+
+        <div class="card">
+          <div class="label">ベスト種目数</div>
+          <div class="stat">${bests.length}</div>
+        </div>
+
+        <div class="card">
+          <div class="label">JO突破種目</div>
+          <div class="stat">${joCount}</div>
+        </div>
+
+      </div>
+
+      <div class="actions" style="margin-bottom:16px">
+
+        <button
+          onclick="
+            selectedPlayerId='${p.id}';
+            go('input')
+          "
+        >
+          ＋ この選手のタイム入力
+        </button>
+
+      </div>
+
+      <h3>🏆 種目別ベスト</h3>
+
+      ${
+        bestHtml ||
+        '<p class="muted">まだ記録がありません。</p>'
+      }
+
+    </div>
+
+    <div class="card">
+
+      <h3>📈 成長履歴</h3>
+
+      ${
+        historyHtml ||
+        '<p class="muted">まだ記録がありません。</p>'
+      }
+
+    </div>
+  `;
+}function renderInput(){if(!selectedPlayerId)selectedPlayerId=PLAYERS[0]?.id||'';if(!PLAYERS.length){$('#input').innerHTML='<div class="card"><h2>⏱️ タイム入力</h2><p>先に選手を登録してください。</p></div>';return}$('#input').innerHTML=`<div class="card"><h2>⏱️ タイム入力</h2><div class="field"><label>選手</label><select id="ip" onchange="selectedPlayerId=this.value;preview()">${PLAYERS.map(p=>`<option value="${p.id}" ${p.id===selectedPlayerId?'selected':''}>${p.name}</option>`).join('')}</select></div><div class="field"><label>種目</label><div class="eventgrid">${strokes.map(e=>`<button class="${e===selectedStroke?'active':''}" onclick="setStroke('${e}')">${e}</button>`).join('')}</div></div><div class="field"><label>距離</label><div class="eventgrid">${distances.map(d=>`<button class="${d===selectedDistance?'active':''}" onclick="setDistance(${d})">${d}m</button>`).join('')}</div></div><div class="field"><label>水路</label><div class="eventgrid"><button class="${selectedCourse==='長水路'?'active':''}" onclick="setCourse('長水路')">長水路</button><button class="${selectedCourse==='短水路'?'active':''}" onclick="setCourse('短水路')">短水路</button></div></div><div class="field"><label>タイム</label><input class="time" id="itime" inputmode="decimal" placeholder="1:02.35" oninput="preview()"></div><div class="field"><label>大会名（任意）</label><input id="ime" placeholder="○○大会"></div><div id="preview"></div><button style="width:100%;font-size:18px" onclick="addRecord()">記録を保存</button></div>`;preview()}
 function setStroke(e){selectedStroke=e;renderInput()}function setDistance(d){selectedDistance=d;renderInput()}function setCourse(p){selectedCourse=p;renderInput()}
 function preview(){let t=$('#itime')?.value||'',s=sec(t),playerId=$('#ip')?.value||selectedPlayerId,st=standard(playerId,selectedStroke,selectedDistance,selectedCourse),b=best(playerId,selectedStroke,selectedDistance,selectedCourse);if(isNaN(s)){if($('#preview'))$('#preview').innerHTML='';return}let jo=st!=null&&s<=st,upd=b==null||s<b;$('#preview').innerHTML=`<div class="result ${jo?'good':'bad'}"><b>${jo?'🏆 JO突破':'🎯 JO未突破'}</b><br>JO標準：${fmt(st)}　${st!=null?(jo?'（'+(st-s).toFixed(2)+'秒クリア）':'（あと '+(s-st).toFixed(2)+'秒）'):'（標準記録なし）'}<br>自己ベスト：${fmt(b)}　${upd&&b!=null?'🔥 '+(b-s).toFixed(2)+'秒更新':''}</div>`}
 async function addRecord(){let playerId=$('#ip').value,t=$('#itime').value,s=sec(t);if(!playerId||isNaN(s)){alert('選手と正しいタイムを入力してください。');return}let st=standard(playerId,selectedStroke,selectedDistance,selectedCourse),b=best(playerId,selectedStroke,selectedDistance,selectedCourse),jo=st!=null&&s<=st,isBest=b==null||s<b;let payload={swimmer_id:playerId,stroke:selectedStroke,distance:selectedDistance,course:selectedCourse,time_seconds:s,meet_name:$('#ime').value||null,record_date:new Date().toISOString().slice(0,10),memo:null,is_personal_best:isBest,is_jo_qualified:jo};let {error}=await sb.from('swim_records').insert(payload);if(error){alert(error.message);return}await loadCloud();alert(isBest?(jo?'🏆 JO突破＆自己ベスト更新！':'🔥 自己ベスト更新！'):(jo?'🏆 JO突破！':'記録を保存しました'));renderHome();renderInput()}
