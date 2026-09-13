@@ -26,41 +26,62 @@ function fmt(v){if(v==null||isNaN(v))return '-';let m=Math.floor(v/60),s=v-m*60;
 function playerById(id){return PLAYERS.find(x=>x.id===id)}
 function standard(playerId,stroke,distance,course){let p=playerById(playerId);if(!p)return null;let x=STANDARDS.find(x=>x.event===stroke&&parseInt(x.distance)===Number(distance)&&x.division===p.age_group);if(!x)return null;return p.gender==='男子'?(course==='長水路'?x.maleLC:x.maleSC):(course==='長水路'?x.femaleLC:x.femaleSC)}
 function tokyoScStandard(playerId,stroke,distance){
-  let p=playerById(playerId);
-  if(!p || !window.TOKYO_SC_STANDARDS)return null;
+  const p=playerById(playerId);
 
-  // 性別表記を東京SCデータに合わせる
-  let gender=String(p.gender||'').trim();
-  if(gender==='男') gender='男子';
-  if(gender==='女') gender='女子';
-
-  // 年齢区分を東京SCデータに合わせる
-  let age=String(p.age_group||'').trim();
-
-  // 「14」→「14歳」のような場合にも対応
-  if(/^\d+$/.test(age)){
-    age=`${age}歳`;
+  if(!p || !Array.isArray(window.TOKYO_SC_STANDARDS)){
+    return null;
   }
 
-  // 東京SCは15歳・16歳を別々に判定するため、
-  // 現在のまとめ区分では一旦対象外
+  // 性別を統一
+  const g=String(p.gender||'').trim();
+  const gender=
+    g.includes('女') ? '女子' :
+    g.includes('男') ? '男子' :
+    g;
+
+  // 年齢を統一
+  const ageRaw=String(p.age_group||'').trim();
+
+  // 東京SCは15歳・16歳を別基準にしているので一旦対象外
   if(
-    age==='15〜16歳' ||
-    age==='15～16歳' ||
-    age==='CS'
+    ageRaw.includes('15〜16') ||
+    ageRaw.includes('15～16') ||
+    ageRaw==='CS'
   ){
     return null;
   }
 
-  let x=window.TOKYO_SC_STANDARDS.find(x=>
-    x.gender===gender &&
-    x.age===age &&
-    x.event===stroke &&
-    Number(x.distance)===Number(distance)
+  let age=ageRaw;
+
+  // 「14」「14才」「14歳」などをすべて「14歳」に統一
+  const ageMatch=ageRaw.match(/\d+/);
+
+  if(ageMatch){
+    const n=Number(ageMatch[0]);
+
+    if(n<=8){
+      age='8歳以下';
+    }else if(n>=19){
+      age='19歳以上';
+    }else{
+      age=`${n}歳`;
+    }
+  }
+
+  const event=String(stroke||'').trim();
+  const dist=Number(distance);
+
+  const x=window.TOKYO_SC_STANDARDS.find(r=>
+    String(r.gender).trim()===gender &&
+    String(r.age).trim()===age &&
+    String(r.event).trim()===event &&
+    Number(r.distance)===dist
   );
 
   return x ? Number(x.standard) : null;
-}function best(playerId,stroke,distance,course){let a=records.filter(r=>r.swimmer_id===playerId&&r.stroke===stroke&&Number(r.distance)===Number(distance)&&r.course===course).map(r=>+r.time_seconds);return a.length?Math.min(...a):null}
+}
+
+function best(playerId,stroke,distance,course){let a=records.filter(r=>r.swimmer_id===playerId&&r.stroke===stroke&&Number(r.distance)===Number(distance)&&r.course===course).map(r=>+r.time_seconds);return a.length?Math.min(...a):null}
 async function init(){if(!configured()){renderSetupNeeded();return}sb=window.supabase.createClient(window.SUPABASE_URL,window.SUPABASE_PUBLISHABLE_KEY);let {data}=await sb.auth.getSession();session=data.session;sb.auth.onAuthStateChange((_e,s)=>{session=s;routeAuth()});routeAuth()}
 function renderSetupNeeded(){setStatus('config.js に Supabase Publishable key を設定してください。','error');$('#auth').innerHTML=`<div class="card auth"><h2>☁️ セットアップ待ち</h2><p>config.js の PASTE_YOUR_PUBLISHABLE_KEY_HERE を置き換えてください。</p></div>`}
 async function routeAuth(){if(!session){$('#app').classList.add('hidden');$('#tabs').classList.add('hidden');$('#logoutBtn').classList.add('hidden');renderAuth();return}$('#auth').innerHTML='';$('#app').classList.remove('hidden');$('#tabs').classList.remove('hidden');$('#logoutBtn').classList.remove('hidden');await loadCloud();go('home')}
