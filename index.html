@@ -82,34 +82,6 @@ function formatTimeInput(){
 
   preview();
 }
-  t=String(t).trim();
-  if(!t)return NaN;
-
-  // 全角記号を半角へ
-  t=t.replace(/：/g,':').replace(/。/g,'.');
-
-  // iPhone入力対応
-  // 例 1.13.64 → 1:13.64
-  const dots=(t.match(/\./g)||[]).length;
-  if(!t.includes(':') && dots===2){
-    const p=t.split('.');
-    t=p[0]+':'+p[1]+'.'+p[2];
-  }
-
-  // 1:13.64 → 秒へ変換
-  let p=t.split(':');
-  if(p.length===2){
-    const m=Number(p[0]);
-    const s=Number(p[1]);
-    return Number.isFinite(m)&&Number.isFinite(s)
-      ? m*60+s
-      : NaN;
-  }
-
-  // 50mなど 32.45 はそのまま秒
-  const n=Number(t);
-  return Number.isFinite(n)?n:NaN;
-}
 
 function fmt(v){if(v==null||isNaN(v))return '-';let m=Math.floor(v/60),s=v-m*60;return (m?m+':':'')+s.toFixed(2).padStart(m?5:0,'0')}
 function playerById(id){return PLAYERS.find(x=>x.id===id)}
