@@ -29,15 +29,31 @@ function tokyoScStandard(playerId,stroke,distance){
   let p=playerById(playerId);
   if(!p || !window.TOKYO_SC_STANDARDS)return null;
 
-  // 現在の選手区分を東京SCの年齢区分へ合わせる
-  let age=p.age_group;
+  // 性別表記を東京SCデータに合わせる
+  let gender=String(p.gender||'').trim();
+  if(gender==='男') gender='男子';
+  if(gender==='女') gender='女子';
 
-  // 東京SCは15歳・16歳など個別区分なので、
-  // 現在の「15〜16歳」「CS」は一旦判定対象外
-  if(age==='15〜16歳' || age==='CS')return null;
+  // 年齢区分を東京SCデータに合わせる
+  let age=String(p.age_group||'').trim();
+
+  // 「14」→「14歳」のような場合にも対応
+  if(/^\d+$/.test(age)){
+    age=`${age}歳`;
+  }
+
+  // 東京SCは15歳・16歳を別々に判定するため、
+  // 現在のまとめ区分では一旦対象外
+  if(
+    age==='15〜16歳' ||
+    age==='15～16歳' ||
+    age==='CS'
+  ){
+    return null;
+  }
 
   let x=window.TOKYO_SC_STANDARDS.find(x=>
-    x.gender===p.gender &&
+    x.gender===gender &&
     x.age===age &&
     x.event===stroke &&
     Number(x.distance)===Number(distance)
