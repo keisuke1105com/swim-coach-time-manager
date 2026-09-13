@@ -6,7 +6,7 @@
 <header><div class="wrap" style="padding:0"><div class="topline"><div><h1>🏊 水泳コーチ・タイム管理 ☁️</h1><small>選手・記録をクラウド共有</small></div><button id="logoutBtn" class="secondary hidden" onclick="logout()">ログアウト</button></div></div></header>
 <main class="wrap"><div id="status"></div><section id="auth"></section><div id="app" class="hidden"><section id="home"></section><section id="players" class="hidden"></section><section id="input" class="hidden"></section><section id="records" class="hidden"></section><section id="analysis" class="hidden"></section></div></main>
 <nav id="tabs" class="tabs hidden"><button data-tab="home">🏠<br>ホーム</button><button data-tab="players">👥<br>選手</button><button data-tab="input">⏱️<br>入力</button><button data-tab="records">📋<br>記録</button><button data-tab="analysis">📊<br>分析</button></nav>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="config.js"></script><script src="data.js"></script><script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="config.js"></script><script src="data.js"><script src="tokyo_sc.js"></script></script><script>
 let sb=null,session=null,PLAYERS=[],records=[];let selectedPlayerId='',selectedStroke='自由形',selectedDistance=50,selectedCourse='長水路';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const strokes=[...new Set(STANDARDS.map(x=>x.event))].filter(x=>!x.includes('リレー'));
