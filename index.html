@@ -380,7 +380,7 @@ function preview(){
 
   let jo=st!=null&&s<=st;
   let upd=b==null||s<b;
-
+　 let joRate=st!=null ? (st/s)*100 : null;
   let joText='';
   if(st==null){
     joText='JO標準：標準記録なし';
@@ -402,8 +402,9 @@ function preview(){
   $('#preview').innerHTML=
     `<div class="result ${jo?'good':'bad'}">
       <b>${joText}</b><br>
-      <b>${tokyoText}</b><br>
-      自己ベスト：${fmt(b)}
+${joRate!=null ? `<b>JO達成率：${joRate.toFixed(1)}%</b><br>` : ''}
+<b>${tokyoText}</b><br>
+自己ベスト：${fmt(b)}
       ${upd&&b!=null ? ` 🔥 ${(b-s).toFixed(2)}秒更新！` : ''}
     </div>`;
 }
