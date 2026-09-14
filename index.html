@@ -265,7 +265,27 @@ if(st!=null){
       improvement
     };
   }).reverse();
+let trendGroups={};
 
+history.forEach(r=>{
+  let key=`${r.stroke}|${r.distance}|${r.course}`;
+
+  if(!trendGroups[key]){
+    trendGroups[key]=[];
+  }
+
+  trendGroups[key].push(r);
+});
+
+let trendKeys=Object.keys(trendGroups);
+
+let trendOptions=trendKeys.map(key=>{
+  let [stroke,distance,course]=key.split('|');
+
+  return `<option value="${key}">
+    ${stroke} ${distance}m・${course}
+  </option>`;
+}).join('');
   let historyHtml=history.map(r=>`
     <div class="row">
       <div>
@@ -351,7 +371,24 @@ if(st!=null){
       }
 
     </div>
+<div class="card">
+  <h3>📈 タイム推移</h3>
 
+  ${
+    trendKeys.length
+      ? `
+        <div class="field">
+          <label>種目</label>
+          <select id="trendSelect" onchange="renderTrendChart('${id}')">
+            ${trendOptions}
+          </select>
+        </div>
+
+        <div id="trendChart"></div>
+      `
+      : '<p class="muted">まだグラフにできる記録がありません。</p>'
+  }
+</div>
     <div class="card">
 
       <h3>📈 成長履歴</h3>
@@ -363,7 +400,173 @@ if(st!=null){
 
     </div>
   `;
-}function renderInput(){if(!selectedPlayerId)selectedPlayerId=PLAYERS[0]?.id||'';if(!PLAYERS.length){$('#input').innerHTML='<div class="card"><h2>⏱️ タイム入力</h2><p>先に選手を登録してください。</p></div>';return}$('#input').innerHTML=`<div class="card"><h2>⏱️ タイム入力</h2><div class="field"><label>選手</label><select id="ip" onchange="selectedPlayerId=this.value;preview()">${PLAYERS.map(p=>`<option value="${p.id}" ${p.id===selectedPlayerId?'selected':''}>${p.name}</option>`).join('')}</select></div><div class="field"><label>種目</label><div class="eventgrid">${strokes.map(e=>`<button class="${e===selectedStroke?'active':''}" onclick="setStroke('${e}')">${e}</button>`).join('')}</div></div><div class="field"><label>距離</label><div class="eventgrid">${distances.map(d=>`<button class="${d===selectedDistance?'active':''}" onclick="setDistance(${d})">${d}m</button>`).join('')}</div></div><div class="field"><label>水路</label><div class="eventgrid"><button class="${selectedCourse==='長水路'?'active':''}" onclick="setCourse('長水路')">長水路</button><button class="${selectedCourse==='短水路'?'active':''}" onclick="setCourse('短水路')">短水路</button></div></div><div class="field"><label>タイム</label><input class="time" id="itime" inputmode="decimal" placeholder="1:02.35" oninput="preview()"></div><div class="field"><label>大会名（任意）</label><input id="ime" placeholder="○○大会"></div><div id="preview"></div><button style="width:100%;font-size:18px" onclick="addRecord()">記録を保存</button></div>`;preview()}
+  
+  setTimeout(()=>renderTrendChart(id),0);
+}
+ 
+  function renderTrendChart(playerId){
+  const select=$('#trendSelect');
+  const chart=$('#trendChart');
+
+  if(!select || !chart)return;
+
+  const key=select.value;
+  if(!key)return;
+
+  const [stroke,distance,course]=key.split('|');
+
+  const data=records
+    .filter(r=>
+      String(r.swimmer_id)===String(playerId) &&
+      r.stroke===stroke &&
+      Number(r.distance)===Number(distance) &&
+      r.course===course
+    )
+    .sort((a,b)=>
+      String(a.record_date||'').localeCompare(String(b.record_date||''))
+    );
+
+  if(!data.length){
+    chart.innerHTML='<p class="muted">グラフにできる記録がありません。</p>';
+    return;
+  }
+
+  const times=data.map(r=>Number(r.time_seconds));
+  const joStandard=standard(playerId,stroke,distance,course);
+
+  let values=[...times];
+  if(joStandard!=null)values.push(joStandard);
+
+  const min=Math.min(...values);
+  const max=Math.max(...values);
+
+  const padding=Math.max((max-min)*0.25,1);
+
+  const yMin=min-padding;
+  const yMax=max+padding;
+
+  const W=600;
+  const H=260;
+
+  const left=55;
+  const right=20;
+  const top=25;
+  const bottom=45;
+
+  const plotW=W-left-right;
+  const plotH=H-top-bottom;
+
+  const x=i=>{
+    if(data.length===1)return left+plotW/2;
+    return left+(i/(data.length-1))*plotW;
+  };
+
+  const y=value=>{
+    return top+((value-yMin)/(yMax-yMin))*plotH;
+  };
+
+  const linePoints=data
+    .map((r,i)=>`${x(i)},${y(Number(r.time_seconds))}`)
+    .join(' ');
+
+  const points=data.map((r,i)=>{
+    const cx=x(i);
+    const cy=y(Number(r.time_seconds));
+    const date=String(r.record_date||'').slice(5).replace('-','/');
+
+    return `
+      <circle cx="${cx}" cy="${cy}" r="5" fill="#087fd1"></circle>
+
+      <text
+        x="${cx}"
+        y="${cy-10}"
+        text-anchor="middle"
+        font-size="12"
+        font-weight="700"
+        fill="#123">
+        ${fmt(Number(r.time_seconds))}
+      </text>
+
+      <text
+        x="${cx}"
+        y="${H-15}"
+        text-anchor="middle"
+        font-size="11"
+        fill="#71808a">
+        ${date}
+      </text>
+    `;
+  }).join('');
+
+  let joLine='';
+
+  if(joStandard!=null){
+    const jy=y(joStandard);
+
+    joLine=`
+      <line
+        x1="${left}"
+        x2="${W-right}"
+        y1="${jy}"
+        y2="${jy}"
+        stroke="#e67e22"
+        stroke-width="2"
+        stroke-dasharray="7 5">
+      </line>
+
+      <text
+        x="${W-right}"
+        y="${jy-6}"
+        text-anchor="end"
+        font-size="12"
+        font-weight="700"
+        fill="#b85d00">
+        JO ${fmt(joStandard)}
+      </text>
+    `;
+  }
+
+  chart.innerHTML=`
+    <div style="margin-top:12px;overflow-x:auto">
+      <svg
+        viewBox="0 0 ${W} ${H}"
+        style="width:100%;min-width:520px;background:#fff;border-radius:14px"
+      >
+
+        <text
+          x="${left}"
+          y="16"
+          font-size="11"
+          fill="#71808a">
+          ↑ タイムが速い
+        </text>
+
+        ${joLine}
+
+        ${
+          data.length>1
+            ? `<polyline
+                 points="${linePoints}"
+                 fill="none"
+                 stroke="#087fd1"
+                 stroke-width="4"
+                 stroke-linecap="round"
+                 stroke-linejoin="round">
+               </polyline>`
+            : ''
+        }
+
+        ${points}
+      </svg>
+    </div>
+
+    <div class="muted" style="margin-top:8px;text-align:center">
+      ${stroke} ${distance}m・${course}
+      ／ ${data.length}記録
+    </div>
+  `;
+} 
+  function renderInput(){if(!selectedPlayerId)selectedPlayerId=PLAYERS[0]?.id||'';if(!PLAYERS.length){$('#input').innerHTML='<div class="card"><h2>⏱️ タイム入力</h2><p>先に選手を登録してください。</p></div>';return}$('#input').innerHTML=`<div class="card"><h2>⏱️ タイム入力</h2><div class="field"><label>選手</label><select id="ip" onchange="selectedPlayerId=this.value;preview()">${PLAYERS.map(p=>`<option value="${p.id}" ${p.id===selectedPlayerId?'selected':''}>${p.name}</option>`).join('')}</select></div><div class="field"><label>種目</label><div class="eventgrid">${strokes.map(e=>`<button class="${e===selectedStroke?'active':''}" onclick="setStroke('${e}')">${e}</button>`).join('')}</div></div><div class="field"><label>距離</label><div class="eventgrid">${distances.map(d=>`<button class="${d===selectedDistance?'active':''}" onclick="setDistance(${d})">${d}m</button>`).join('')}</div></div><div class="field"><label>水路</label><div class="eventgrid"><button class="${selectedCourse==='長水路'?'active':''}" onclick="setCourse('長水路')">長水路</button><button class="${selectedCourse==='短水路'?'active':''}" onclick="setCourse('短水路')">短水路</button></div></div><div class="field"><label>タイム</label><input class="time" id="itime" inputmode="decimal" placeholder="1:02.35" oninput="preview()"></div><div class="field"><label>大会名（任意）</label><input id="ime" placeholder="○○大会"></div><div id="preview"></div><button style="width:100%;font-size:18px" onclick="addRecord()">記録を保存</button></div>`;preview()}
 function setStroke(e){selectedStroke=e;renderInput()}function setDistance(d){selectedDistance=d;renderInput()}function setCourse(p){selectedCourse=p;renderInput()}
 function preview(){
   let t=$('#itime')?.value||'',
