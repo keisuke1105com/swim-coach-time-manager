@@ -207,16 +207,18 @@ function showPlayerDetail(id){
     );
 
     let s=Number(r.time_seconds);
-    let jo=st!=null && s<=st;
-    let diff=st!=null ? s-st : null;
+let jo=st!=null && s<=st;
+let diff=st!=null ? s-st : null;
 
-    let joText='JO標準なし';
+let joText='JO標準なし';
 
-    if(st!=null){
-      joText=jo
-        ? `🏆 JO突破 ${Math.abs(diff).toFixed(2)}秒`
-        : `JOまであと ${diff.toFixed(2)}秒`;
-    }
+if(st!=null){
+  const joRate=(st/s)*100;
+
+  joText=jo
+    ? `🏆 JO突破　達成率 ${joRate.toFixed(1)}%`
+    : `JOまであと ${diff.toFixed(2)}秒　達成率 ${joRate.toFixed(1)}%`;
+}
 
     return `
       <div class="row">
