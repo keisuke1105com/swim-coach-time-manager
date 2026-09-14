@@ -180,13 +180,20 @@ function showPlayerDetail(id){
     }
   });
 
-  let bests=Object.values(bestMap).sort((a,b)=>{
-    if(a.stroke!==b.stroke)return a.stroke.localeCompare(b.stroke,'ja');
-    if(Number(a.distance)!==Number(b.distance)){
-      return Number(a.distance)-Number(b.distance);
-    }
-    return a.course.localeCompare(b.course,'ja');
-  });
+let bests=Object.values(bestMap).sort((a,b)=>{
+  const stA=standard(id,a.stroke,a.distance,a.course);
+  const stB=standard(id,b.stroke,b.distance,b.course);
+
+  const rateA=stA!=null
+    ? (stA/Number(a.time_seconds))*100
+    : -1;
+
+  const rateB=stB!=null
+    ? (stB/Number(b.time_seconds))*100
+    : -1;
+
+  return rateB-rateA;
+});
 
   let joCount=bests.filter(r=>{
     let st=standard(
@@ -200,12 +207,14 @@ function showPlayerDetail(id){
 
   let bestHtml=bests.map(r=>{
     let st=standard(
-      id,
+     id,
       r.stroke,
       r.distance,
       r.course
     );
-
+let joRate=st!=null
+  ? (st/Number(r.time_seconds))*100
+  : null; 
     let s=Number(r.time_seconds);
 let jo=st!=null && s<=st;
 let diff=st!=null ? s-st : null;
@@ -213,7 +222,6 @@ let diff=st!=null ? s-st : null;
 let joText='JO標準なし';
 
 if(st!=null){
-  const joRate=(st/s)*100;
 
   joText=jo
     ? `🏆 JO突破　達成率 ${joRate.toFixed(1)}%`
