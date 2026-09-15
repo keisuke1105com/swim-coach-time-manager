@@ -614,7 +614,150 @@ ${joRate!=null ? `<b>JO達成率：${joRate.toFixed(1)}%</b><br>` : ''}
 async function addRecord(){let playerId=$('#ip').value,t=$('#itime').value,s=sec(t);if(!playerId||isNaN(s)){alert('選手と正しいタイムを入力してください。');return}let st=standard(playerId,selectedStroke,selectedDistance,selectedCourse),ts=tokyoScStandard(playerId,selectedStroke,selectedDistance),b=best(playerId,selectedStroke,selectedDistance,selectedCourse),jo=st!=null&&s<=st,isBest=b==null||s<b;let payload={swimmer_id:playerId,stroke:selectedStroke,distance:selectedDistance,course:selectedCourse,time_seconds:s,meet_name:$('#ime').value||null,record_date:new Date().toISOString().slice(0,10),memo:null,is_personal_best:isBest,is_jo_qualified:jo};let {error}=await sb.from('swim_records').insert(payload);if(error){alert(error.message);return}await loadCloud();alert(isBest?(jo?'🏆 JO突破＆自己ベスト更新！':'🔥 自己ベスト更新！'):(jo?'🏆 JO突破！':'記録を保存しました'));renderHome();renderInput()}
 function renderRecords(){let rs=[...records].reverse();$('#records').innerHTML=`<div class="card"><h2>📋 タイム履歴</h2>${rs.map(r=>{let p=playerById(r.swimmer_id);return `<div class="row"><div><b>${p?.name||'選手'}</b><br><span class="muted">${r.record_date||''}・${r.stroke} ${r.distance}m・${r.course}</span><br>${r.is_jo_qualified?'<span class="badge">JO突破</span> ':''}${r.is_personal_best?'<span class="badge">BEST</span> ':''}</div><div style="text-align:right"><b>${fmt(r.time_seconds)}</b><br><button class="danger" onclick="delRecord('${r.id}')">削除</button></div></div>`}).join('')||'<p class="muted">記録がありません。</p>'}</div>`}
 async function delRecord(id){if(!confirm('この記録を削除しますか？'))return;let {error}=await sb.from('swim_records').delete().eq('id',id);if(error)alert(error.message);else{await loadCloud();renderRecords();renderHome()}}
-function renderAnalysis(){let jo=records.filter(r=>r.is_jo_qualified).length,b=records.filter(r=>r.is_personal_best).length;let counts={};records.forEach(r=>counts[r.swimmer_id]=(counts[r.swimmer_id]||0)+1);let ranking=Object.entries(counts).sort((a,b)=>b[1]-a[1]);$('#analysis').innerHTML=`<div class="grid"><div class="card"><div class="label">記録件数</div><div class="stat">${records.length}</div></div><div class="card"><div class="label">JO突破</div><div class="stat">${jo}</div></div><div class="card"><div class="label">ベスト更新</div><div class="stat">${b}</div></div></div><div class="card"><h2>🏆 入力件数ランキング</h2>${ranking.map((x,i)=>`<div class="row"><b>${i+1}. ${playerById(x[0])?.name||'選手'}</b><span>${x[1]}件</span></div>`).join('')||'<p class="muted">記録を入力すると表示されます。</p>'}</div><div class="card"><h3>☁️ クラウド共有</h3><p>現在の選手数：<b>${PLAYERS.length}名</b></p><p class="muted">「選手」→「＋ 選手追加」から人数を増やせます。Mac・iPhoneで同じ一覧と記録を共有します。</p><button class="secondary" onclick="migrateLocalV3()">このMacの旧v3記録をクラウドへ移行</button></div>`}
+function renderAnalysis(){
+  let jo=records.filter(r=>r.is_jo_qualified).length;
+  let bestRecords=records.filter(r=>r.is_personal_best).length;
+
+  let counts={};
+  records.forEach(r=>{
+    counts[r.swimmer_id]=(counts[r.swimmer_id]||0)+1;
+  });
+
+  let ranking=Object.entries(counts)
+    .sort((a,b)=>b[1]-a[1]);
+
+  // JOに近い選手・種目ランキングを作成
+  let joBestMap={};
+
+  records.forEach(r=>{
+    let player=playerById(r.swimmer_id);
+    if(!player)return;
+
+    let st=standard(
+      r.swimmer_id,
+      r.stroke,
+      r.distance,
+      r.course
+    );
+
+    if(st==null)return;
+
+    let time=Number(r.time_seconds);
+    if(!Number.isFinite(time) || time<=0)return;
+
+    let key=`${r.swimmer_id}|${r.stroke}|${r.distance}|${r.course}`;
+
+    if(!joBestMap[key] || time<joBestMap[key].time){
+      joBestMap[key]={
+        player,
+        stroke:r.stroke,
+        distance:r.distance,
+        course:r.course,
+        time,
+        standard:st
+      };
+    }
+  });
+
+  let joRanking=Object.values(joBestMap).map(x=>{
+    let diff=x.time-x.standard;
+    let rate=(x.standard/x.time)*100;
+
+    return {
+      ...x,
+      diff,
+      rate,
+      qualified:x.time<=x.standard
+    };
+  }).sort((a,b)=>{
+    // JO突破済みを先頭、その後は達成率の高い順
+    if(a.qualified!==b.qualified){
+      return a.qualified ? -1 : 1;
+    }
+    return b.rate-a.rate;
+  });
+
+  let joRankingHtml=joRanking.length
+    ? joRanking.map((x,i)=>{
+        let medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}位`;
+
+        let status=x.qualified
+          ? `🏆 JO突破！ 達成率 ${x.rate.toFixed(1)}%`
+          : `JOまであと ${x.diff.toFixed(2)}秒　達成率 ${x.rate.toFixed(1)}%`;
+
+        return `
+          <div class="row">
+            <div>
+              <b>${medal} ${x.player.name}</b><br>
+              <span class="muted">
+                ${x.stroke} ${x.distance}m・${x.course}
+              </span><br>
+              <span class="muted">${status}</span>
+            </div>
+
+            <div style="text-align:right">
+              <b>${fmt(x.time)}</b><br>
+              <span class="muted">JO ${fmt(x.standard)}</span>
+            </div>
+          </div>
+        `;
+      }).join('')
+    : '<p class="muted">JO標準と比較できる記録がまだありません。</p>';
+
+  $('#analysis').innerHTML=`
+    <div class="grid">
+      <div class="card">
+        <div class="label">記録件数</div>
+        <div class="stat">${records.length}</div>
+      </div>
+
+      <div class="card">
+        <div class="label">JO突破数</div>
+        <div class="stat">${jo}</div>
+      </div>
+
+      <div class="card">
+        <div class="label">ベスト更新</div>
+        <div class="stat">${bestRecords}</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🏆 JOに近い選手・種目ランキング</h2>
+      <p class="muted">
+        全選手のベストタイムをJO標準記録と比較しています。
+      </p>
+      ${joRankingHtml}
+    </div>
+
+    <div class="card">
+      <h2>🏅 入力件数ランキング</h2>
+      ${
+        ranking.map((x,i)=>`
+          <div class="row">
+            <b>${i+1}. ${playerById(x[0])?.name||'選手'}</b>
+            <span>${x[1]}件</span>
+          </div>
+        `).join('') ||
+        '<p class="muted">記録を入力すると表示されます。</p>'
+      }
+    </div>
+
+    <div class="card">
+      <h3>☁️ クラウド共有</h3>
+      <p>
+        現在の選手数：<b>${PLAYERS.length}名</b>
+      </p>
+      <p class="muted">
+        「選手」→「＋ 選手追加」から人数を増やせます。
+        Mac・iPhoneで同じ一覧と記録を共有します。
+      </p>
+      <button class="secondary" onclick="migrateLocalV3()">
+        このMacの旧v3記録をクラウドへ移行
+      </button>
+    </div>
+  `;
+}
 async function migrateLocalV3(){
   let old=[];
   try{
