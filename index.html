@@ -660,24 +660,42 @@ function renderAnalysis(){
   });
 
 let joRanking=Object.values(
-  Object.values(joBestMap).reduce((best,x)=>{
-    const id=String(x.swimmer_id);
-    if(!best[id] || (x.standard/x.time) > (best[id].standard/best[id].time)){
-      best[id]=x;
+  records.reduce((best,r)=>{
+    const player=playerById(r.swimmer_id);
+    if(!player)return best;
+
+    const st=standard(
+      r.swimmer_id,
+      r.stroke,
+      r.distance,
+      r.course
+    );
+
+    if(st==null)return best;
+
+    const time=Number(r.time_seconds);
+    if(!time || time<=0)return best;
+
+    const id=String(r.swimmer_id);
+    const rate=(st/time)*100;
+
+    if(!best[id] || rate>best[id].rate){
+      best[id]={
+        swimmer_id:r.swimmer_id,
+        stroke:r.stroke,
+        distance:r.distance,
+        course:r.course,
+        time:time,
+        standard:st,
+        diff:time-st,
+        rate:rate,
+        qualified:time<=st
+      };
     }
+
     return best;
   },{})
-).map(x=>{
-    let diff=x.time-x.standard;
-    let rate=(x.standard/x.time)*100;
-
-    return {
-      ...x,
-      diff,
-      rate,
-      qualified:x.time<=x.standard
-    };
-  }).sort((a,b)=>{
+).sort((a,b)=>{
     // JO突破済みを先頭、その後は達成率の高い順
     if(a.qualified!==b.qualified){
       return a.qualified ? -1 : 1;
