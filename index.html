@@ -85,7 +85,39 @@ function formatTimeInput(){
 
 function fmt(v){if(v==null||isNaN(v))return '-';let m=Math.floor(v/60),s=v-m*60;return (m?m+':':'')+s.toFixed(2).padStart(m?5:0,'0')}
 function playerById(id){return PLAYERS.find(x=>x.id===id)}
-function standard(playerId,stroke,distance,course){let p=playerById(playerId);if(!p)return null;let x=STANDARDS.find(x=>x.event===stroke&&parseInt(x.distance)===Number(distance)&&x.division===p.age_group);if(!x)return null;return p.gender==='男子'?(course==='長水路'?x.maleLC:x.maleSC):(course==='長水路'?x.femaleLC:x.femaleSC)}
+function standard(playerId,stroke,distance,course){
+  let p=playerById(playerId);
+  if(!p)return null;
+
+  let division=p.age_group;
+
+  // 17-18歳はCS
+  if(division==='17-18歳' || division==='17～18歳'){
+    division='CS';
+  }
+
+  // 13歳以上の50m 背泳ぎ・平泳ぎ・バタフライはCS
+  const age=parseInt(p.age);
+  if(
+    age>=13 &&
+    Number(distance)===50 &&
+    ['背泳ぎ','平泳ぎ','バタフライ'].includes(stroke)
+  ){
+    division='CS';
+  }
+
+  let x=STANDARDS.find(x=>
+    x.event===stroke &&
+    parseInt(x.distance)===Number(distance) &&
+    x.division===division
+  );
+
+  if(!x)return null;
+
+  return p.gender==='男子'
+    ? (course==='長水路'?x.maleLC:x.maleSC)
+    : (course==='長水路'?x.femaleLC:x.femaleSC);
+}
 function tokyoScStandard(playerId,stroke,distance){
   const p=playerById(playerId);
 
