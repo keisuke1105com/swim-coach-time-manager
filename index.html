@@ -97,14 +97,17 @@ function standard(playerId,stroke,distance,course){
   }
 
   // 13歳以上の50m 背泳ぎ・平泳ぎ・バタフライはCS
-  const age=parseInt(p.age);
-  if(
-    age>=13 &&
-    Number(distance)===50 &&
-    ['背泳ぎ','平泳ぎ','バタフライ'].includes(stroke)
-  ){
-    division='CS';
-  }
+const ageMatch=String(p.age_group||'').match(/\d+/);
+const age=ageMatch ? Number(ageMatch[0]) : null;
+
+if(
+  age!==null &&
+  age>=13 &&
+  Number(distance)===50 &&
+  ['背泳ぎ','平泳ぎ','バタフライ'].includes(stroke)
+){
+  division='CS';
+}
 
   let x=STANDARDS.find(x=>
     x.event===stroke &&
