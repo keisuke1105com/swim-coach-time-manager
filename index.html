@@ -612,8 +612,55 @@ ${joRate!=null ? `<b>JO達成率：${joRate.toFixed(1)}%</b><br>` : ''}
     </div>`;
 }
 async function addRecord(){let playerId=$('#ip').value,t=$('#itime').value,s=sec(t);if(!playerId||isNaN(s)){alert('選手と正しいタイムを入力してください。');return}let st=standard(playerId,selectedStroke,selectedDistance,selectedCourse),ts=tokyoScStandard(playerId,selectedStroke,selectedDistance),b=best(playerId,selectedStroke,selectedDistance,selectedCourse),jo=st!=null&&s<=st,isBest=b==null||s<b;let payload={swimmer_id:playerId,stroke:selectedStroke,distance:selectedDistance,course:selectedCourse,time_seconds:s,meet_name:$('#ime').value||null,record_date:$('#recordDate')?.value || new Date().toISOString().slice(0,10),memo:null,is_personal_best:isBest,is_jo_qualified:jo};let {error}=await sb.from('swim_records').insert(payload);if(error){alert(error.message);return}await loadCloud();alert(isBest?(jo?'🏆 JO突破＆自己ベスト更新！':'🔥 自己ベスト更新！'):(jo?'🏆 JO突破！':'記録を保存しました'));renderHome();renderInput()}
-function renderRecords(){let rs=[...records].reverse();$('#records').innerHTML=`<div class="card"><h2>📋 タイム履歴</h2>${rs.map(r=>{let p=playerById(r.swimmer_id);return `<div class="row"><div><b>${p?.name||'選手'}</b><br><span class="muted">${r.record_date||''}・${r.stroke} ${r.distance}m・${r.course}</span><br>${r.is_jo_qualified?'<span class="badge">JO突破</span> ':''}${r.is_personal_best?'<span class="badge">BEST</span> ':''}</div><div style="text-align:right"><b>${fmt(r.time_seconds)}</b><br><button class="danger" onclick="delRecord('${r.id}')">削除</button></div></div>`}).join('')||'<p class="muted">記録がありません。</p>'}</div>`}
-async function delRecord(id){if(!confirm('この記録を削除しますか？'))return;let {error}=await sb.from('swim_records').delete().eq('id',id);if(error)alert(error.message);else{await loadCloud();renderRecords();renderHome()}}
+function renderRecords(){let rs=[...records].reverse();$('#records').innerHTML=`<div class="card"><h2>📋 タイム履歴</h2>${rs.map(r=>{let p=playerById(r.swimmer_id);return `<div class="row"><div><b>${p?.name||'選手'}</b><br><span class="muted">${r.record_date||''}・${r.stroke} ${r.distance}m・${r.course}</span><br>${r.is_jo_qualified?'<span class="badge">JO突破</span> ':''}${r.is_personal_best?'<span class="badge">BEST</span> ':''}</div><div style="text-align:right"><b>${fmt(r.time_seconds)}</b><br><button class="secondary" onclick="editRecord('${r.id}')">編集</button>
+<button class="danger" onclick="delRecord('${r.id}')">削除</button></div></div>`}).join('')||'<p class="muted">記録がありません。</p>'}</div>`}
+async function editRecord(id){
+  const r=records.find(x=>String(x.id)===String(id));
+  if(!r){
+    alert('記録が見つかりません。');
+    return;
+  }
+
+  const newDate=prompt(
+    '大会日を入力してください（例：2026-07-12）',
+    r.record_date || ''
+  );
+
+  if(newDate===null)return;
+
+  const newTime=prompt(
+    'タイムを入力してください（例：26.87 または 1:02.35）',
+    fmt(r.time_seconds)
+  );
+
+  if(newTime===null)return;
+
+  const newSeconds=sec(newTime);
+
+  if(isNaN(newSeconds)){
+    alert('正しいタイムを入力してください。');
+    return;
+  }
+
+  const {error}=await sb
+    .from('swim_records')
+    .update({
+      record_date:newDate,
+      time_seconds:newSeconds
+    })
+    .eq('id',id);
+
+  if(error){
+    alert(error.message);
+    return;
+  }
+
+  await loadCloud();
+  renderRecords();
+  renderHome();
+  alert('記録を更新しました！');
+}
+  async function delRecord(id){if(!confirm('この記録を削除しますか？'))return;let {error}=await sb.from('swim_records').delete().eq('id',id);if(error)alert(error.message);else{await loadCloud();renderRecords();renderHome()}}
 function renderAnalysis(){
   let jo=records.filter(r=>r.is_jo_qualified).length;
   let bestRecords=records.filter(r=>r.is_personal_best).length;
