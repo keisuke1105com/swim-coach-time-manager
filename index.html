@@ -659,7 +659,15 @@ function renderAnalysis(){
     }
   });
 
-  let joRanking=Object.values(joBestMap).map(x=>{
+let joRanking=Object.values(
+  Object.values(joBestMap).reduce((best,x)=>{
+    const id=String(x.swimmer_id);
+    if(!best[id] || (x.standard/x.time) > (best[id].standard/best[id].time)){
+      best[id]=x;
+    }
+    return best;
+  },{})
+).map(x=>{
     let diff=x.time-x.standard;
     let rate=(x.standard/x.time)*100;
 
