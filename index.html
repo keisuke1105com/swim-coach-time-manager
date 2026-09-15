@@ -85,12 +85,55 @@ function formatTimeInput(){
 
 function fmt(v){if(v==null||isNaN(v))return '-';let m=Math.floor(v/60),s=v-m*60;return (m?m+':':'')+s.toFixed(2).padStart(m?5:0,'0')}
 function playerById(id){return PLAYERS.find(x=>x.id===id)}
-function standard(playerId,stroke,distance,course){
+function ageOnDate(birthDate, targetDate){
+  if(!birthDate || !targetDate) return null;
+
+  const b = new Date(birthDate + 'T00:00:00');
+  const d = new Date(targetDate + 'T00:00:00');
+
+  if(isNaN(b) || isNaN(d)) return null;
+
+  let age = d.getFullYear() - b.getFullYear();
+
+  const birthdayPassed =
+    d.getMonth() > b.getMonth() ||
+    (d.getMonth() === b.getMonth() && d.getDate() >= b.getDate());
+
+  if(!birthdayPassed) age--;
+
+  return age;
+}
+function standard(playerId,stroke,distance,course,targetDate=null){
   let p=playerById(playerId);
   if(!p)return null;
 
   let division=p.age_group;
+// 大会当日の満年齢を計算
+let meetAge = null;
 
+if(p.birth_date && targetDate){
+  meetAge = ageOnDate(p.birth_date, targetDate);
+}
+// 大会当日の年齢からJO区分を自動判定
+if(meetAge !== null){
+  if(meetAge <= 9){
+    division = '9歳以下';
+  }else if(meetAge === 10){
+    division = '10歳';
+  }else if(meetAge === 11){
+    division = '11歳';
+  }else if(meetAge === 12){
+    division = '12歳';
+  }else if(meetAge === 13){
+    division = '13歳';
+  }else if(meetAge === 14){
+    division = '14歳';
+  }else if(meetAge === 15 || meetAge === 16){
+    division = '15〜16歳';
+  }else if(meetAge >= 17){
+    division = 'CS';
+  }
+}
   // 17-18歳はCS
   if(division==='17-18歳' || division==='17～18歳'){
     division='CS';
