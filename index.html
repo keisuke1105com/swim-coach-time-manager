@@ -140,14 +140,16 @@ if(meetAge !== null){
   }
 
   // 13歳以上の50m 背泳ぎ・平泳ぎ・バタフライはCS
-// 13歳以上の50m 背泳ぎ・平泳ぎ・バタフライはCS
+const ageMatch=String(p.age_group||'').match(/\d+/);
+const age=ageMatch ? Number(ageMatch[0]) : null;
+
 if(
-  meetAge !== null &&
-  meetAge >= 13 &&
-  Number(distance) === 50 &&
+  age!==null &&
+  age>=13 &&
+  Number(distance)===50 &&
   ['背泳ぎ','平泳ぎ','バタフライ'].includes(stroke)
 ){
-  division = 'CS';
+  division='CS';
 }
 
   let x=STANDARDS.find(x=>
@@ -257,8 +259,8 @@ function showPlayerDetail(id){
   });
 
 let bests=Object.values(bestMap).sort((a,b)=>{
-const stA=standard(id,a.stroke,a.distance,a.course,a.record_date);
-const stB=standard(id,b.stroke,b.distance,b.course,b.record_date);
+  const stA=standard(id,a.stroke,a.distance,a.course);
+  const stB=standard(id,b.stroke,b.distance,b.course);
 
   const rateA=stA!=null
     ? (stA/Number(a.time_seconds))*100
@@ -272,23 +274,22 @@ const stB=standard(id,b.stroke,b.distance,b.course,b.record_date);
 });
 
   let joCount=bests.filter(r=>{
- let st=standard(
-  id,
-  r.stroke,
-  r.distance,
-  r.course,
-  r.record_date
-);
+    let st=standard(
+      id,
+      r.stroke,
+      r.distance,
+      r.course
+    );
     return st!=null && Number(r.time_seconds)<=st;
   }).length;
 
-  let st=standard(
-  id,
-  r.stroke,
-  r.distance,
-  r.course,
-  r.record_date
-);
+  let bestHtml=bests.map(r=>{
+    let st=standard(
+     id,
+      r.stroke,
+      r.distance,
+      r.course
+    );
 let joRate=st!=null
   ? (st/Number(r.time_seconds))*100
   : null; 
@@ -509,8 +510,7 @@ let trendOptions=trendKeys.map(key=>{
   }
 
   const times=data.map(r=>Number(r.time_seconds));
- const targetDate=data.length ? data[data.length-1].record_date : null;
-const joStandard=standard(playerId,stroke,distance,course,targetDate);
+  const joStandard=standard(playerId,stroke,distance,course);
 
   let values=[...times];
   if(joStandard!=null)values.push(joStandard);
@@ -689,12 +689,7 @@ ${joRate!=null ? `<b>JO達成率：${joRate.toFixed(1)}%</b><br>` : ''}
       ${upd&&b!=null ? ` 🔥 ${(b-s).toFixed(2)}秒更新！` : ''}
     </div>`;
 }
-async function addRecord(){
-  let playerId=$('#ip').value,
-      t=$('#itime').value,
-      s=sec(t);
-
-  const targetDate=$('#recordDate')?.value || new Date().toISOString().slice(0,10);if(!playerId||isNaN(s)){alert('選手と正しいタイムを入力してください。');return}let st=standard(playerId,selectedStroke,selectedDistance,selectedCourse,targetDate),ts=tokyoScStandard(playerId,selectedStroke,selectedDistance),b=best(playerId,selectedStroke,selectedDistance,selectedCourse),jo=st!=null&&s<=st,isBest=b==null||s<b;let payload={swimmer_id:playerId,stroke:selectedStroke,distance:selectedDistance,course:selectedCourse,time_seconds:s,meet_name:$('#ime').value||null,record_date:$('#recordDate')?.value || new Date().toISOString().slice(0,10),memo:null,is_personal_best:isBest,is_jo_qualified:jo};let {error}=await sb.from('swim_records').insert(payload);if(error){alert(error.message);return}await loadCloud();alert(isBest?(jo?'🏆 JO突破＆自己ベスト更新！':'🔥 自己ベスト更新！'):(jo?'🏆 JO突破！':'記録を保存しました'));renderHome();renderInput()}
+async function addRecord(){let playerId=$('#ip').value,t=$('#itime').value,s=sec(t);if(!playerId||isNaN(s)){alert('選手と正しいタイムを入力してください。');return}let st=standard(playerId,selectedStroke,selectedDistance,selectedCourse),ts=tokyoScStandard(playerId,selectedStroke,selectedDistance),b=best(playerId,selectedStroke,selectedDistance,selectedCourse),jo=st!=null&&s<=st,isBest=b==null||s<b;let payload={swimmer_id:playerId,stroke:selectedStroke,distance:selectedDistance,course:selectedCourse,time_seconds:s,meet_name:$('#ime').value||null,record_date:$('#recordDate')?.value || new Date().toISOString().slice(0,10),memo:null,is_personal_best:isBest,is_jo_qualified:jo};let {error}=await sb.from('swim_records').insert(payload);if(error){alert(error.message);return}await loadCloud();alert(isBest?(jo?'🏆 JO突破＆自己ベスト更新！':'🔥 自己ベスト更新！'):(jo?'🏆 JO突破！':'記録を保存しました'));renderHome();renderInput()}
 function renderRecords(){let rs=[...records].reverse();$('#records').innerHTML=`<div class="card"><h2>📋 タイム履歴</h2>${rs.map(r=>{let p=playerById(r.swimmer_id);return `<div class="row"><div><b>${p?.name||'選手'}</b><br><span class="muted">${r.record_date||''}・${r.stroke} ${r.distance}m・${r.course}</span><br>${r.is_jo_qualified?'<span class="badge">JO突破</span> ':''}${r.is_personal_best?'<span class="badge">BEST</span> ':''}</div><div style="text-align:right"><b>${fmt(r.time_seconds)}</b><br><button class="secondary" onclick="editRecord('${r.id}')">編集</button>
 <button class="danger" onclick="delRecord('${r.id}')">削除</button></div></div>`}).join('')||'<p class="muted">記録がありません。</p>'}</div>`}
 async function editRecord(id){
@@ -763,13 +758,12 @@ function renderAnalysis(){
     let player=playerById(r.swimmer_id);
     if(!player)return;
 
-let st=standard(
-  r.swimmer_id,
-  r.stroke,
-  r.distance,
-  r.course,
-  r.record_date
-);
+    let st=standard(
+      r.swimmer_id,
+      r.stroke,
+      r.distance,
+      r.course
+    );
 
     if(st==null)return;
 
