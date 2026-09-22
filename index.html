@@ -707,15 +707,16 @@ function renderAnalysis(){
     .sort((a,b)=>b[1]-a[1]);
 
   // JOに近い選手・種目ランキングを作成
+  // ランキングは記録日ではなく「今日から見た次のJO大会」の基準日で全選手を統一して比較する。
+  // 例：2026/09/22 時点なら 2027年春季JO（基準日 2027/03/27）。
   let joBestMap={};
+  const rankingToday=new Date().toISOString().slice(0,10);
+  const rankingMeet=joMeetInfo(rankingToday);
+  const rankingMeetDate=rankingMeet?.date||null;
 
   records.forEach(r=>{
     let player=playerById(r.swimmer_id);
     if(!player)return;
-
-    // ランキングも「記録日から判定した次のJO大会基準日」の年齢・区分で比較
-    const rankingMeet=joMeetInfo(r.record_date||new Date().toISOString().slice(0,10));
-    const rankingMeetDate=rankingMeet?.date||null;
 
     let st=standard(
       r.swimmer_id,
@@ -817,7 +818,7 @@ let joRanking=Object.values(
     <div class="card">
       <h2>🏆 JOに近い選手・種目ランキング</h2>
       <p class="muted">
-        各選手のベストタイムを次のJO大会基準日の年齢・区分で比較し、上位20名まで表示しています。
+        各選手のベストタイムを今日から見た次のJO大会基準日の年齢・区分で比較し、1人1種目・上位20名まで表示しています。
       </p>
       ${joRankingHtml}
     </div>
