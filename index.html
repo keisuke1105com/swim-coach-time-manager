@@ -129,60 +129,48 @@ function standard(playerId,stroke,distance,course,targetDate=null){
   return p.gender==='男子'?(course==='長水路'?x.maleLC:x.maleSC):(course==='長水路'?x.femaleLC:x.femaleSC);
 }
 
-function tokyoScStandard(playerId,stroke,distance){
+const TOKYO_SC_MEET_DATE='2026-10-30';
+
+function tokyoScInfo(playerId,stroke,distance){
   const p=playerById(playerId);
-
+  const age=p?.birth_date ? ageOnDate(p.birth_date,TOKYO_SC_MEET_DATE) : null;
   if(!p || !Array.isArray(window.TOKYO_SC_STANDARDS)){
-    return null;
+    return {date:TOKYO_SC_MEET_DATE,age,ageKey:null,standard:null};
   }
 
-  // 性別を統一
   const g=String(p.gender||'').trim();
-  const gender=
-    g.includes('女') ? '女子' :
-    g.includes('男') ? '男子' :
-    g;
+  const gender=g.includes('女')?'女子':g.includes('男')?'男子':g;
 
-  // 年齢を統一
-  const ageRaw=String(p.age_group||'').trim();
-
-  // 東京SCは15歳・16歳を別基準にしているので一旦対象外
-  if(
-    ageRaw.includes('15〜16') ||
-    ageRaw.includes('15～16') ||
-    ageRaw==='CS'
-  ){
-    return null;
-  }
-
-  let age=ageRaw;
-
-  // 「14」「14才」「14歳」などをすべて「14歳」に統一
-  const ageMatch=ageRaw.match(/\d+/);
-
-  if(ageMatch){
-    const n=Number(ageMatch[0]);
-
-    if(n<=8){
-      age='8歳以下';
-    }else if(n>=19){
-      age='19歳以上';
-    }else{
-      age=`${n}歳`;
+  // 要項どおり、本大会第1日目 2026/10/30 の満年齢で参加年齢を決定する。
+  // 生年月日が未登録の選手だけ、従来の年齢区分をフォールバックとして使う。
+  let ageKey=null;
+  if(age!==null){
+    ageKey=age<=8?'8歳以下':age>=19?'19歳以上':`${age}歳`;
+  }else{
+    const ageRaw=String(p.age_group||'').trim();
+    const ageMatch=ageRaw.match(/\d+/);
+    if(ageMatch){
+      const n=Number(ageMatch[0]);
+      ageKey=n<=8?'8歳以下':n>=19?'19歳以上':`${n}歳`;
     }
   }
 
+  if(!ageKey)return {date:TOKYO_SC_MEET_DATE,age,ageKey:null,standard:null};
+
   const event=String(stroke||'').trim();
   const dist=Number(distance);
-console.log('東京SC確認', {gender, age, event, dist, total:window.TOKYO_SC_STANDARDS.length});
   const x=window.TOKYO_SC_STANDARDS.find(r=>
     String(r.gender).trim()===gender &&
-    String(r.age).trim()===age &&
+    String(r.age).trim()===ageKey &&
     String(r.event).trim()===event &&
     Number(r.distance)===dist
   );
 
-  return x ? Number(x.standard) : null;
+  return {date:TOKYO_SC_MEET_DATE,age,ageKey,standard:x?Number(x.standard):null};
+}
+
+function tokyoScStandard(playerId,stroke,distance){
+  return tokyoScInfo(playerId,stroke,distance).standard;
 }
 
 function best(playerId,stroke,distance,course){let a=records.filter(r=>r.swimmer_id===playerId&&r.stroke===stroke&&Number(r.distance)===Number(distance)&&r.course===course).map(r=>+r.time_seconds);return a.length?Math.min(...a):null}
@@ -617,7 +605,8 @@ function preview(){
   const meet=joMeetInfo(recordDate),p=playerById(playerId);
   const divInfo=meet?joDivisionFor(p,selectedStroke,selectedDistance,meet.date):null;
   const st=standard(playerId,selectedStroke,selectedDistance,selectedCourse,meet?.date||null);
-  const ts=tokyoScStandard(playerId,selectedStroke,selectedDistance);
+  const tokyoInfo=tokyoScInfo(playerId,selectedStroke,selectedDistance);
+  const ts=tokyoInfo.standard;
   const b=best(playerId,selectedStroke,selectedDistance,selectedCourse);
   if(isNaN(s)){if($('#preview'))$('#preview').innerHTML='';return;}
   const jo=st!=null&&s<=st,upd=b==null||s<b,joRate=st!=null?(st/s)*100:null;
@@ -625,7 +614,11 @@ function preview(){
   let meetText=meet
     ? `🏊 ${meet.name} ／ 基準日 ${meet.date.replaceAll('-','/')} ／ 基準日年齢 ${divInfo?.age!=null?divInfo.age+'歳':'生年月日未登録'} ／ JO区分 ${divInfo?.division||p?.age_group||'-'}`
     : '🏊 JO大会基準日：この年度の日程は未登録';
-  let tokyoText=ts==null?'🗼 東京SC招待：対象標準なし':s<=ts?`🗼 東京SC招待突破！　標準 ${fmt(ts)}`:`🗼 東京SC招待：標準 ${fmt(ts)}（あと ${(s-ts).toFixed(2)}秒）`;
+  let tokyoText=ts==null
+    ? `🗼 東京SC招待 ／ 基準日 2026/10/30 ／ 基準日年齢 ${tokyoInfo.age!=null?tokyoInfo.age+'歳':'生年月日未登録'}：対象標準なし`
+    : s<=ts
+      ? `🗼 東京SC招待 ／ 基準日 2026/10/30 ／ 基準日年齢 ${tokyoInfo.age!=null?tokyoInfo.age+'歳':tokyoInfo.ageKey||'-'} ／ 🏆 突破！　標準 ${fmt(ts)}`
+      : `🗼 東京SC招待 ／ 基準日 2026/10/30 ／ 基準日年齢 ${tokyoInfo.age!=null?tokyoInfo.age+'歳':tokyoInfo.ageKey||'-'} ／ 標準 ${fmt(ts)}（あと ${(s-ts).toFixed(2)}秒）`;
   $('#preview').innerHTML=`<div class="result ${jo?'good':'bad'}"><b>${meetText}</b><br><b>${joText}</b><br>${joRate!=null?`<b>JO達成率：${joRate.toFixed(1)}%</b><br>`:''}<b>${tokyoText}</b><br>自己ベスト：${fmt(b)}${upd&&b!=null?` 🔥 ${(b-s).toFixed(2)}秒更新！`:''}</div>`;
 }
 
