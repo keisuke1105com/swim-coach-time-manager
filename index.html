@@ -84,67 +84,51 @@ function ageOnDate(birthDate, targetDate){
 
   return age;
 }
+
+function joMeetInfo(recordDate){
+  const raw=recordDate||new Date().toISOString().slice(0,10);
+  const d=new Date(raw+'T00:00:00');
+  if(isNaN(d))return null;
+  const y=d.getFullYear(),m=d.getMonth()+1;
+  const seasonYear=m>=4?y:y-1;
+  const schedules={2026:{summer:'2026-08-22',spring:'2027-03-27'}};
+  const sc=schedules[seasonYear];
+  if(!sc)return null;
+  const summerDate=new Date(sc.summer+'T00:00:00');
+  return d<=summerDate
+    ? {name:`${seasonYear}年夏季JO`,date:sc.summer}
+    : {name:`${seasonYear+1}年春季JO`,date:sc.spring};
+}
+
+function joDivisionFor(player,stroke,distance,meetDate){
+  if(!player)return null;
+  let age=null,division=player.age_group;
+  if(player.birth_date&&meetDate)age=ageOnDate(player.birth_date,meetDate);
+  if(age!==null){
+    if(age<=9)division='9歳以下';
+    else if(age===10)division='10歳';
+    else if(age===11)division='11歳';
+    else if(age===12)division='12歳';
+    else if(age===13)division='13歳';
+    else if(age===14)division='14歳';
+    else if(age===15||age===16)division='15〜16歳';
+    else if(age>=17)division='CS';
+  }
+  if(division==='17-18歳'||division==='17～18歳')division='CS';
+  if(age!==null&&age>=13&&Number(distance)===50&&['背泳ぎ','平泳ぎ','バタフライ'].includes(stroke))division='CS';
+  return {age,division};
+}
+
 function standard(playerId,stroke,distance,course,targetDate=null){
-  let p=playerById(playerId);
+  const p=playerById(playerId);
   if(!p)return null;
-
-  let division=p.age_group;
-// 大会当日の満年齢を計算
-let meetAge = null;
-
-if(p.birth_date && targetDate){
-  meetAge = ageOnDate(p.birth_date, targetDate);
-}
-// 大会当日の年齢からJO区分を自動判定
-if(meetAge !== null){
-  if(meetAge <= 9){
-    division = '9歳以下';
-  }else if(meetAge === 10){
-    division = '10歳';
-  }else if(meetAge === 11){
-    division = '11歳';
-  }else if(meetAge === 12){
-    division = '12歳';
-  }else if(meetAge === 13){
-    division = '13歳';
-  }else if(meetAge === 14){
-    division = '14歳';
-  }else if(meetAge === 15 || meetAge === 16){
-    division = '15〜16歳';
-  }else if(meetAge >= 17){
-    division = 'CS';
-  }
-}
-  // 17-18歳はCS
-  if(division==='17-18歳' || division==='17～18歳'){
-    division='CS';
-  }
-
-  // 13歳以上の50m 背泳ぎ・平泳ぎ・バタフライはCS
-const ageMatch=String(p.age_group||'').match(/\d+/);
-const age=ageMatch ? Number(ageMatch[0]) : null;
-
-if(
-  age!==null &&
-  age>=13 &&
-  Number(distance)===50 &&
-  ['背泳ぎ','平泳ぎ','バタフライ'].includes(stroke)
-){
-  division='CS';
-}
-
-  let x=STANDARDS.find(x=>
-    x.event===stroke &&
-    parseInt(x.distance)===Number(distance) &&
-    x.division===division
-  );
-
+  const divInfo=joDivisionFor(p,stroke,distance,targetDate);
+  const division=divInfo?.division||p.age_group;
+  const x=STANDARDS.find(x=>x.event===stroke&&parseInt(x.distance)===Number(distance)&&x.division===division);
   if(!x)return null;
-
-  return p.gender==='男子'
-    ? (course==='長水路'?x.maleLC:x.maleSC)
-    : (course==='長水路'?x.femaleLC:x.femaleSC);
+  return p.gender==='男子'?(course==='長水路'?x.maleLC:x.maleSC):(course==='長水路'?x.femaleLC:x.femaleSC);
 }
+
 function tokyoScStandard(playerId,stroke,distance){
   const p=playerById(playerId);
 
@@ -625,52 +609,42 @@ let trendOptions=trendKeys.map(key=>{
     </div>
   `;
 } 
-  function renderInput(){if(!selectedPlayerId)selectedPlayerId=PLAYERS[0]?.id||'';if(!PLAYERS.length){$('#input').innerHTML='<div class="card"><h2>⏱️ タイム入力</h2><p>先に選手を登録してください。</p></div>';return}$('#input').innerHTML=`<div class="card"><h2>⏱️ タイム入力</h2><div class="field"><label>選手</label><select id="ip" onchange="selectedPlayerId=this.value;preview()">${PLAYERS.map(p=>`<option value="${p.id}" ${p.id===selectedPlayerId?'selected':''}>${p.name}</option>`).join('')}</select></div><div class="field"><label>種目</label><div class="eventgrid">${strokes.map(e=>`<button class="${e===selectedStroke?'active':''}" onclick="setStroke('${e}')">${e}</button>`).join('')}</div></div><div class="field"><label>距離</label><div class="eventgrid">${distances.map(d=>`<button class="${d===selectedDistance?'active':''}" onclick="setDistance(${d})">${d}m</button>`).join('')}</div></div><div class="field"><label>水路</label><div class="eventgrid"><button class="${selectedCourse==='長水路'?'active':''}" onclick="setCourse('長水路')">長水路</button><button class="${selectedCourse==='短水路'?'active':''}" onclick="setCourse('短水路')">短水路</button></div></div><div class="field"><label>タイム</label><input class="time" id="itime" inputmode="decimal" placeholder="1:02.35" oninput="preview()"><div class="field"><label>記録日</label><input type="date" id="recordDate"></div></div><div class="field"><label>大会名（任意）</label><input id="ime" placeholder="○○大会"></div><div id="preview"></div><button style="width:100%;font-size:18px" onclick="addRecord()">記録を保存</button></div>`;preview()}
+  function renderInput(){if(!selectedPlayerId)selectedPlayerId=PLAYERS[0]?.id||'';if(!PLAYERS.length){$('#input').innerHTML='<div class="card"><h2>⏱️ タイム入力</h2><p>先に選手を登録してください。</p></div>';return}$('#input').innerHTML=`<div class="card"><h2>⏱️ タイム入力</h2><div class="field"><label>選手</label><select id="ip" onchange="selectedPlayerId=this.value;preview()">${PLAYERS.map(p=>`<option value="${p.id}" ${p.id===selectedPlayerId?'selected':''}>${p.name}</option>`).join('')}</select></div><div class="field"><label>種目</label><div class="eventgrid">${strokes.map(e=>`<button class="${e===selectedStroke?'active':''}" onclick="setStroke('${e}')">${e}</button>`).join('')}</div></div><div class="field"><label>距離</label><div class="eventgrid">${distances.map(d=>`<button class="${d===selectedDistance?'active':''}" onclick="setDistance(${d})">${d}m</button>`).join('')}</div></div><div class="field"><label>水路</label><div class="eventgrid"><button class="${selectedCourse==='長水路'?'active':''}" onclick="setCourse('長水路')">長水路</button><button class="${selectedCourse==='短水路'?'active':''}" onclick="setCourse('短水路')">短水路</button></div></div><div class="field"><label>タイム</label><input class="time" id="itime" inputmode="decimal" placeholder="1:02.35" oninput="preview()"><div class="field"><label>記録日</label><input type="date" id="recordDate" onchange="preview()"></div></div><div class="field"><label>大会名（任意）</label><input id="ime" placeholder="○○大会"></div><div id="preview"></div><button style="width:100%;font-size:18px" onclick="addRecord()">記録を保存</button></div>`;const rd=$('#recordDate');if(rd&&!rd.value)rd.value=new Date().toISOString().slice(0,10);preview()}
 function setStroke(e){selectedStroke=e;renderInput()}function setDistance(d){selectedDistance=d;renderInput()}function setCourse(p){selectedCourse=p;renderInput()}
 function preview(){
-  let t=$('#itime')?.value||'',
-      s=sec(t),
-      playerId=$('#ip')?.value||selectedPlayerId,
-      st=standard(playerId,selectedStroke,selectedDistance,selectedCourse),
-      ts=tokyoScStandard(playerId,selectedStroke,selectedDistance),
-      b=best(playerId,selectedStroke,selectedDistance,selectedCourse);
-
-  if(isNaN(s)){
-    if($('#preview')) $('#preview').innerHTML='';
-    return;
-  }
-
-  let jo=st!=null&&s<=st;
-  let upd=b==null||s<b;
-　 let joRate=st!=null ? (st/s)*100 : null;
-  let joText='';
-  if(st==null){
-    joText='JO標準：標準記録なし';
-  }else if(jo){
-    joText='🏆 JO突破！';
-  }else{
-    joText=`JO標準：${fmt(st)}（あと ${(s-st).toFixed(2)}秒）`;
-  }
-
-  let tokyoText='';
-  if(ts==null){
-    tokyoText='🗼 東京SC招待：対象標準なし';
-  }else if(s<=ts){
-    tokyoText=`🗼 東京SC招待突破！　標準 ${fmt(ts)}`;
-  }else{
-    tokyoText=`🗼 東京SC招待：標準 ${fmt(ts)}（あと ${(s-ts).toFixed(2)}秒）`;
-  }
-
-  $('#preview').innerHTML=
-    `<div class="result ${jo?'good':'bad'}">
-      <b>${joText}</b><br>
-${joRate!=null ? `<b>JO達成率：${joRate.toFixed(1)}%</b><br>` : ''}
-<b>${tokyoText}</b><br>
-自己ベスト：${fmt(b)}
-      ${upd&&b!=null ? ` 🔥 ${(b-s).toFixed(2)}秒更新！` : ''}
-    </div>`;
+  let t=$('#itime')?.value||'',s=sec(t),playerId=$('#ip')?.value||selectedPlayerId;
+  const recordDate=$('#recordDate')?.value||new Date().toISOString().slice(0,10);
+  const meet=joMeetInfo(recordDate),p=playerById(playerId);
+  const divInfo=meet?joDivisionFor(p,selectedStroke,selectedDistance,meet.date):null;
+  const st=standard(playerId,selectedStroke,selectedDistance,selectedCourse,meet?.date||null);
+  const ts=tokyoScStandard(playerId,selectedStroke,selectedDistance);
+  const b=best(playerId,selectedStroke,selectedDistance,selectedCourse);
+  if(isNaN(s)){if($('#preview'))$('#preview').innerHTML='';return;}
+  const jo=st!=null&&s<=st,upd=b==null||s<b,joRate=st!=null?(st/s)*100:null;
+  let joText=st==null?'JO標準：標準記録なし':jo?'🏆 JO突破！':`JO標準：${fmt(st)}（あと ${(s-st).toFixed(2)}秒）`;
+  let meetText=meet
+    ? `🏊 ${meet.name} ／ 基準日 ${meet.date.replaceAll('-','/')} ／ 基準日年齢 ${divInfo?.age!=null?divInfo.age+'歳':'生年月日未登録'} ／ JO区分 ${divInfo?.division||p?.age_group||'-'}`
+    : '🏊 JO大会基準日：この年度の日程は未登録';
+  let tokyoText=ts==null?'🗼 東京SC招待：対象標準なし':s<=ts?`🗼 東京SC招待突破！　標準 ${fmt(ts)}`:`🗼 東京SC招待：標準 ${fmt(ts)}（あと ${(s-ts).toFixed(2)}秒）`;
+  $('#preview').innerHTML=`<div class="result ${jo?'good':'bad'}"><b>${meetText}</b><br><b>${joText}</b><br>${joRate!=null?`<b>JO達成率：${joRate.toFixed(1)}%</b><br>`:''}<b>${tokyoText}</b><br>自己ベスト：${fmt(b)}${upd&&b!=null?` 🔥 ${(b-s).toFixed(2)}秒更新！`:''}</div>`;
 }
-async function addRecord(){let playerId=$('#ip').value,t=$('#itime').value,s=sec(t);if(!playerId||isNaN(s)){alert('選手と正しいタイムを入力してください。');return}let st=standard(playerId,selectedStroke,selectedDistance,selectedCourse),ts=tokyoScStandard(playerId,selectedStroke,selectedDistance),b=best(playerId,selectedStroke,selectedDistance,selectedCourse),jo=st!=null&&s<=st,isBest=b==null||s<b;let payload={swimmer_id:playerId,stroke:selectedStroke,distance:selectedDistance,course:selectedCourse,time_seconds:s,meet_name:$('#ime').value||null,record_date:$('#recordDate')?.value || new Date().toISOString().slice(0,10),memo:null,is_personal_best:isBest,is_jo_qualified:jo};let {error}=await sb.from('swim_records').insert(payload);if(error){alert(error.message);return}await loadCloud();alert(isBest?(jo?'🏆 JO突破＆自己ベスト更新！':'🔥 自己ベスト更新！'):(jo?'🏆 JO突破！':'記録を保存しました'));renderHome();renderInput()}
+
+async function addRecord(){
+  let playerId=$('#ip').value,t=$('#itime').value,s=sec(t);
+  if(!playerId||isNaN(s)){alert('選手と正しいタイムを入力してください。');return}
+  const recordDate=$('#recordDate')?.value||new Date().toISOString().slice(0,10);
+  const meet=joMeetInfo(recordDate);
+  const st=standard(playerId,selectedStroke,selectedDistance,selectedCourse,meet?.date||null);
+  const b=best(playerId,selectedStroke,selectedDistance,selectedCourse);
+  const jo=st!=null&&s<=st,isBest=b==null||s<b;
+  const payload={swimmer_id:playerId,stroke:selectedStroke,distance:selectedDistance,course:selectedCourse,time_seconds:s,meet_name:$('#ime').value||null,record_date:recordDate,memo:null,is_personal_best:isBest,is_jo_qualified:jo};
+  let {error}=await sb.from('swim_records').insert(payload);
+  if(error){alert(error.message);return}
+  await loadCloud();
+  alert(isBest?(jo?'🏆 JO突破＆自己ベスト更新！':'🔥 自己ベスト更新！'):(jo?'🏆 JO突破！':'記録を保存しました'));
+  renderHome();renderInput();
+}
+
 function renderRecords(){let rs=[...records].reverse();$('#records').innerHTML=`<div class="card"><h2>📋 タイム履歴</h2>${rs.map(r=>{let p=playerById(r.swimmer_id);return `<div class="row"><div><b>${p?.name||'選手'}</b><br><span class="muted">${r.record_date||''}・${r.stroke} ${r.distance}m・${r.course}</span><br>${r.is_jo_qualified?'<span class="badge">JO突破</span> ':''}${r.is_personal_best?'<span class="badge">BEST</span> ':''}</div><div style="text-align:right"><b>${fmt(r.time_seconds)}</b><br><button class="secondary" onclick="editRecord('${r.id}')">編集</button>
 <button class="danger" onclick="delRecord('${r.id}')">削除</button></div></div>`}).join('')||'<p class="muted">記録がありません。</p>'}</div>`}
 async function editRecord(id){
