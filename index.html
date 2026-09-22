@@ -713,11 +713,16 @@ function renderAnalysis(){
     let player=playerById(r.swimmer_id);
     if(!player)return;
 
+    // ランキングも「記録日から判定した次のJO大会基準日」の年齢・区分で比較
+    const rankingMeet=joMeetInfo(r.record_date||new Date().toISOString().slice(0,10));
+    const rankingMeetDate=rankingMeet?.date||null;
+
     let st=standard(
       r.swimmer_id,
       r.stroke,
       r.distance,
-      r.course
+      r.course,
+      rankingMeetDate
     );
 
     if(st==null)return;
@@ -762,7 +767,7 @@ let joRanking=Object.values(
     return a.qualified ? -1 : 1;
   }
   return b.rate-a.rate;
-});
+}).slice(0,20);
 
   let joRankingHtml=joRanking.length
     ? joRanking.map((x,i)=>{
@@ -812,7 +817,7 @@ let joRanking=Object.values(
     <div class="card">
       <h2>🏆 JOに近い選手・種目ランキング</h2>
       <p class="muted">
-        全選手のベストタイムをJO標準記録と比較しています。
+        各選手のベストタイムを次のJO大会基準日の年齢・区分で比較し、上位20名まで表示しています。
       </p>
       ${joRankingHtml}
     </div>
