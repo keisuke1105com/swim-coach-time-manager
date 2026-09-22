@@ -1,0 +1,950 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b84d8"><link rel="manifest" href="manifest.json"><title>水泳コーチ・タイム管理 Cloud</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;background:#eef7fc;color:#123}header{background:linear-gradient(135deg,#087fd1,#38bdf8);color:white;padding:18px 16px 22px;border-radius:0 0 24px 24px}h1{font-size:22px;margin:0 0 5px}header small{opacity:.9}.wrap{max-width:760px;margin:auto;padding:14px 12px 90px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.card{background:white;border-radius:18px;padding:16px;box-shadow:0 3px 14px #0b84d81a;margin-bottom:12px}.stat{font-size:27px;font-weight:800;margin-top:5px}.label{font-size:13px;color:#637786}button,select,input{font:inherit}button{border:0;border-radius:14px;padding:14px 16px;background:#087fd1;color:white;font-weight:700;cursor:pointer}.secondary{background:#e7f3fb;color:#0869a8}.danger{background:#ffe8e8;color:#b42318}.field{margin:12px 0}.field label{display:block;font-size:13px;font-weight:700;margin-bottom:6px;color:#47606f}select,input{width:100%;padding:14px;border:1px solid #c9dce8;border-radius:13px;background:#fff}input.time{font-size:28px;text-align:center;font-weight:800;letter-spacing:1px}.eventgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.eventgrid button{padding:12px 5px;background:#e8f5fd;color:#0869a8}.eventgrid button.active{background:#087fd1;color:white}.result{border-radius:16px;padding:14px;background:#f1f8fc;margin-top:12px}.good{background:#e8f8ef;color:#14753b}.bad{background:#fff2e8;color:#a64b00}.tabs{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #d6e5ed;display:grid;grid-template-columns:repeat(5,1fr);padding:7px max(7px,env(safe-area-inset-left)) calc(7px + env(safe-area-inset-bottom));z-index:5}.tabs button{background:none;color:#55717f;padding:7px 2px;font-size:11px}.tabs button.active{color:#087fd1}.row{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:12px 0;border-bottom:1px solid #edf1f3}.badge{display:inline-block;padding:4px 8px;border-radius:99px;background:#e8f8ef;color:#14753b;font-size:12px;font-weight:700}.muted{color:#71808a}.hidden{display:none}.search{margin-bottom:10px}.topline{display:flex;justify-content:space-between;gap:10px;align-items:center}.notice{padding:12px;border-radius:14px;background:#fff8e7;color:#835400;margin-bottom:12px}.error{padding:12px;border-radius:14px;background:#ffeaea;color:#a61b1b;margin-bottom:12px}.auth{max-width:520px;margin:24px auto}.actions{display:flex;gap:8px;flex-wrap:wrap}.actions button{flex:1}.small{font-size:12px}@media(min-width:650px){.eventgrid{grid-template-columns:repeat(5,1fr)}}
+</style></head><body>
+<header><div class="wrap" style="padding:0"><div class="topline"><div><h1>🏊 水泳コーチ・タイム管理 ☁️</h1><small>選手・記録をクラウド共有</small></div><button id="logoutBtn" class="secondary hidden" onclick="logout()">ログアウト</button></div></div></header>
+<main class="wrap"><div id="status"></div><section id="auth"></section><div id="app" class="hidden"><section id="home"></section><section id="players" class="hidden"></section><section id="input" class="hidden"></section><section id="records" class="hidden"></section><section id="analysis" class="hidden"></section></div></main>
+<nav id="tabs" class="tabs hidden"><button data-tab="home">🏠<br>ホーム</button><button data-tab="players">👥<br>選手</button><button data-tab="input">⏱️<br>入力</button><button data-tab="records">📋<br>記録</button><button data-tab="analysis">📊<br>分析</button></nav>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="config.js"></script><script src="data.js"></script><script src="tokyo_sc.js"></script><script>
+let sb=null,session=null,PLAYERS=[],records=[];let selectedPlayerId='',selectedStroke='自由形',selectedDistance=50,selectedCourse='長水路';
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const strokes=[...new Set(STANDARDS.map(x=>x.event))].filter(x=>!x.includes('リレー'));
+const distances=[50,100,200,400,800,1500];
+function setStatus(msg,type='notice'){ $('#status').innerHTML=msg?`<div class="${type}">${msg}</div>`:'' }
+function configured(){return window.SUPABASE_URL&&window.SUPABASE_PUBLISHABLE_KEY&&!window.SUPABASE_PUBLISHABLE_KEY.includes('PASTE_')}
+function sec(t){
+  t=String(t).trim();
+  if(!t)return NaN;
+
+  // 全角記号を半角へ
+  t=t.replace(/：/g,':').replace(/。/g,'.');
+
+  // iPhone入力対応
+  // 例 1.13.64 → 1:13.64
+  const dots=(t.match(/\./g)||[]).length;
+  if(!t.includes(':') && dots===2){
+    const p=t.split('.');
+    t=p[0]+':'+p[1]+'.'+p[2];
+  }
+
+  // 1:13.64 → 秒へ変換
+  let p=t.split(':');
+  if(p.length===2){
+    const m=Number(p[0]);
+    const s=Number(p[1]);
+    return Number.isFinite(m)&&Number.isFinite(s)
+      ? m*60+s
+      : NaN;
+  }
+
+  // 50mなど 32.45 はそのまま秒
+  const n=Number(t);
+  return Number.isFinite(n)?n:NaN;
+}
+
+function formatTimeInput(){
+  const el=$('#itime');
+  if(!el)return;
+
+  let t=String(el.value||'').trim();
+  if(!t)return;
+
+  t=t.replace(/：/g,':').replace(/。/g,'.');
+
+  // 1.13.64 → 1:13.64
+  const dots=(t.match(/\./g)||[]).length;
+  if(!t.includes(':') && dots===2){
+    const p=t.split('.');
+    if(p.length===3){
+      el.value=p[0]+':'+p[1]+'.'+p[2];
+    }
+  }
+
+  preview();
+}
+
+function fmt(v){if(v==null||isNaN(v))return '-';let m=Math.floor(v/60),s=v-m*60;return (m?m+':':'')+s.toFixed(2).padStart(m?5:0,'0')}
+function playerById(id){return PLAYERS.find(x=>x.id===id)}
+function ageOnDate(birthDate, targetDate){
+  if(!birthDate || !targetDate) return null;
+
+  const b = new Date(birthDate + 'T00:00:00');
+  const d = new Date(targetDate + 'T00:00:00');
+
+  if(isNaN(b) || isNaN(d)) return null;
+
+  let age = d.getFullYear() - b.getFullYear();
+
+  const birthdayPassed =
+    d.getMonth() > b.getMonth() ||
+    (d.getMonth() === b.getMonth() && d.getDate() >= b.getDate());
+
+  if(!birthdayPassed) age--;
+
+  return age;
+}
+function standard(playerId,stroke,distance,course,targetDate=null){
+  let p=playerById(playerId);
+  if(!p)return null;
+
+  let division=p.age_group;
+// 大会当日の満年齢を計算
+let meetAge = null;
+
+if(p.birth_date && targetDate){
+  meetAge = ageOnDate(p.birth_date, targetDate);
+}
+// 大会当日の年齢からJO区分を自動判定
+if(meetAge !== null){
+  if(meetAge <= 9){
+    division = '9歳以下';
+  }else if(meetAge === 10){
+    division = '10歳';
+  }else if(meetAge === 11){
+    division = '11歳';
+  }else if(meetAge === 12){
+    division = '12歳';
+  }else if(meetAge === 13){
+    division = '13歳';
+  }else if(meetAge === 14){
+    division = '14歳';
+  }else if(meetAge === 15 || meetAge === 16){
+    division = '15〜16歳';
+  }else if(meetAge >= 17){
+    division = 'CS';
+  }
+}
+  // 17-18歳はCS
+  if(division==='17-18歳' || division==='17～18歳'){
+    division='CS';
+  }
+
+  // 13歳以上の50m 背泳ぎ・平泳ぎ・バタフライはCS
+const ageMatch=String(p.age_group||'').match(/\d+/);
+const age=ageMatch ? Number(ageMatch[0]) : null;
+
+if(
+  age!==null &&
+  age>=13 &&
+  Number(distance)===50 &&
+  ['背泳ぎ','平泳ぎ','バタフライ'].includes(stroke)
+){
+  division='CS';
+}
+
+  let x=STANDARDS.find(x=>
+    x.event===stroke &&
+    parseInt(x.distance)===Number(distance) &&
+    x.division===division
+  );
+
+  if(!x)return null;
+
+  return p.gender==='男子'
+    ? (course==='長水路'?x.maleLC:x.maleSC)
+    : (course==='長水路'?x.femaleLC:x.femaleSC);
+}
+function tokyoScStandard(playerId,stroke,distance){
+  const p=playerById(playerId);
+
+  if(!p || !Array.isArray(window.TOKYO_SC_STANDARDS)){
+    return null;
+  }
+
+  // 性別を統一
+  const g=String(p.gender||'').trim();
+  const gender=
+    g.includes('女') ? '女子' :
+    g.includes('男') ? '男子' :
+    g;
+
+  // 年齢を統一
+  const ageRaw=String(p.age_group||'').trim();
+
+  // 東京SCは15歳・16歳を別基準にしているので一旦対象外
+  if(
+    ageRaw.includes('15〜16') ||
+    ageRaw.includes('15～16') ||
+    ageRaw==='CS'
+  ){
+    return null;
+  }
+
+  let age=ageRaw;
+
+  // 「14」「14才」「14歳」などをすべて「14歳」に統一
+  const ageMatch=ageRaw.match(/\d+/);
+
+  if(ageMatch){
+    const n=Number(ageMatch[0]);
+
+    if(n<=8){
+      age='8歳以下';
+    }else if(n>=19){
+      age='19歳以上';
+    }else{
+      age=`${n}歳`;
+    }
+  }
+
+  const event=String(stroke||'').trim();
+  const dist=Number(distance);
+console.log('東京SC確認', {gender, age, event, dist, total:window.TOKYO_SC_STANDARDS.length});
+  const x=window.TOKYO_SC_STANDARDS.find(r=>
+    String(r.gender).trim()===gender &&
+    String(r.age).trim()===age &&
+    String(r.event).trim()===event &&
+    Number(r.distance)===dist
+  );
+
+  return x ? Number(x.standard) : null;
+}
+
+function best(playerId,stroke,distance,course){let a=records.filter(r=>r.swimmer_id===playerId&&r.stroke===stroke&&Number(r.distance)===Number(distance)&&r.course===course).map(r=>+r.time_seconds);return a.length?Math.min(...a):null}
+async function init(){if(!configured()){renderSetupNeeded();return}sb=window.supabase.createClient(window.SUPABASE_URL,window.SUPABASE_PUBLISHABLE_KEY);let {data}=await sb.auth.getSession();session=data.session;sb.auth.onAuthStateChange((_e,s)=>{session=s;routeAuth()});routeAuth()}
+function renderSetupNeeded(){setStatus('config.js に Supabase Publishable key を設定してください。','error');$('#auth').innerHTML=`<div class="card auth"><h2>☁️ セットアップ待ち</h2><p>config.js の PASTE_YOUR_PUBLISHABLE_KEY_HERE を置き換えてください。</p></div>`}
+async function routeAuth(){if(!session){$('#app').classList.add('hidden');$('#tabs').classList.add('hidden');$('#logoutBtn').classList.add('hidden');renderAuth();return}$('#auth').innerHTML='';$('#app').classList.remove('hidden');$('#tabs').classList.remove('hidden');$('#logoutBtn').classList.remove('hidden');await loadCloud();go('home')}
+function renderAuth(){setStatus('');$('#auth').innerHTML=`<div class="card auth"><h2>🔐 コーチログイン</h2><div class="field"><label>メールアドレス</label><input id="email" type="email"></div><div class="field"><label>パスワード</label><input id="password" type="password"></div><div class="actions"><button onclick="login()">ログイン</button><button class="secondary" onclick="signup()">初回登録</button></div><p class="muted small">初回のみアカウント登録してください。複数コーチでも同じクラウドデータを共有できます。</p></div>`}
+async function login(){let email=$('#email').value.trim(),password=$('#password').value;let {error}=await sb.auth.signInWithPassword({email,password});if(error)setStatus(error.message,'error')}
+async function signup(){let email=$('#email').value.trim(),password=$('#password').value;if(password.length<6){setStatus('パスワードは6文字以上にしてください。','error');return}let {error}=await sb.auth.signUp({email,password});setStatus(error?error.message:'登録しました。メール確認が必要な場合はメールを確認してください。',error?'error':'notice')}
+async function logout(){await sb.auth.signOut()}
+async function loadCloud(){setStatus('クラウドから読み込み中…');let [{data:p,error:pe},{data:r,error:re}]=await Promise.all([sb.from('swimmers').select('*').eq('active',true).order('sort_order'),sb.from('swim_records').select('*').order('created_at')]);if(pe||re){setStatus('クラウドDBにアクセスできません。RLSポリシーを確認してください。 '+(pe?.message||re?.message||''),'error');PLAYERS=[];records=[];return}PLAYERS=p||[];records=r||[];setStatus('')}
+function renderHome(){let today=new Date().toISOString().slice(0,10),td=records.filter(r=>r.record_date===today).length,b=records.filter(r=>r.is_personal_best).length,j=records.filter(r=>r.is_jo_qualified).length;$('#home').innerHTML=`<div class="grid"><div class="card"><div class="label">今日の入力</div><div class="stat">${td}</div></div><div class="card"><div class="label">ベスト更新</div><div class="stat">${b}</div></div><div class="card"><div class="label">JO突破記録</div><div class="stat">${j}</div></div><div class="card"><div class="label">登録選手</div><div class="stat">${PLAYERS.length}</div></div></div><div class="card"><h3>🚀 すぐ入力</h3><button style="width:100%" onclick="go('input')">タイムを入力する</button></div><div class="card"><h3>最近の記録</h3>${records.slice(-5).reverse().map(r=>{let p=playerById(r.swimmer_id);return `<div class="row"><div><b>${p?.name||'選手'}</b><br><span class="muted">${r.stroke} ${r.distance}m・${r.course}</span></div><b>${fmt(r.time_seconds)}</b></div>`}).join('')||'<p class="muted">まだ記録がありません。</p>'}</div>`}
+function renderPlayers(){ $('#players').innerHTML=`<div class="card"><div class="topline"><h2>👥 選手一覧</h2><button onclick="showAddPlayer()">＋ 選手追加</button></div><input class="search" id="pq" placeholder="選手名で検索" oninput="filterPlayers()"><div id="playerForm"></div><div id="plist"></div></div>`;filterPlayers()}
+function showAddPlayer(p=null){$('#playerForm').innerHTML=`<div class="result"><h3>${p?'選手編集':'新しい選手'}</h3><div class="field"><label>氏名</label><input id="pn" value="${p?.name||''}"></div><div class="field"><label>区分</label><select id="pd">${['9歳以下','10歳','11歳','12歳','13歳','14歳','15〜16歳','CS'].map(x=>`<option ${p?.age_group===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>性別</label><select id="pg"><option ${p?.gender==='男子'?'selected':''}>男子</option><option ${p?.gender==='女子'?'selected':''}>女子</option></select></div><div class="field"><label>生年月日（任意）</label><input id="pb" type="date" value="${p?.birth_date||''}"></div><div class="field"><label>チーム・メモ（任意）</label><input id="pt" value="${p?.team||''}"></div><div class="actions"><button onclick="savePlayer('${p?.id||''}')">保存</button><button class="secondary" onclick="$('#playerForm').innerHTML=''">キャンセル</button></div></div>`}
+async function savePlayer(id=''){let payload={name:$('#pn').value.trim(),age_group:$('#pd').value,gender:$('#pg').value,birth_date:$('#pb').value||null,team:$('#pt').value.trim()||null,active:true};if(!payload.name){alert('氏名を入力してください');return}if(!id)payload.sort_order=(PLAYERS.reduce((m,p)=>Math.max(m,p.sort_order||0),0)+1);let q=id?sb.from('swimmers').update(payload).eq('id',id):sb.from('swimmers').insert(payload);let {error}=await q;if(error){alert(error.message);return}await loadCloud();renderPlayers();renderHome()}
+async function removePlayer(id){if(!confirm('この選手を一覧から外しますか？過去記録は残ります。'))return;let {error}=await sb.from('swimmers').update({active:false}).eq('id',id);if(error)alert(error.message);else{await loadCloud();renderPlayers();renderHome()}}
+function filterPlayers(){let q=($('#pq')?.value||'').toLowerCase();$('#plist').innerHTML=PLAYERS.filter(p=>p.name.toLowerCase().includes(q)).map(p=>{let n=records.filter(r=>r.swimmer_id===p.id).length,j=records.filter(r=>r.swimmer_id===p.id&&r.is_jo_qualified).length;return `<div class="row"><div><b>${p.name}</b><br><span class="muted">${p.age_group||'-'}・${p.gender||'-'}・${n}件</span></div><div>${j?'<span class="badge">JO突破あり</span> ':''}<button class="secondary" onclick="showPlayerDetail('${p.id}')">詳細</button><button class="secondary" onclick="selectedPlayerId='${p.id}';go('input')">入力</button> <button class="secondary" onclick='showAddPlayer(${JSON.stringify(p)})'>編集</button> <button class="danger" onclick="removePlayer('${p.id}')">外す</button></div></div>`}).join('')||'<p class="muted">選手がいません。</p>'}
+function showPlayerDetail(id){
+  let p=playerById(id);
+  if(!p)return;
+
+  let rs=records
+    .filter(r=>r.swimmer_id===id)
+    .sort((a,b)=>
+      String(a.record_date||'').localeCompare(String(b.record_date||''))
+    );
+
+  let bestMap={};
+
+  rs.forEach(r=>{
+    let key=`${r.stroke}|${r.distance}|${r.course}`;
+
+    if(
+      !bestMap[key] ||
+      Number(r.time_seconds)<Number(bestMap[key].time_seconds)
+    ){
+      bestMap[key]=r;
+    }
+  });
+
+let bests=Object.values(bestMap).sort((a,b)=>{
+  const stA=standard(id,a.stroke,a.distance,a.course);
+  const stB=standard(id,b.stroke,b.distance,b.course);
+
+  const rateA=stA!=null
+    ? (stA/Number(a.time_seconds))*100
+    : -1;
+
+  const rateB=stB!=null
+    ? (stB/Number(b.time_seconds))*100
+    : -1;
+
+  return rateB-rateA;
+});
+
+  let joCount=bests.filter(r=>{
+    let st=standard(
+      id,
+      r.stroke,
+      r.distance,
+      r.course
+    );
+    return st!=null && Number(r.time_seconds)<=st;
+  }).length;
+
+  let bestHtml=bests.map(r=>{
+    let st=standard(
+     id,
+      r.stroke,
+      r.distance,
+      r.course
+    );
+let joRate=st!=null
+  ? (st/Number(r.time_seconds))*100
+  : null; 
+    let s=Number(r.time_seconds);
+let jo=st!=null && s<=st;
+let diff=st!=null ? s-st : null;
+
+let joText='JO標準なし';
+
+if(st!=null){
+
+  joText=jo
+    ? `🏆 JO突破　達成率 ${joRate.toFixed(1)}%`
+    : `JOまであと ${diff.toFixed(2)}秒　達成率 ${joRate.toFixed(1)}%`;
+}
+
+    return `
+      <div class="row">
+        <div>
+          <b>${r.stroke} ${r.distance}m</b><br>
+          <span class="muted">${r.course}</span><br>
+          <span class="muted">${joText}</span>
+        </div>
+        <div style="text-align:right">
+          <b style="font-size:20px">${fmt(s)}</b><br>
+          ${jo?'<span class="badge">JO突破</span>':''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  let pastBest={};
+
+  let history=rs.map(r=>{
+    let key=`${r.stroke}|${r.distance}|${r.course}`;
+    let s=Number(r.time_seconds);
+    let previous=pastBest[key];
+
+    let improvement='';
+
+    if(previous==null){
+      improvement='初回記録';
+      pastBest[key]=s;
+    }else if(s<previous){
+      improvement=`🔥 ${(previous-s).toFixed(2)}秒更新`;
+      pastBest[key]=s;
+    }
+
+    return {
+      ...r,
+      improvement
+    };
+  }).reverse();
+let trendGroups={};
+
+history.forEach(r=>{
+  let key=`${r.stroke}|${r.distance}|${r.course}`;
+
+  if(!trendGroups[key]){
+    trendGroups[key]=[];
+  }
+
+  trendGroups[key].push(r);
+});
+
+let trendKeys=Object.keys(trendGroups);
+
+let trendOptions=trendKeys.map(key=>{
+  let [stroke,distance,course]=key.split('|');
+
+  return `<option value="${key}">
+    ${stroke} ${distance}m・${course}
+  </option>`;
+}).join('');
+  let historyHtml=history.map(r=>`
+    <div class="row">
+      <div>
+        <b>${r.record_date||''}</b><br>
+        <span class="muted">
+          ${r.stroke} ${r.distance}m・${r.course}
+        </span>
+        ${r.meet_name
+          ? `<br><span class="muted">${r.meet_name}</span>`
+          : ''
+        }
+        ${r.improvement
+          ? `<br><span class="badge">${r.improvement}</span>`
+          : ''
+        }
+      </div>
+      <div style="text-align:right">
+        <b>${fmt(r.time_seconds)}</b><br>
+        ${r.is_jo_qualified
+          ? '<span class="badge">JO突破</span>'
+          : ''
+        }
+      </div>
+    </div>
+  `).join('');
+
+  $('#players').innerHTML=`
+    <div class="card">
+
+      <button
+        class="secondary"
+        onclick="renderPlayers()"
+        style="margin-bottom:14px"
+      >
+        ← 選手一覧へ戻る
+      </button>
+
+      <h2>🏊 ${p.name}</h2>
+
+      <p class="muted">
+        ${p.age_group||'-'} ・
+        ${p.gender||'-'}
+        ${p.team?' ・ '+p.team:''}
+      </p>
+
+      <div class="grid">
+
+        <div class="card">
+          <div class="label">記録数</div>
+          <div class="stat">${rs.length}</div>
+        </div>
+
+        <div class="card">
+          <div class="label">ベスト種目数</div>
+          <div class="stat">${bests.length}</div>
+        </div>
+
+        <div class="card">
+          <div class="label">JO突破種目</div>
+          <div class="stat">${joCount}</div>
+        </div>
+
+      </div>
+
+      <div class="actions" style="margin-bottom:16px">
+
+        <button
+          onclick="
+            selectedPlayerId='${p.id}';
+            go('input')
+          "
+        >
+          ＋ この選手のタイム入力
+        </button>
+
+      </div>
+
+      <h3>🏆 種目別ベスト</h3>
+
+      ${
+        bestHtml ||
+        '<p class="muted">まだ記録がありません。</p>'
+      }
+
+    </div>
+<div class="card">
+  <h3>📈 タイム推移</h3>
+
+  ${
+    trendKeys.length
+      ? `
+        <div class="field">
+          <label>種目</label>
+          <select id="trendSelect" onchange="renderTrendChart('${id}')">
+            ${trendOptions}
+          </select>
+        </div>
+
+        <div id="trendChart"></div>
+      `
+      : '<p class="muted">まだグラフにできる記録がありません。</p>'
+  }
+</div>
+    <div class="card">
+
+      <h3>📈 成長履歴</h3>
+
+      ${
+        historyHtml ||
+        '<p class="muted">まだ記録がありません。</p>'
+      }
+
+    </div>
+  `;
+  
+  setTimeout(()=>renderTrendChart(id),0);
+}
+ 
+  function renderTrendChart(playerId){
+  const select=$('#trendSelect');
+  const chart=$('#trendChart');
+
+  if(!select || !chart)return;
+
+  const key=select.value;
+  if(!key)return;
+
+  const [stroke,distance,course]=key.split('|');
+
+  const data=records
+    .filter(r=>
+      String(r.swimmer_id)===String(playerId) &&
+      r.stroke===stroke &&
+      Number(r.distance)===Number(distance) &&
+      r.course===course
+    )
+    .sort((a,b)=>
+      String(a.record_date||'').localeCompare(String(b.record_date||''))
+    );
+
+  if(!data.length){
+    chart.innerHTML='<p class="muted">グラフにできる記録がありません。</p>';
+    return;
+  }
+
+  const times=data.map(r=>Number(r.time_seconds));
+  const joStandard=standard(playerId,stroke,distance,course);
+
+  let values=[...times];
+  if(joStandard!=null)values.push(joStandard);
+
+  const min=Math.min(...values);
+  const max=Math.max(...values);
+
+  const padding=Math.max((max-min)*0.25,1);
+
+  const yMin=min-padding;
+  const yMax=max+padding;
+
+  const W=600;
+  const H=260;
+
+  const left=55;
+  const right=20;
+  const top=25;
+  const bottom=45;
+
+  const plotW=W-left-right;
+  const plotH=H-top-bottom;
+
+  const x=i=>{
+    if(data.length===1)return left+plotW/2;
+    return left+(i/(data.length-1))*plotW;
+  };
+
+  const y=value=>{
+    return top+((value-yMin)/(yMax-yMin))*plotH;
+  };
+
+  const linePoints=data
+    .map((r,i)=>`${x(i)},${y(Number(r.time_seconds))}`)
+    .join(' ');
+
+  const points=data.map((r,i)=>{
+    const cx=x(i);
+    const cy=y(Number(r.time_seconds));
+    const date=String(r.record_date||'').slice(5).replace('-','/');
+
+    return `
+      <circle cx="${cx}" cy="${cy}" r="5" fill="#087fd1"></circle>
+
+      <text
+        x="${cx}"
+        y="${cy-10}"
+        text-anchor="middle"
+        font-size="12"
+        font-weight="700"
+        fill="#123">
+        ${fmt(Number(r.time_seconds))}
+      </text>
+
+      <text
+        x="${cx}"
+        y="${H-15}"
+        text-anchor="middle"
+        font-size="11"
+        fill="#71808a">
+        ${date}
+      </text>
+    `;
+  }).join('');
+
+  let joLine='';
+
+  if(joStandard!=null){
+    const jy=y(joStandard);
+
+    joLine=`
+      <line
+        x1="${left}"
+        x2="${W-right}"
+        y1="${jy}"
+        y2="${jy}"
+        stroke="#e67e22"
+        stroke-width="2"
+        stroke-dasharray="7 5">
+      </line>
+
+      <text
+        x="${W-right}"
+        y="${jy-6}"
+        text-anchor="end"
+        font-size="12"
+        font-weight="700"
+        fill="#b85d00">
+        JO ${fmt(joStandard)}
+      </text>
+    `;
+  }
+
+  chart.innerHTML=`
+    <div style="margin-top:12px;overflow-x:auto">
+      <svg
+        viewBox="0 0 ${W} ${H}"
+        style="width:100%;min-width:520px;background:#fff;border-radius:14px"
+      >
+
+        <text
+          x="${left}"
+          y="16"
+          font-size="11"
+          fill="#71808a">
+          ↑ タイムが速い
+        </text>
+
+        ${joLine}
+
+        ${
+          data.length>1
+            ? `<polyline
+                 points="${linePoints}"
+                 fill="none"
+                 stroke="#087fd1"
+                 stroke-width="4"
+                 stroke-linecap="round"
+                 stroke-linejoin="round">
+               </polyline>`
+            : ''
+        }
+
+        ${points}
+      </svg>
+    </div>
+
+    <div class="muted" style="margin-top:8px;text-align:center">
+      ${stroke} ${distance}m・${course}
+      ／ ${data.length}記録
+    </div>
+  `;
+} 
+  function renderInput(){if(!selectedPlayerId)selectedPlayerId=PLAYERS[0]?.id||'';if(!PLAYERS.length){$('#input').innerHTML='<div class="card"><h2>⏱️ タイム入力</h2><p>先に選手を登録してください。</p></div>';return}$('#input').innerHTML=`<div class="card"><h2>⏱️ タイム入力</h2><div class="field"><label>選手</label><select id="ip" onchange="selectedPlayerId=this.value;preview()">${PLAYERS.map(p=>`<option value="${p.id}" ${p.id===selectedPlayerId?'selected':''}>${p.name}</option>`).join('')}</select></div><div class="field"><label>種目</label><div class="eventgrid">${strokes.map(e=>`<button class="${e===selectedStroke?'active':''}" onclick="setStroke('${e}')">${e}</button>`).join('')}</div></div><div class="field"><label>距離</label><div class="eventgrid">${distances.map(d=>`<button class="${d===selectedDistance?'active':''}" onclick="setDistance(${d})">${d}m</button>`).join('')}</div></div><div class="field"><label>水路</label><div class="eventgrid"><button class="${selectedCourse==='長水路'?'active':''}" onclick="setCourse('長水路')">長水路</button><button class="${selectedCourse==='短水路'?'active':''}" onclick="setCourse('短水路')">短水路</button></div></div><div class="field"><label>タイム</label><input class="time" id="itime" inputmode="decimal" placeholder="1:02.35" oninput="preview()"><div class="field"><label>記録日</label><input type="date" id="recordDate"></div></div><div class="field"><label>大会名（任意）</label><input id="ime" placeholder="○○大会"></div><div id="preview"></div><button style="width:100%;font-size:18px" onclick="addRecord()">記録を保存</button></div>`;preview()}
+function setStroke(e){selectedStroke=e;renderInput()}function setDistance(d){selectedDistance=d;renderInput()}function setCourse(p){selectedCourse=p;renderInput()}
+function preview(){
+  let t=$('#itime')?.value||'',
+      s=sec(t),
+      playerId=$('#ip')?.value||selectedPlayerId,
+      st=standard(playerId,selectedStroke,selectedDistance,selectedCourse),
+      ts=tokyoScStandard(playerId,selectedStroke,selectedDistance),
+      b=best(playerId,selectedStroke,selectedDistance,selectedCourse);
+
+  if(isNaN(s)){
+    if($('#preview')) $('#preview').innerHTML='';
+    return;
+  }
+
+  let jo=st!=null&&s<=st;
+  let upd=b==null||s<b;
+　 let joRate=st!=null ? (st/s)*100 : null;
+  let joText='';
+  if(st==null){
+    joText='JO標準：標準記録なし';
+  }else if(jo){
+    joText='🏆 JO突破！';
+  }else{
+    joText=`JO標準：${fmt(st)}（あと ${(s-st).toFixed(2)}秒）`;
+  }
+
+  let tokyoText='';
+  if(ts==null){
+    tokyoText='🗼 東京SC招待：対象標準なし';
+  }else if(s<=ts){
+    tokyoText=`🗼 東京SC招待突破！　標準 ${fmt(ts)}`;
+  }else{
+    tokyoText=`🗼 東京SC招待：標準 ${fmt(ts)}（あと ${(s-ts).toFixed(2)}秒）`;
+  }
+
+  $('#preview').innerHTML=
+    `<div class="result ${jo?'good':'bad'}">
+      <b>${joText}</b><br>
+${joRate!=null ? `<b>JO達成率：${joRate.toFixed(1)}%</b><br>` : ''}
+<b>${tokyoText}</b><br>
+自己ベスト：${fmt(b)}
+      ${upd&&b!=null ? ` 🔥 ${(b-s).toFixed(2)}秒更新！` : ''}
+    </div>`;
+}
+async function addRecord(){let playerId=$('#ip').value,t=$('#itime').value,s=sec(t);if(!playerId||isNaN(s)){alert('選手と正しいタイムを入力してください。');return}let st=standard(playerId,selectedStroke,selectedDistance,selectedCourse),ts=tokyoScStandard(playerId,selectedStroke,selectedDistance),b=best(playerId,selectedStroke,selectedDistance,selectedCourse),jo=st!=null&&s<=st,isBest=b==null||s<b;let payload={swimmer_id:playerId,stroke:selectedStroke,distance:selectedDistance,course:selectedCourse,time_seconds:s,meet_name:$('#ime').value||null,record_date:$('#recordDate')?.value || new Date().toISOString().slice(0,10),memo:null,is_personal_best:isBest,is_jo_qualified:jo};let {error}=await sb.from('swim_records').insert(payload);if(error){alert(error.message);return}await loadCloud();alert(isBest?(jo?'🏆 JO突破＆自己ベスト更新！':'🔥 自己ベスト更新！'):(jo?'🏆 JO突破！':'記録を保存しました'));renderHome();renderInput()}
+function renderRecords(){let rs=[...records].reverse();$('#records').innerHTML=`<div class="card"><h2>📋 タイム履歴</h2>${rs.map(r=>{let p=playerById(r.swimmer_id);return `<div class="row"><div><b>${p?.name||'選手'}</b><br><span class="muted">${r.record_date||''}・${r.stroke} ${r.distance}m・${r.course}</span><br>${r.is_jo_qualified?'<span class="badge">JO突破</span> ':''}${r.is_personal_best?'<span class="badge">BEST</span> ':''}</div><div style="text-align:right"><b>${fmt(r.time_seconds)}</b><br><button class="secondary" onclick="editRecord('${r.id}')">編集</button>
+<button class="danger" onclick="delRecord('${r.id}')">削除</button></div></div>`}).join('')||'<p class="muted">記録がありません。</p>'}</div>`}
+async function editRecord(id){
+  const r=records.find(x=>String(x.id)===String(id));
+  if(!r){
+    alert('記録が見つかりません。');
+    return;
+  }
+
+  const newDate=prompt(
+    '大会日を入力してください（例：2026-07-12）',
+    r.record_date || ''
+  );
+
+  if(newDate===null)return;
+
+  const newTime=prompt(
+    'タイムを入力してください（例：26.87 または 1:02.35）',
+    fmt(r.time_seconds)
+  );
+
+  if(newTime===null)return;
+
+  const newSeconds=sec(newTime);
+
+  if(isNaN(newSeconds)){
+    alert('正しいタイムを入力してください。');
+    return;
+  }
+
+  const {error}=await sb
+    .from('swim_records')
+    .update({
+      record_date:newDate,
+      time_seconds:newSeconds
+    })
+    .eq('id',id);
+
+  if(error){
+    alert(error.message);
+    return;
+  }
+
+  await loadCloud();
+  renderRecords();
+  renderHome();
+  alert('記録を更新しました！');
+}
+  async function delRecord(id){if(!confirm('この記録を削除しますか？'))return;let {error}=await sb.from('swim_records').delete().eq('id',id);if(error)alert(error.message);else{await loadCloud();renderRecords();renderHome()}}
+function renderAnalysis(){
+  let jo=records.filter(r=>r.is_jo_qualified).length;
+  let bestRecords=records.filter(r=>r.is_personal_best).length;
+
+  let counts={};
+  records.forEach(r=>{
+    counts[r.swimmer_id]=(counts[r.swimmer_id]||0)+1;
+  });
+
+  let ranking=Object.entries(counts)
+    .sort((a,b)=>b[1]-a[1]);
+
+  // JOに近い選手・種目ランキングを作成
+  let joBestMap={};
+
+  records.forEach(r=>{
+    let player=playerById(r.swimmer_id);
+    if(!player)return;
+
+    let st=standard(
+      r.swimmer_id,
+      r.stroke,
+      r.distance,
+      r.course
+    );
+
+    if(st==null)return;
+
+    let time=Number(r.time_seconds);
+    if(!Number.isFinite(time) || time<=0)return;
+
+    let key=`${r.swimmer_id}|${r.stroke}|${r.distance}|${r.course}`;
+
+    if(!joBestMap[key] || time<joBestMap[key].time){
+      joBestMap[key]={
+        player,
+        stroke:r.stroke,
+        distance:r.distance,
+        course:r.course,
+        time,
+        standard:st
+      };
+    }
+  });
+
+let joRanking=Object.values(
+  Object.values(joBestMap).reduce((best,x)=>{
+    const id=String(x.player.id);
+    const rate=(x.standard/x.time)*100;
+
+    if(!best[id] || rate>best[id].rate){
+      best[id]={
+        ...x,
+        swimmer_id:x.player.id,
+        rate:rate,
+        diff:x.time-x.standard,
+        qualified:x.time<=x.standard
+      };
+    }
+
+    return best;
+  },{})
+).sort((a,b)=>{
+  // JO突破済みを先頭、その後は達成率が高い順
+  if(a.qualified!==b.qualified){
+    return a.qualified ? -1 : 1;
+  }
+  return b.rate-a.rate;
+});
+
+  let joRankingHtml=joRanking.length
+    ? joRanking.map((x,i)=>{
+        let medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}位`;
+
+        let status=x.qualified
+          ? `🏆 JO突破！ 達成率 ${x.rate.toFixed(1)}%`
+          : `JOまであと ${x.diff.toFixed(2)}秒　達成率 ${x.rate.toFixed(1)}%`;
+
+        return `
+          <div class="row">
+            <div>
+              <b>${medal} ${x.player.name}</b><br>
+              <span class="muted">
+                ${x.stroke} ${x.distance}m・${x.course}
+              </span><br>
+              <span class="muted">${status}</span>
+            </div>
+
+            <div style="text-align:right">
+              <b>${fmt(x.time)}</b><br>
+              <span class="muted">JO ${fmt(x.standard)}</span>
+            </div>
+          </div>
+        `;
+      }).join('')
+    : '<p class="muted">JO標準と比較できる記録がまだありません。</p>';
+
+  $('#analysis').innerHTML=`
+    <div class="grid">
+      <div class="card">
+        <div class="label">記録件数</div>
+        <div class="stat">${records.length}</div>
+      </div>
+
+      <div class="card">
+        <div class="label">JO突破数</div>
+        <div class="stat">${jo}</div>
+      </div>
+
+      <div class="card">
+        <div class="label">ベスト更新</div>
+        <div class="stat">${bestRecords}</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🏆 JOに近い選手・種目ランキング</h2>
+      <p class="muted">
+        全選手のベストタイムをJO標準記録と比較しています。
+      </p>
+      ${joRankingHtml}
+    </div>
+
+    <div class="card">
+      <h2>🏅 入力件数ランキング</h2>
+      ${
+        ranking.map((x,i)=>`
+          <div class="row">
+            <b>${i+1}. ${playerById(x[0])?.name||'選手'}</b>
+            <span>${x[1]}件</span>
+          </div>
+        `).join('') ||
+        '<p class="muted">記録を入力すると表示されます。</p>'
+      }
+    </div>
+
+    <div class="card">
+      <h3>☁️ クラウド共有</h3>
+      <p>
+        現在の選手数：<b>${PLAYERS.length}名</b>
+      </p>
+      <p class="muted">
+        「選手」→「＋ 選手追加」から人数を増やせます。
+        Mac・iPhoneで同じ一覧と記録を共有します。
+      </p>
+      <button class="secondary" onclick="migrateLocalV3()">
+        このMacの旧v3記録をクラウドへ移行
+      </button>
+    </div>
+  `;
+}
+async function migrateLocalV3(){
+  let old=[];
+  try{
+    old=JSON.parse(localStorage.getItem('swimCoachRecordsV3')||'[]');
+  }catch{}
+
+  if(!old.length){
+    alert('この端末に旧v3記録はありません。');
+    return;
+  }
+
+  let byName=Object.fromEntries(PLAYERS.map(p=>[p.name,p]));
+  let payload=[];
+  let skipped=0;
+
+  for(let r of old){
+    let p=byName[r.player];
+    if(!p)continue;
+
+    let candidate={
+      swimmer_id:p.id,
+      stroke:r.event,
+      distance:parseInt(r.distance),
+      course:r.pool,
+      time_seconds:+r.seconds,
+      meet_name:r.memo||null,
+      record_date:r.date||new Date().toISOString().slice(0,10),
+      memo:null,
+      is_personal_best:!!r.isBest,
+      is_jo_qualified:!!r.jo
+    };
+
+    let duplicate=records.some(x=>
+      x.swimmer_id===candidate.swimmer_id &&
+      x.stroke===candidate.stroke &&
+      Number(x.distance)===Number(candidate.distance) &&
+      x.course===candidate.course &&
+      Math.abs(Number(x.time_seconds)-Number(candidate.time_seconds))<0.001 &&
+      x.record_date===candidate.record_date
+    );
+
+    if(duplicate){
+      skipped++;
+    }else{
+      payload.push(candidate);
+    }
+  }
+
+  if(!payload.length){
+    alert(
+      skipped
+        ? `移行対象はすべて登録済みです。（重複 ${skipped}件をスキップ）`
+        : '選手名が一致する旧記録がありません。'
+    );
+    return;
+  }
+
+  let {error}=await sb.from('swim_records').insert(payload);
+
+  if(error){
+    alert(error.message);
+    return;
+  }
+
+  await loadCloud();
+
+  alert(
+    `${payload.length}件をクラウドへ移行しました。` +
+    (skipped ? `\n重複 ${skipped}件はスキップしました。` : '')
+  );
+
+  renderAnalysis();
+  renderHome();
+}
+function go(tab){$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis()}
+$$('.tabs button').forEach(b=>b.onclick=()=>go(b.dataset.tab));document.addEventListener('blur',e=>{if(e.target&&e.target.id==='itime')formatTimeInput()},true);init();
+</script></body></html>
