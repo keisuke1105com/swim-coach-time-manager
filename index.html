@@ -849,6 +849,8 @@ let joRanking=Object.values(
     return Object.values(map).sort((a,b)=>a.player.name.localeCompare(b.player.name,'ja')||a.stroke.localeCompare(b.stroke,'ja')||a.distance-b.distance);
   }
   const tokyoQual=buildQualifiers('tokyo'),yumeQual=buildQualifiers('yume');
+  const tokyoQualifiedPlayers=new Set(tokyoQual.map(x=>String(x.player.id))).size;
+  const yumeQualifiedPlayers=new Set(yumeQual.map(x=>String(x.player.id))).size;
   function qualifierHtml(items,kind){
     if(!items.length)return '<p class="muted">現在、突破記録はありません。</p>';
     let last='';
@@ -869,6 +871,18 @@ let joRanking=Object.values(
       <div class="card">
         <div class="label">JO突破数</div>
         <div class="stat">${jo}</div>
+      </div>
+
+      <div class="card">
+        <div class="label">🗼 東京SC招待 突破者数</div>
+        <div class="stat">${tokyoQualifiedPlayers}<span class="small">名</span></div>
+        <div class="muted small">延べ ${tokyoQual.length}種目</div>
+      </div>
+
+      <div class="card">
+        <div class="label">🌈 ゆめカップ 突破者数</div>
+        <div class="stat">${yumeQualifiedPlayers}<span class="small">名</span></div>
+        <div class="muted small">延べ ${yumeQual.length}種目</div>
       </div>
 
       <div class="card">
