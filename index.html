@@ -174,11 +174,11 @@ function tokyoScStandard(playerId,stroke,distance){
 }
 
 
-// 2026年度 いきいき茨城 ゆめカップ参加基準記録
-// 大会当日の学年区分。短水路・長水路は同一基準。
-const YUME_CUP_YEAR=2026;
-const YUME_CUP_MEET_DATE='2026-05-16';
-const YUME_CUP_VALID_FROM='2025-04-01';
+// 2027年度 いきいき茨城 ゆめカップ（予定）参加基準記録
+// 2026年度と同じ標準記録を使用し、2027年度の学年区分で判定。短水路・長水路は同一基準。
+const YUME_CUP_YEAR=2027;
+const YUME_CUP_MEET_DATE='2027-05-16'; // 日程未発表のため学年判定用の予定日
+const YUME_CUP_VALID_FROM='2026-04-01';
 const YUME_CUP_STANDARDS={
  'A':{'自由形':{50:[42.31,42.31]},'背泳ぎ':{50:[47.40,47.40]},'平泳ぎ':{50:[52.94,52.94]},'バタフライ':{50:[45.24,45.24]}},
  'B':{'自由形':{50:[34.04,34.04],100:[74.37,74.37]},'背泳ぎ':{50:[38.13,38.13],100:[82.48,82.48]},'平泳ぎ':{50:[42.79,42.79],100:[92.45,92.45]},'バタフライ':{50:[36.43,36.43],100:[80.42,80.42]},'個人メドレー':{200:[179.65,179.65]}},
@@ -187,9 +187,9 @@ const YUME_CUP_STANDARDS={
  'E':{'自由形':{50:[25.29,28.67],100:[55.40,62.38],200:[119.87,133.15],400:[251.43,276.29]},'背泳ぎ':{50:[28.10,31.54],100:[60.75,68.07],200:[131.76,145.42]},'平泳ぎ':{50:[31.42,35.62],100:[67.72,77.11],200:[145.11,163.53]},'バタフライ':{50:[27.05,30.36],100:[59.32,67.09],200:[130.15,145.85]},'個人メドレー':{200:[133.85,149.23],400:[279.92,311.61]}},
  'F':{'自由形':{50:[24.50,28.00],100:[53.50,60.50],200:[117.00,131.00],400:[246.00,270.00]},'背泳ぎ':{50:[27.40,30.90],100:[58.50,66.00],200:[128.00,142.00]},'平泳ぎ':{50:[30.70,35.00],100:[65.50,75.00],200:[140.50,160.00]},'バタフライ':{50:[26.30,29.70],100:[57.50,65.00],200:[127.00,142.00]},'個人メドレー':{200:[130.00,146.00],400:[273.00,302.00]}}
 };
-function schoolGrade2026(player){
+function schoolGrade2027(player){
   if(!player?.birth_date)return null;
-  const ageApr1=ageOnDate(player.birth_date,'2026-04-01');
+  const ageApr1=ageOnDate(player.birth_date,'2027-04-01');
   if(ageApr1==null)return null;
   const n=ageApr1-5; // 小1=1 ... 高3=12
   if(n<1)return {n, label:'小学生未満', division:'A'};
@@ -198,7 +198,7 @@ function schoolGrade2026(player){
   return {n,label,division};
 }
 function yumeCupInfo(playerId,stroke,distance){
-  const p=playerById(playerId),g=schoolGrade2026(p);
+  const p=playerById(playerId),g=schoolGrade2027(p);
   if(!p||!g)return {year:YUME_CUP_YEAR,grade:null,division:null,standard:null};
   const vals=YUME_CUP_STANDARDS[g.division]?.[String(stroke||'').trim()]?.[Number(distance)];
   const female=String(p.gender||'').includes('女');
@@ -655,12 +655,12 @@ function preview(){
       ? `🗼 東京SC招待 ／ 基準日 2026/10/30 ／ 基準日年齢 ${tokyoInfo.age!=null?tokyoInfo.age+'歳':tokyoInfo.ageKey||'-'} ／ 🏆 突破！　標準 ${fmt(ts)}`
       : `🗼 東京SC招待 ／ 基準日 2026/10/30 ／ 基準日年齢 ${tokyoInfo.age!=null?tokyoInfo.age+'歳':tokyoInfo.ageKey||'-'} ／ 標準 ${fmt(ts)}（あと ${(s-ts).toFixed(2)}秒）`;
   let yumeText=!yumeInfo.grade
-    ? `🌈 ゆめカップ2026 ／ 学年判定：生年月日未登録`
+    ? `🌈 ゆめカップ2027（予定） ／ 学年判定：生年月日未登録`
     : ys==null
-      ? `🌈 ゆめカップ2026 ／ ${yumeInfo.grade}（${yumeInfo.division}区分）／ 対象標準なし`
+      ? `🌈 ゆめカップ2027（予定） ／ ${yumeInfo.grade}（${yumeInfo.division}区分）／ 対象標準なし`
       : s<=ys
-        ? `🌈 ゆめカップ2026 ／ ${yumeInfo.grade}（${yumeInfo.division}区分）／ 🏆 突破！　標準 ${fmt(ys)}`
-        : `🌈 ゆめカップ2026 ／ ${yumeInfo.grade}（${yumeInfo.division}区分）／ 標準 ${fmt(ys)}（あと ${(s-ys).toFixed(2)}秒）`;
+        ? `🌈 ゆめカップ2027（予定） ／ ${yumeInfo.grade}（${yumeInfo.division}区分）／ 🏆 突破！　標準 ${fmt(ys)}`
+        : `🌈 ゆめカップ2027（予定） ／ ${yumeInfo.grade}（${yumeInfo.division}区分）／ 標準 ${fmt(ys)}（あと ${(s-ys).toFixed(2)}秒）`;
   $('#preview').innerHTML=`<div class="result ${jo?'good':'bad'}"><b>${meetText}</b><br><b>${joText}</b><br>${joRate!=null?`<b>JO達成率：${joRate.toFixed(1)}%</b><br>`:''}<b>${tokyoText}</b><br><b>${yumeText}</b><br>自己ベスト：${fmt(b)}${upd&&b!=null?` 🔥 ${(b-s).toFixed(2)}秒更新！`:''}</div>`;
 }
 
@@ -880,7 +880,7 @@ let joRanking=Object.values(
       </div>
 
       <div class="card">
-        <div class="label">🌈 ゆめカップ 突破者数</div>
+        <div class="label">🌈 ゆめカップ2027（予定） 突破者数</div>
         <div class="stat">${yumeQualifiedPlayers}<span class="small">名</span></div>
         <div class="muted small">延べ ${yumeQual.length}種目</div>
       </div>
@@ -904,8 +904,8 @@ let joRanking=Object.values(
       <h3>🗼 東京SC招待</h3>
       <p class="muted">基準日 2026/10/30 の満年齢で判定。突破した種目をすべて表示します。</p>
       ${qualifierHtml(tokyoQual,'tokyo')}
-      <h3 style="margin-top:24px">🌈 いきいき茨城 ゆめカップ 2026</h3>
-      <p class="muted">2026年度の学年区分で判定。短水路・長水路は同じ標準記録です。2025/04/01以降の記録を対象に、突破した種目をすべて表示します。</p>
+      <h3 style="margin-top:24px">🌈 いきいき茨城 ゆめカップ 2027（予定）</h3>
+      <p class="muted">2027年度の学年区分で判定。標準記録は2026年度と同じものを使用（予定）しています。短水路・長水路は同じ標準記録です。2026/04/01以降の記録を対象に、突破した種目をすべて表示します。</p>
       ${qualifierHtml(yumeQual,'yume')}
     </div>
 
