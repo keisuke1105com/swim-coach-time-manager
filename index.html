@@ -873,13 +873,13 @@ let joRanking=Object.values(
         <div class="stat">${jo}</div>
       </div>
 
-      <div class="card">
+      <div class="card" role="button" tabindex="0" onclick="document.getElementById('tokyo-qualifiers')?.scrollIntoView({behavior:'smooth',block:'start'})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('tokyo-qualifiers')?.scrollIntoView({behavior:'smooth',block:'start'})}" style="cursor:pointer">
         <div class="label">🗼 東京SC招待 突破者数</div>
         <div class="stat">${tokyoQualifiedPlayers}<span class="small">名</span></div>
         <div class="muted small">延べ ${tokyoQual.length}種目</div>
       </div>
 
-      <div class="card">
+      <div class="card" role="button" tabindex="0" onclick="document.getElementById('yume-qualifiers')?.scrollIntoView({behavior:'smooth',block:'start'})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('yume-qualifiers')?.scrollIntoView({behavior:'smooth',block:'start'})}" style="cursor:pointer">
         <div class="label">🌈 ゆめカップ2027（予定） 突破者数</div>
         <div class="stat">${yumeQualifiedPlayers}<span class="small">名</span></div>
         <div class="muted small">延べ ${yumeQual.length}種目</div>
@@ -901,10 +901,10 @@ let joRanking=Object.values(
 
     <div class="card">
       <h2>🏆 大会突破者リスト</h2>
-      <h3>🗼 東京SC招待</h3>
+      <h3 id="tokyo-qualifiers" style="scroll-margin-top:110px">🗼 東京SC招待</h3>
       <p class="muted">基準日 2026/10/30 の満年齢で判定。突破した種目をすべて表示します。</p>
       ${qualifierHtml(tokyoQual,'tokyo')}
-      <h3 style="margin-top:24px">🌈 いきいき茨城 ゆめカップ 2027（予定）</h3>
+      <h3 id="yume-qualifiers" style="margin-top:24px;scroll-margin-top:110px">🌈 いきいき茨城 ゆめカップ 2027（予定）</h3>
       <p class="muted">2027年度の学年区分で判定。標準記録は2026年度と同じものを使用（予定）しています。短水路・長水路は同じ標準記録です。2026/04/01以降の記録を対象に、突破した種目をすべて表示します。</p>
       ${qualifierHtml(yumeQual,'yume')}
     </div>
