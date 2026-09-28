@@ -803,7 +803,7 @@ let joRanking=Object.values(
     return a.qualified ? -1 : 1;
   }
   return b.rate-a.rate;
-}).slice(0,20);
+}).slice(0,30);
 
   let joRankingHtml=joRanking.length
     ? joRanking.map((x,i)=>{
@@ -892,9 +892,9 @@ let joRanking=Object.values(
     </div>
 
     <div class="card">
-      <h2>🏆 JOに近い選手・種目ランキング</h2>
+      <h2>🏆 JOに近い選手・種目ランキング（上位30名）</h2>
       <p class="muted">
-        各選手のベストタイムを今日から見た次のJO大会基準日の年齢・区分で比較し、1人1種目・上位20名まで表示しています。
+        各選手のベストタイムを今日から見た次のJO大会基準日の年齢・区分で比較し、1人1種目・上位30名まで表示しています。
       </p>
       ${joRankingHtml}
     </div>
