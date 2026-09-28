@@ -66,6 +66,20 @@ function formatTimeInput(){
 
 function fmt(v){if(v==null||isNaN(v))return '-';let m=Math.floor(v/60),s=v-m*60;return (m?m+':':'')+s.toFixed(2).padStart(m?5:0,'0')}
 function playerById(id){return PLAYERS.find(x=>x.id===id)}
+// 日本水泳連盟「Results of Japan Swimming」選手ページとの紐づけ
+const JASF_ATHLETE_IDS={
+  '龍田小春':'58337328'
+};
+function jasfAthleteId(player){
+  if(!player)return '';
+  const key=String(player.name||'').replace(/[ 　]/g,'').trim();
+  return JASF_ATHLETE_IDS[key]||'';
+}
+function jasfAthleteUrl(player){
+  const athleteId=jasfAthleteId(player);
+  return athleteId?`https://result.swim.or.jp/athletes/${athleteId}`:'';
+}
+
 function ageOnDate(birthDate, targetDate){
   if(!birthDate || !targetDate) return null;
 
@@ -424,6 +438,12 @@ let trendOptions=trendKeys.map(key=>{
         >
           ＋ この選手のタイム入力
         </button>
+
+        ${jasfAthleteUrl(p)?`
+        <button class="secondary" onclick="window.open('${jasfAthleteUrl(p)}','_blank','noopener')">
+          🇯🇵 日本水泳連盟 公式記録を見る
+        </button>
+        `:''}
 
       </div>
 
