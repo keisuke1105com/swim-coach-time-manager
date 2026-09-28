@@ -414,6 +414,22 @@ function showAddPlayer(p=null){$('#playerForm').innerHTML=`<div class="result"><
 async function savePlayer(id=''){let payload={name:$('#pn').value.trim(),age_group:$('#pd').value,gender:$('#pg').value,birth_date:$('#pb').value||null,team:$('#pt').value.trim()||null,athlete_id:($('#pj')?.value||'').trim()||null,active:true};if(!payload.name){alert('氏名を入力してください');return}if(!id)payload.sort_order=(PLAYERS.reduce((m,p)=>Math.max(m,p.sort_order||0),0)+1);let q=id?sb.from('swimmers').update(payload).eq('id',id):sb.from('swimmers').insert(payload);let {error}=await q;if(error){alert(error.message);return}await loadCloud();renderPlayers();renderHome()}
 async function removePlayer(id){if(!confirm('この選手を一覧から外しますか？過去記録は残ります。'))return;let {error}=await sb.from('swimmers').update({active:false}).eq('id',id);if(error)alert(error.message);else{await loadCloud();renderPlayers();renderHome()}}
 function filterPlayers(){let q=($('#pq')?.value||'').toLowerCase();$('#plist').innerHTML=PLAYERS.filter(p=>p.name.toLowerCase().includes(q)).map(p=>{let n=records.filter(r=>r.swimmer_id===p.id).length,j=records.filter(r=>r.swimmer_id===p.id&&r.is_jo_qualified).length;return `<div class="row"><div><b>${p.name}</b><br><span class="muted">${p.age_group||'-'}・${p.gender||'-'}・${n}件</span></div><div>${j?'<span class="badge">JO突破あり</span> ':''}<button class="secondary" onclick="showPlayerDetail('${p.id}')">詳細</button><button class="secondary" onclick="selectedPlayerId='${p.id}';go('input')">入力</button> <button class="secondary" onclick='showAddPlayer(${JSON.stringify(p)})'>編集</button> <button class="danger" onclick="removePlayer('${p.id}')">外す</button></div></div>`}).join('')||'<p class="muted">選手がいません。</p>'}
+async function saveAthleteId(playerId){
+  const el=$('#detailAthleteId');
+  if(!el)return;
+  const athleteId=String(el.value||'').trim();
+  if(athleteId && !/^\d+$/.test(athleteId)){
+    alert('競技者IDは数字のみで入力してください。');
+    return;
+  }
+  const {error}=await sb.from('swimmers').update({athlete_id:athleteId||null}).eq('id',playerId);
+  if(error){alert(error.message);return;}
+  await loadCloud();
+  showPlayerDetail(playerId);
+  renderHome();
+  alert(athleteId?'日本水泳連盟 競技者IDを保存しました！':'競技者IDを解除しました。');
+}
+
 function showPlayerDetail(id){
   let p=playerById(id);
   if(!p)return;
@@ -587,6 +603,18 @@ let trendOptions=trendKeys.map(key=>{
         ${p.gender||'-'}
         ${p.team?' ・ '+p.team:''}
       </p>
+
+      <div class="result" style="margin-bottom:16px">
+        <b>🇯🇵 日本水泳連盟 競技者ID</b>
+        <div class="field" style="margin-bottom:8px">
+          <input id="detailAthleteId" inputmode="numeric" placeholder="例：58337328" value="${p.athlete_id||p.jasf_athlete_id||jasfAthleteId(p)||''}">
+        </div>
+        <div class="actions">
+          <button onclick="saveAthleteId('${p.id}')">競技者IDを保存</button>
+          ${jasfAthleteUrl(p)?`<button class="secondary" onclick="window.open('${jasfAthleteUrl(p)}','_blank','noopener')">公式記録を見る</button>`:''}
+        </div>
+        <div class="muted small" style="margin-top:8px">Results of Japan Swimming の選手ページURL末尾の数字を入力してください。</div>
+      </div>
 
       <div class="grid">
 
