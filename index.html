@@ -308,7 +308,10 @@ function joDivisionFor(player,stroke,distance,meetDate){
     else if(age>=17)division='CS';
   }
   if(division==='17-18歳'||division==='17～18歳')division='CS';
-  if(age!==null&&age>=13&&Number(distance)===50&&['背泳ぎ','平泳ぎ','バタフライ'].includes(stroke))division='CS';
+  // JO特例：13歳以上の50m背泳ぎ・平泳ぎ・バタフライはCS標準を使用。
+  // meetDateが渡されない詳細画面・グラフ等でも、登録済み年齢区分から同じ特例を適用する。
+  const cs50AgeDivision=['13歳','14歳','15〜16歳','15～16歳','17-18歳','17～18歳','CS'].includes(String(division||'').trim());
+  if(Number(distance)===50 && ['背泳ぎ','平泳ぎ','バタフライ'].includes(stroke) && ((age!==null&&age>=13)||cs50AgeDivision))division='CS';
   return {age,division};
 }
 
