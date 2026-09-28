@@ -80,26 +80,179 @@ function jasfAthleteUrl(player){
   return athleteId?`https://result.swim.or.jp/athletes/${athleteId}`:'';
 }
 
+function jasfRecordDate(year,md){
+  const m=String(md||'').match(/^(\d{1,2})\/(\d{1,2})$/);
+  if(!m)return `${year}-01-01`;
+  return `${year}-${String(m[1]).padStart(2,'0')}-${String(m[2]).padStart(2,'0')}`;
+}
+
+async function fetchJasfCourse(athleteId,year,waterwayCode){
+  const base=String(window.SUPABASE_URL||'').replace(/\/$/,'');
+  const res=await fetch(`${base}/functions/v1/jasf-test`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      athleteId,
+      year,
+      waterwayCode
+    })
+  });
+  const json=await res.json();
+  if(!res.ok||!json.success)throw new Error(json.error||`HTTP ${res.status}`);
+  return json;
+}
+
 async function fetchJasfLatest(playerId){
   const p=playerById(playerId);
   const athleteId=jasfAthleteId(p);
   const box=$('#jasfLatestBox');
   if(!box)return;
-  if(!athleteId){box.innerHTML='<div class="notice">この選手の競技者IDはまだ登録されていません。</div>';return;}
-  box.innerHTML='<div class="notice">🇯🇵 日本水泳連盟から最新記録を取得中…</div>';
+  if(!athleteId){
+    box.innerHTML='<div class="notice">この選手の競技者IDはまだ登録されていません。</div>';
+    return;
+  }
+
+  const year=new Date().getFullYear();
+  box.innerHTML='<div class="notice">🇯🇵 日本水泳連盟から長水路・短水路の最新ベストを取得中…</div>';
+
   try{
-    const base=String(window.SUPABASE_URL||'').replace(/\/$/,'');
-    const res=await fetch(`${base}/functions/v1/jasf-test`,{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({athleteId})
+    const results=await Promise.allSettled([
+      fetchJasfCourse(athleteId,year,1),
+      fetchJasfCourse(athleteId,year,2)
+    ]);
+
+    const fetched=[];
+    const errors=[];
+
+    results.forEach((r,i)=>{
+      const course=i===0?'長水路':'短水路';
+      if(r.status==='fulfilled'){
+        const json=r.value;
+        const data=Array.isArray(json.data)?json.data:[];
+        data.forEach(x=>fetched.push({x,course,year:Number(json.year||year)}));
+      }else{
+        errors.push(`${course}: ${String(r.reason?.message||r.reason)}`);
+      }
     });
-    const json=await res.json();
-    if(!res.ok||!json.success)throw new Error(json.error||`HTTP ${res.status}`);
-    const data=Array.isArray(json.data)?json.data:[];
-    box.innerHTML=data.length?`<div class="result good"><b>🇯🇵 日本水泳連盟 最新ベスト（${json.year||''}年・長水路）</b>${data.map(x=>`<div class="row"><div><b>${x.swimming_style?.name||'-'} ${x.distance?.name||''}</b><br><span class="muted">${x.result_date||''} ${x.game_short_name||x.game_name||''}</span></div><div style="text-align:right"><b style="font-size:20px">${x.result_time||'-'}</b><br><span class="muted">${x.fina_point??'-'}pt</span></div></div>`).join('')}</div>`:'<div class="notice">取得できるベスト記録がありませんでした。</div>';
+
+    if(!fetched.length){
+      throw new Error(errors.length?errors.join(' / '):'取得できるベスト記録がありませんでした。');
+    }
+
+    let saved=0,unchanged=0,unsupported=0;
+    const savedRows=[];
+
+    for(const item of fetched){
+      const x=item.x;
+      const stroke=String(x.swimming_style?.name||'').trim();
+      const distance=Number(String(x.distance?.name||'').replace(/[^\d]/g,''));
+      const timeSeconds=sec(x.result_time);
+      const recordDate=jasfRecordDate(item.year,x.result_date);
+      const meetName=x.game_short_name||x.game_name||'日本水泳連盟公式記録';
+
+      if(!stroke || !distance || !Number.isFinite(timeSeconds)){
+        unsupported++;
+        continue;
+      }
+
+      const currentBest=best(playerId,stroke,distance,item.course);
+
+      // 既存ベストと同タイム、または既存ベストより遅い場合は保存しない
+      if(currentBest!=null && timeSeconds>=Number(currentBest)-0.001){
+        unchanged++;
+        continue;
+      }
+
+      const duplicate=records.some(r=>
+        String(r.swimmer_id)===String(playerId) &&
+        r.stroke===stroke &&
+        Number(r.distance)===distance &&
+        r.course===item.course &&
+        Math.abs(Number(r.time_seconds)-timeSeconds)<0.001 &&
+        r.record_date===recordDate
+      );
+
+      if(duplicate){
+        unchanged++;
+        continue;
+      }
+
+      const meet=joMeetInfo(recordDate);
+      const st=standard(playerId,stroke,distance,item.course,meet?.date||null);
+      const jo=st!=null && timeSeconds<=st;
+
+      // 同じ種目・距離・水路の旧BESTフラグを外す
+      if(currentBest!=null){
+        const {error:clearError}=await sb
+          .from('swim_records')
+          .update({is_personal_best:false})
+          .eq('swimmer_id',playerId)
+          .eq('stroke',stroke)
+          .eq('distance',distance)
+          .eq('course',item.course)
+          .eq('is_personal_best',true);
+        if(clearError)throw clearError;
+      }
+
+      const payload={
+        swimmer_id:playerId,
+        stroke,
+        distance,
+        course:item.course,
+        time_seconds:timeSeconds,
+        meet_name:meetName,
+        record_date:recordDate,
+        memo:`日本水泳連盟公式記録 / ${x.fina_point??'-'}pt / game_code:${x.game_code||'-'}`,
+        is_personal_best:true,
+        is_jo_qualified:jo
+      };
+
+      const {error}=await sb.from('swim_records').insert(payload);
+      if(error)throw error;
+
+      saved++;
+      savedRows.push(`${stroke} ${distance}m・${item.course} ${x.result_time}`);
+      // 後続種目のbest()判定にも反映させる
+      records.push({...payload,id:`jasf-temp-${Date.now()}-${saved}`});
+    }
+
+    await loadCloud();
+
+    const courseGroups=['長水路','短水路'].map(course=>{
+      const rows=fetched.filter(v=>v.course===course);
+      if(!rows.length)return '';
+      return `<div style="margin-top:12px"><b>${course}</b>${rows.map(({x})=>`
+        <div class="row">
+          <div>
+            <b>${x.swimming_style?.name||'-'} ${x.distance?.name||''}</b><br>
+            <span class="muted">${x.result_date||''} ${x.game_short_name||x.game_name||''}</span>
+          </div>
+          <div style="text-align:right">
+            <b style="font-size:20px">${x.result_time||'-'}</b><br>
+            <span class="muted">${x.fina_point??'-'}pt</span>
+          </div>
+        </div>`).join('')}</div>`;
+    }).join('');
+
+    box.innerHTML=`
+      <div class="result good">
+        <b>✅ 日本水泳連盟との同期が完了しました</b><br>
+        <span class="small">
+          新規ベスト保存：${saved}件 ／ 変更なし：${unchanged}件
+          ${unsupported?` ／ 対象外：${unsupported}件`:''}
+        </span>
+        ${savedRows.length?`<div class="small" style="margin-top:8px">保存：${savedRows.join('、')}</div>`:''}
+      </div>
+      <div class="result">
+        <b>🇯🇵 日本水泳連盟 最新ベスト（${year}年）</b>
+        ${courseGroups}
+        ${errors.length?`<div class="notice small" style="margin-top:10px">${errors.join('<br>')}</div>`:''}
+      </div>`;
+
+    renderHome();
   }catch(e){
-    box.innerHTML=`<div class="error">最新記録の取得に失敗しました。<br><span class="small">${String(e.message||e)}</span></div>`;
+    await loadCloud();
+    box.innerHTML=`<div class="error">最新記録の同期に失敗しました。<br><span class="small">${String(e.message||e)}</span></div>`;
   }
 }
 
@@ -467,7 +620,7 @@ let trendOptions=trendKeys.map(key=>{
           🇯🇵 日本水泳連盟 公式記録を見る
         </button>
         <button onclick="fetchJasfLatest('${p.id}')">
-          🔄 最新記録を取得
+          🔄 日本水泳連盟から最新記録を同期
         </button>
         `:''}
 
