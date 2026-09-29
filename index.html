@@ -8,6 +8,10 @@
 <nav id="tabs" class="tabs hidden"><button data-tab="home">🏠<br>ホーム</button><button data-tab="players">👥<br>選手</button><button data-tab="input">⏱️<br>入力</button><button data-tab="records">📋<br>記録</button><button data-tab="analysis">📊<br>分析</button></nav>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="config.js"></script><script src="data.js"></script><script src="tokyo_sc.js"></script><script>
 let sb=null,session=null,PLAYERS=[],records=[];let selectedPlayerId='',selectedStroke='自由形',selectedDistance=50,selectedCourse='長水路';
+const VIEW_STATE_KEY='swimCloudViewState';
+function saveViewState(tab,playerId=''){try{localStorage.setItem(VIEW_STATE_KEY,JSON.stringify({tab,playerId,ts:Date.now()}))}catch(e){}}
+function getViewState(){try{return JSON.parse(localStorage.getItem(VIEW_STATE_KEY)||'{}')}catch(e){return {}}}
+function restoreViewState(){const v=getViewState();const tab=['home','players','input','records','analysis'].includes(v.tab)?v.tab:'home';go(tab,false);if(tab==='players'&&v.playerId&&playerById(v.playerId))showPlayerDetail(v.playerId,false);}
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const strokes=[...new Set(STANDARDS.map(x=>x.event))].filter(x=>!x.includes('リレー'));
 const distances=[50,100,200,400,800,1500];
@@ -405,7 +409,7 @@ function yumeCupStandard(playerId,stroke,distance){return yumeCupInfo(playerId,s
 function best(playerId,stroke,distance,course){let a=records.filter(r=>r.swimmer_id===playerId&&r.stroke===stroke&&Number(r.distance)===Number(distance)&&r.course===course).map(r=>+r.time_seconds);return a.length?Math.min(...a):null}
 async function init(){if(!configured()){renderSetupNeeded();return}sb=window.supabase.createClient(window.SUPABASE_URL,window.SUPABASE_PUBLISHABLE_KEY);let {data}=await sb.auth.getSession();session=data.session;sb.auth.onAuthStateChange((_e,s)=>{session=s;routeAuth()});routeAuth()}
 function renderSetupNeeded(){setStatus('config.js に Supabase Publishable key を設定してください。','error');$('#auth').innerHTML=`<div class="card auth"><h2>☁️ セットアップ待ち</h2><p>config.js の PASTE_YOUR_PUBLISHABLE_KEY_HERE を置き換えてください。</p></div>`}
-async function routeAuth(){if(!session){$('#app').classList.add('hidden');$('#tabs').classList.add('hidden');$('#logoutBtn').classList.add('hidden');renderAuth();return}$('#auth').innerHTML='';$('#app').classList.remove('hidden');$('#tabs').classList.remove('hidden');$('#logoutBtn').classList.remove('hidden');await loadCloud();go('home')}
+async function routeAuth(){if(!session){$('#app').classList.add('hidden');$('#tabs').classList.add('hidden');$('#logoutBtn').classList.add('hidden');renderAuth();return}$('#auth').innerHTML='';$('#app').classList.remove('hidden');$('#tabs').classList.remove('hidden');$('#logoutBtn').classList.remove('hidden');await loadCloud();restoreViewState()}
 function renderAuth(){setStatus('');$('#auth').innerHTML=`<div class="card auth"><h2>🔐 コーチログイン</h2><div class="field"><label>メールアドレス</label><input id="email" type="email"></div><div class="field"><label>パスワード</label><input id="password" type="password"></div><div class="actions"><button onclick="login()">ログイン</button><button class="secondary" onclick="signup()">初回登録</button></div><p class="muted small">初回のみアカウント登録してください。複数コーチでも同じクラウドデータを共有できます。</p></div>`}
 async function login(){let email=$('#email').value.trim(),password=$('#password').value;let {error}=await sb.auth.signInWithPassword({email,password});if(error)setStatus(error.message,'error')}
 async function signup(){let email=$('#email').value.trim(),password=$('#password').value;if(password.length<6){setStatus('パスワードは6文字以上にしてください。','error');return}let {error}=await sb.auth.signUp({email,password});setStatus(error?error.message:'登録しました。メール確認が必要な場合はメールを確認してください。',error?'error':'notice')}
@@ -433,8 +437,9 @@ async function saveAthleteId(playerId){
   alert(athleteId?'日本水泳連盟 競技者IDを保存しました！':'競技者IDを解除しました。');
 }
 
-function showPlayerDetail(id){
+function showPlayerDetail(id,remember=true){
   let p=playerById(id);
+  if(remember)saveViewState('players',id);
   if(!p)return;
 
   let rs=records
@@ -1246,6 +1251,6 @@ async function migrateLocalV3(){
   renderAnalysis();
   renderHome();
 }
-function go(tab){$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis()}
+function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis()}
 $$('.tabs button').forEach(b=>b.onclick=()=>go(b.dataset.tab));document.addEventListener('blur',e=>{if(e.target&&e.target.id==='itime')formatTimeInput()},true);init();
 </script></body></html>
