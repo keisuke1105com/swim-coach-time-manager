@@ -781,7 +781,8 @@ let trendOptions=trendKeys.map(key=>{
   const points=data.map((r,i)=>{
     const cx=x(i);
     const cy=y(Number(r.time_seconds));
-    const date=String(r.record_date||'').slice(5).replace('-','/');
+    const fullDate=String(r.record_date||'');
+    const date=fullDate ? `${fullDate.slice(0,4)}年度｜${fullDate.slice(5).replace('-', '/')}` : '';
 
     return `
       <circle cx="${cx}" cy="${cy}" r="5" fill="#087fd1"></circle>
