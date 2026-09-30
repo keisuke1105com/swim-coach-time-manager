@@ -926,8 +926,20 @@ async function addRecord(){
   renderHome();renderInput();
 }
 
-function renderRecords(){let rs=[...records].reverse();$('#records').innerHTML=`<div class="card"><h2>📋 タイム履歴</h2>${rs.map(r=>{let p=playerById(r.swimmer_id);return `<div class="row"><div><b>${p?.name||'選手'}</b><br><span class="muted">${r.record_date||''}・${r.stroke} ${r.distance}m・${r.course}</span><br>${r.is_jo_qualified?'<span class="badge">JO突破</span> ':''}${r.is_personal_best?'<span class="badge">BEST</span> ':''}</div><div style="text-align:right"><b>${fmt(r.time_seconds)}</b><br><button class="secondary" onclick="editRecord('${r.id}')">編集</button>
-<button class="danger" onclick="delRecord('${r.id}')">削除</button></div></div>`}).join('')||'<p class="muted">記録がありません。</p>'}</div>`}
+let recordsPlayerFilter='';
+function renderRecords(){
+  const selected=recordsPlayerFilter && PLAYERS.some(p=>String(p.id)===String(recordsPlayerFilter)) ? recordsPlayerFilter : '';
+  recordsPlayerFilter=selected;
+  let rs=[...records]
+    .filter(r=>!selected || String(r.swimmer_id)===String(selected))
+    .sort((a,b)=>String(b.record_date||'').localeCompare(String(a.record_date||'')) || String(b.created_at||'').localeCompare(String(a.created_at||'')));
+  const options=PLAYERS.map(p=>`<option value="${p.id}" ${String(p.id)===String(selected)?'selected':''}>${p.name}</option>`).join('');
+  $('#records').innerHTML=`<div class="card"><h2>📋 タイム履歴</h2>
+    <div class="field"><label>選手で絞り込み</label><select id="recordsPlayerFilter" onchange="recordsPlayerFilter=this.value;renderRecords()"><option value="">全選手</option>${options}</select></div>
+    <div class="muted small" style="margin-bottom:8px">${selected?(playerById(selected)?.name||'選手')+'：'+rs.length+'件':'全選手：'+rs.length+'件'}</div>
+    ${rs.map(r=>{let p=playerById(r.swimmer_id);return `<div class="row"><div><b>${p?.name||'選手'}</b><br><span class="muted">${r.record_date||''}・${r.stroke} ${r.distance}m・${r.course}</span><br>${r.is_jo_qualified?'<span class="badge">JO突破</span> ':''}${r.is_personal_best?'<span class="badge">BEST</span> ':''}</div><div style="text-align:right"><b>${fmt(r.time_seconds)}</b><br><button class="secondary" onclick="editRecord('${r.id}')">編集</button>
+<button class="danger" onclick="delRecord('${r.id}')">削除</button></div></div>`}).join('')||'<p class="muted">この選手の記録はありません。</p>'}</div>`
+}
 async function editRecord(id){
   const r=records.find(x=>String(x.id)===String(id));
   if(!r){
