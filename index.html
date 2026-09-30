@@ -74,17 +74,26 @@ function playerById(id){return PLAYERS.find(x=>x.id===id)}
 const JASF_ATHLETE_IDS={
   '龍田小春':'58337328'
 };
-function jasfAthleteId(player){
-  if(!player)return '';
-  // 選手マスターに登録した競技者IDを優先。既存データ移行前は従来の名前対応表をフォールバック。
-  const saved=String(player.athlete_id||player.jasf_athlete_id||'').trim();
-  if(saved)return saved;
+function jasfAthleteIds(player){
+  if(!player)return [];
+  const ids=[];
+  const add=v=>{
+    const id=String(v||'').trim();
+    if(/^\d+$/.test(id) && !ids.includes(id))ids.push(id);
+  };
+  if(Array.isArray(player.athlete_ids))player.athlete_ids.forEach(add);
+  add(player.athlete_id||player.jasf_athlete_id);
   const key=String(player.name||'').replace(/[ 　]/g,'').trim();
-  return JASF_ATHLETE_IDS[key]||'';
+  add(JASF_ATHLETE_IDS[key]);
+  return ids;
 }
+function jasfAthleteId(player){return jasfAthleteIds(player)[0]||'';}
 function jasfAthleteUrl(player){
   const athleteId=jasfAthleteId(player);
   return athleteId?`https://result.swim.or.jp/athletes/${athleteId}`:'';
+}
+function parseAthleteIds(value){
+  return [...new Set(String(value||'').split(/[\s,、，]+/).map(v=>v.trim()).filter(Boolean))];
 }
 
 function jasfRecordDate(year,md){
@@ -114,10 +123,10 @@ async function fetchJasfCourse(athleteId,year,waterwayCode){
 
 async function fetchJasfLatest(playerId){
   const p=playerById(playerId);
-  const athleteId=jasfAthleteId(p);
+  const athleteIds=jasfAthleteIds(p);
   const box=$('#jasfLatestBox');
   if(!box)return;
-  if(!athleteId){
+  if(!athleteIds.length){
     box.innerHTML='<div class="notice">この選手の競技者IDはまだ登録されていません。</div>';
     return;
   }
@@ -125,13 +134,15 @@ async function fetchJasfLatest(playerId){
   const currentYear=new Date().getFullYear();
   const years=[];
   for(let y=2024;y<=currentYear;y++)years.push(y);
-  box.innerHTML=`<div class="notice">🇯🇵 日本水泳連盟から${years[0]}〜${years[years.length-1]}年度の長水路・短水路ベストを取得中…</div>`;
+  box.innerHTML=`<div class="notice">🇯🇵 日本水泳連盟から競技者ID ${athleteIds.join('・')} の${years[0]}〜${years[years.length-1]}年度ベストを取得中…</div>`;
 
   try{
     const jobs=[];
-    years.forEach(year=>{
-      jobs.push({year,course:'長水路',promise:fetchJasfCourse(athleteId,year,1)});
-      jobs.push({year,course:'短水路',promise:fetchJasfCourse(athleteId,year,2)});
+    athleteIds.forEach(athleteId=>{
+      years.forEach(year=>{
+        jobs.push({athleteId,year,course:'長水路',promise:fetchJasfCourse(athleteId,year,1)});
+        jobs.push({athleteId,year,course:'短水路',promise:fetchJasfCourse(athleteId,year,2)});
+      });
     });
     const settled=await Promise.allSettled(jobs.map(j=>j.promise));
 
@@ -142,9 +153,9 @@ async function fetchJasfLatest(playerId){
       if(r.status==='fulfilled'){
         const json=r.value;
         const data=Array.isArray(json.data)?json.data:[];
-        data.forEach(x=>fetched.push({x,course:job.course,year:Number(json.year||job.year)}));
+        data.forEach(x=>fetched.push({x,athleteId:job.athleteId,course:job.course,year:Number(json.year||job.year)}));
       }else{
-        errors.push(`${job.year}年度 ${job.course}: ${String(r.reason?.message||r.reason)}`);
+        errors.push(`ID ${job.athleteId} / ${job.year}年度 ${job.course}: ${String(r.reason?.message||r.reason)}`);
       }
     });
 
@@ -213,7 +224,7 @@ async function fetchJasfLatest(playerId){
         time_seconds:timeSeconds,
         meet_name:meetName,
         record_date:recordDate,
-        memo:`日本水泳連盟 ${item.year}年度ベスト / ${x.fina_point??'-'}pt / game_code:${x.game_code||'-'}`,
+        memo:`日本水泳連盟 ID:${item.athleteId} / ${item.year}年度ベスト / ${x.fina_point??'-'}pt / game_code:${x.game_code||'-'}`,
         is_personal_best:isBest,
         is_jo_qualified:jo
       };
@@ -253,7 +264,7 @@ async function fetchJasfLatest(playerId){
       <div class="result good">
         <b>✅ 日本水泳連盟との年度別ベスト同期が完了しました</b><br>
         <span class="small">
-          対象：${years[0]}〜${years[years.length-1]}年度 ／ 新規保存：${saved}件 ／ 登録済み：${unchanged}件
+          競技者ID：${athleteIds.join('・')} ／ 対象：${years[0]}〜${years[years.length-1]}年度 ／ 新規保存：${saved}件 ／ 登録済み：${unchanged}件
           ${unsupported?` ／ 対象外：${unsupported}件`:''}
         </span>
         ${savedRows.length?`<div class="small" style="margin-top:8px">保存：${savedRows.join('、')}</div>`:''}
@@ -422,24 +433,27 @@ async function logout(){await sb.auth.signOut()}
 async function loadCloud(){setStatus('クラウドから読み込み中…');let [{data:p,error:pe},{data:r,error:re}]=await Promise.all([sb.from('swimmers').select('*').eq('active',true).order('sort_order'),sb.from('swim_records').select('*').order('created_at')]);if(pe||re){setStatus('クラウドDBにアクセスできません。RLSポリシーを確認してください。 '+(pe?.message||re?.message||''),'error');PLAYERS=[];records=[];return}PLAYERS=p||[];records=r||[];setStatus('')}
 function renderHome(){let today=new Date().toISOString().slice(0,10),td=records.filter(r=>r.record_date===today).length,b=records.filter(r=>r.is_personal_best).length,j=records.filter(r=>r.is_jo_qualified).length;$('#home').innerHTML=`<div class="grid"><div class="card"><div class="label">今日の入力</div><div class="stat">${td}</div></div><div class="card"><div class="label">ベスト更新</div><div class="stat">${b}</div></div><div class="card"><div class="label">JO突破記録</div><div class="stat">${j}</div></div><div class="card"><div class="label">登録選手</div><div class="stat">${PLAYERS.length}</div></div></div><div class="card"><h3>🚀 すぐ入力</h3><button style="width:100%" onclick="go('input')">タイムを入力する</button></div><div class="card"><h3>最近の記録</h3>${records.slice(-5).reverse().map(r=>{let p=playerById(r.swimmer_id);return `<div class="row"><div><b>${p?.name||'選手'}</b><br><span class="muted">${r.stroke} ${r.distance}m・${r.course}</span></div><b>${fmt(r.time_seconds)}</b></div>`}).join('')||'<p class="muted">まだ記録がありません。</p>'}</div>`}
 function renderPlayers(){ $('#players').innerHTML=`<div class="card"><div class="topline"><h2>👥 選手一覧</h2><button onclick="showAddPlayer()">＋ 選手追加</button></div><input class="search" id="pq" placeholder="選手名で検索" oninput="filterPlayers()"><div id="playerForm"></div><div id="plist"></div></div>`;filterPlayers()}
-function showAddPlayer(p=null){$('#playerForm').innerHTML=`<div class="result"><h3>${p?'選手編集':'新しい選手'}</h3><div class="field"><label>氏名</label><input id="pn" value="${p?.name||''}"></div><div class="field"><label>区分</label><select id="pd">${['9歳以下','10歳','11歳','12歳','13歳','14歳','15〜16歳','CS'].map(x=>`<option ${p?.age_group===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>性別</label><select id="pg"><option ${p?.gender==='男子'?'selected':''}>男子</option><option ${p?.gender==='女子'?'selected':''}>女子</option></select></div><div class="field"><label>生年月日（任意）</label><input id="pb" type="date" value="${p?.birth_date||''}"></div><div class="field"><label>チーム・メモ（任意）</label><input id="pt" value="${p?.team||''}"></div><div class="field"><label>日本水泳連盟 競技者ID（任意）</label><input id="pj" inputmode="numeric" placeholder="例：58337328" value="${p?.athlete_id||p?.jasf_athlete_id||jasfAthleteId(p)||''}"><div class="muted small" style="margin-top:6px">Results of Japan Swimming の選手ページURL末尾の数字を入力してください。</div></div><div class="actions"><button onclick="savePlayer('${p?.id||''}')">保存</button><button class="secondary" onclick="$('#playerForm').innerHTML=''">キャンセル</button></div></div>`}
-async function savePlayer(id=''){let payload={name:$('#pn').value.trim(),age_group:$('#pd').value,gender:$('#pg').value,birth_date:$('#pb').value||null,team:$('#pt').value.trim()||null,athlete_id:($('#pj')?.value||'').trim()||null,active:true};if(!payload.name){alert('氏名を入力してください');return}if(!id)payload.sort_order=(PLAYERS.reduce((m,p)=>Math.max(m,p.sort_order||0),0)+1);let q=id?sb.from('swimmers').update(payload).eq('id',id):sb.from('swimmers').insert(payload);let {error}=await q;if(error){alert(error.message);return}await loadCloud();renderPlayers();renderHome()}
+function showAddPlayer(p=null){$('#playerForm').innerHTML=`<div class="result"><h3>${p?'選手編集':'新しい選手'}</h3><div class="field"><label>氏名</label><input id="pn" value="${p?.name||''}"></div><div class="field"><label>区分</label><select id="pd">${['9歳以下','10歳','11歳','12歳','13歳','14歳','15〜16歳','CS'].map(x=>`<option ${p?.age_group===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>性別</label><select id="pg"><option ${p?.gender==='男子'?'selected':''}>男子</option><option ${p?.gender==='女子'?'selected':''}>女子</option></select></div><div class="field"><label>生年月日（任意）</label><input id="pb" type="date" value="${p?.birth_date||''}"></div><div class="field"><label>チーム・メモ（任意）</label><input id="pt" value="${p?.team||''}"></div><div class="field"><label>日本水泳連盟 競技者ID（複数可）</label><input id="pj" placeholder="例：58337328, 12345678" value="${p?jasfAthleteIds(p).join(', '):''}"><div class="muted small" style="margin-top:6px">複数ある場合はカンマ区切りで入力してください。すべてのIDから記録を同期します。</div></div><div class="actions"><button onclick="savePlayer('${p?.id||''}')">保存</button><button class="secondary" onclick="$('#playerForm').innerHTML=''">キャンセル</button></div></div>`}
+async function savePlayer(id=''){let payload={name:$('#pn').value.trim(),age_group:$('#pd').value,gender:$('#pg').value,birth_date:$('#pb').value||null,team:$('#pt').value.trim()||null,athlete_id:(parseAthleteIds($('#pj')?.value)[0]||null),athlete_ids:parseAthleteIds($('#pj')?.value),active:true};if(!payload.name){alert('氏名を入力してください');return}if(!id)payload.sort_order=(PLAYERS.reduce((m,p)=>Math.max(m,p.sort_order||0),0)+1);let q=id?sb.from('swimmers').update(payload).eq('id',id):sb.from('swimmers').insert(payload);let {error}=await q;if(error){alert(error.message);return}await loadCloud();renderPlayers();renderHome()}
 async function removePlayer(id){if(!confirm('この選手を一覧から外しますか？過去記録は残ります。'))return;let {error}=await sb.from('swimmers').update({active:false}).eq('id',id);if(error)alert(error.message);else{await loadCloud();renderPlayers();renderHome()}}
 function filterPlayers(){let q=($('#pq')?.value||'').toLowerCase();$('#plist').innerHTML=PLAYERS.filter(p=>p.name.toLowerCase().includes(q)).sort((a,b)=>{if(a.birth_date&&b.birth_date)return a.birth_date.localeCompare(b.birth_date);if(a.birth_date)return -1;if(b.birth_date)return 1;return (a.sort_order||0)-(b.sort_order||0)}).map(p=>{let n=records.filter(r=>r.swimmer_id===p.id).length,j=records.filter(r=>r.swimmer_id===p.id&&r.is_jo_qualified).length;return `<div class="row"><div><b>${p.name}</b><br><span class="muted">${p.age_group||'-'}・${p.gender||'-'}・${n}件</span></div><div>${j?'<span class="badge">JO突破あり</span> ':''}<button class="secondary" onclick="showPlayerDetail('${p.id}')">詳細</button><button class="secondary" onclick="selectedPlayerId='${p.id}';go('input')">入力</button> <button class="secondary" onclick='showAddPlayer(${JSON.stringify(p)})'>編集</button> <button class="danger" onclick="removePlayer('${p.id}')">外す</button></div></div>`}).join('')||'<p class="muted">選手がいません。</p>'}
 async function saveAthleteId(playerId){
   const el=$('#detailAthleteId');
   if(!el)return;
-  const athleteId=String(el.value||'').trim();
-  if(athleteId && !/^\d+$/.test(athleteId)){
-    alert('競技者IDは数字のみで入力してください。');
+  const athleteIds=parseAthleteIds(el.value);
+  if(athleteIds.some(id=>!/^\d+$/.test(id))){
+    alert('競技者IDは数字のみで、複数ある場合はカンマ区切りで入力してください。');
     return;
   }
-  const {error}=await sb.from('swimmers').update({athlete_id:athleteId||null}).eq('id',playerId);
+  const {error}=await sb.from('swimmers').update({
+    athlete_id:athleteIds[0]||null,
+    athlete_ids:athleteIds
+  }).eq('id',playerId);
   if(error){alert(error.message);return;}
   await loadCloud();
   showPlayerDetail(playerId);
   renderHome();
-  alert(athleteId?'日本水泳連盟 競技者IDを保存しました！':'競技者IDを解除しました。');
+  alert(athleteIds.length?`日本水泳連盟 競技者IDを${athleteIds.length}件保存しました！`:'競技者IDを解除しました。');
 }
 
 function showPlayerDetail(id,remember=true){
@@ -618,15 +632,15 @@ let trendOptions=trendKeys.map(key=>{
       </p>
 
       <div class="result" style="margin-bottom:16px">
-        <b>🇯🇵 日本水泳連盟 競技者ID</b>
+        <b>🇯🇵 日本水泳連盟 競技者ID（複数可）</b>
         <div class="field" style="margin-bottom:8px">
-          <input id="detailAthleteId" inputmode="numeric" placeholder="例：58337328" value="${p.athlete_id||p.jasf_athlete_id||jasfAthleteId(p)||''}">
+          <input id="detailAthleteId" placeholder="例：58337328, 12345678" value="${jasfAthleteIds(p).join(', ')}">
         </div>
         <div class="actions">
           <button onclick="saveAthleteId('${p.id}')">競技者IDを保存</button>
           ${jasfAthleteUrl(p)?`<button class="secondary" onclick="window.open('${jasfAthleteUrl(p)}','_blank','noopener')">公式記録を見る</button>`:''}
         </div>
-        <div class="muted small" style="margin-top:8px">Results of Japan Swimming の選手ページURL末尾の数字を入力してください。</div>
+        <div class="muted small" style="margin-top:8px">複数登録がある場合はカンマ区切りで入力してください。同期時はすべてのIDをまとめて取得します。</div>
       </div>
 
       <div class="grid">
@@ -664,7 +678,7 @@ let trendOptions=trendKeys.map(key=>{
           🇯🇵 日本水泳連盟 公式記録を見る
         </button>
         <button onclick="fetchJasfLatest('${p.id}')">
-          🔄 2024〜2026年度ベストを同期
+          🔄 全競技者IDの年度別ベストを同期
         </button>
         `:''}
 
