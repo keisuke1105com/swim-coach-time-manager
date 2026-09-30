@@ -800,7 +800,7 @@ let trendOptions=trendKeys.map(key=>{
       <text
         x="${cx}"
         y="${H-15}"
-        text-anchor="middle"
+        text-anchor="${i===0?'start':i===data.length-1?'end':'middle'}"
         font-size="11"
         fill="#71808a">
         ${date}
