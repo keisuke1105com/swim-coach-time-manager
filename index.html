@@ -151,14 +151,16 @@ async function fetchJasfLatest(playerId){
 
   try{
     const jobs=[];
-    athleteIds.forEach(athleteId=>years.forEach(year=>[1,2].forEach(waterwayCode=>{
+    // period_code=4 は 2024年度以降の年度別データをまとめて返すため、
+    // 年度ごとに同じAPIを繰り返し呼ばず、競技者ID×水路×種目×距離につき1回だけ取得する。
+    athleteIds.forEach(athleteId=>[1,2].forEach(waterwayCode=>{
       JASF_EVENTS.forEach(ev=>ev.distances.forEach(d=>{
         jobs.push({
-          athleteId,year,course:waterwayCode===1?'長水路':'短水路',stroke:ev.stroke,distance:d.m,
-          promise:fetchJasfRecord(athleteId,year,waterwayCode,ev.styleCode,d.code)
+          athleteId,year:currentYear,course:waterwayCode===1?'長水路':'短水路',stroke:ev.stroke,distance:d.m,
+          promise:fetchJasfRecord(athleteId,currentYear,waterwayCode,ev.styleCode,d.code)
         });
       }));
-    })));
+    }));
 
     const settled=await Promise.allSettled(jobs.map(j=>j.promise));
     const fetched=[];
@@ -175,7 +177,7 @@ async function fetchJasfLatest(playerId){
       }else{
         const msg=String(r.reason?.message||r.reason||'');
         // 記録なし等は大量表示せず、通信・API異常だけ後で確認できるよう保持
-        if(!/invalid|422|記録がありません/i.test(msg))errors.push(`ID ${job.athleteId} / ${job.year}年度 ${job.course} ${job.stroke}${job.distance}m: ${msg}`);
+        if(!/invalid|422|記録がありません/i.test(msg))errors.push(`ID ${job.athleteId} / 2024年度以降 ${job.course} ${job.stroke}${job.distance}m: ${msg}`);
       }
     });
 
