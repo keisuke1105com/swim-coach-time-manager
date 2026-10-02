@@ -581,6 +581,10 @@ async function saveAthleteId(playerId){
   alert(athleteIds.length?`日本水泳連盟 競技者IDを${athleteIds.length}件保存しました！`:'競技者IDを解除しました。');
 }
 
+function nationalRankCacheKey(playerId,stroke,distance,course,year=2026){return `nationalRank|${year}|${playerId}|${stroke}|${Number(distance)}|${course}`;}
+function getNationalRankCache(playerId,stroke,distance,course,year=2026){try{return JSON.parse(localStorage.getItem(nationalRankCacheKey(playerId,stroke,distance,course,year))||'null');}catch(e){return null;}}
+function setNationalRankCache(playerId,stroke,distance,course,data,year=2026){try{localStorage.setItem(nationalRankCacheKey(playerId,stroke,distance,course,year),JSON.stringify(data));}catch(e){}}
+function rankBadgeId(playerId,stroke,distance,course){return 'nationalRank_'+String(playerId+'_'+stroke+'_'+distance+'_'+course).replace(/[^a-zA-Z0-9_-]/g,'_');}
 function showPlayerDetail(id,remember=true){
   let p=playerById(id);
   if(remember)saveViewState('players',id);
@@ -653,12 +657,15 @@ if(st!=null){
     : `JOまであと ${diff.toFixed(2)}秒　達成率 ${joRate.toFixed(1)}%`;
 }
 
+    const nr=getNationalRankCache(id,r.stroke,r.distance,r.course,2026);
+    const nrText=nr ? (nr.found ? `🇯🇵 全国 ${nr.rank}位` : '🇯🇵 ランキング掲載なし') : '🇯🇵 全国順位 未取得';
     return `
       <div class="row">
         <div>
           <b>${r.stroke} ${r.distance}m</b><br>
           <span class="muted">${r.course}</span><br>
-          <span class="muted">${joText}</span>
+          <span class="muted">${joText}</span><br>
+          <span id="${rankBadgeId(id,r.stroke,r.distance,r.course)}" class="${nr&&nr.found?'badge':'muted'}">${nrText}</span>
         </div>
         <div style="text-align:right">
           <b style="font-size:20px">${fmt(s)}</b><br>
@@ -812,7 +819,7 @@ let trendOptions=trendKeys.map(key=>{
           🧹 重複した公式記録を整理
         </button>
         <button class="secondary" onclick="testPlayerJasfRanking('${p.id}')">
-          🏆 全国ランキングを照合テスト
+          🏆 全国ランキングを更新
         </button>
         `:''}
 
@@ -1126,6 +1133,16 @@ async function testPlayerJasfRanking(playerId){
       results.push({r,x,count:q.matched.length});
     }catch(e){results.push({r,error:String(e?.message||e)});}
   }
+  results.forEach(v=>{
+    const r=v.r;
+    if(v.error)return;
+    if(v.x){
+      const x=v.x;
+      setNationalRankCache(playerId,r.stroke,r.distance,r.course,{found:true,rank:x?.ranking??x?.ranking_in_overall??'-',officialTime:x?.record?.record||x?.record||'-',swimmerCode:x?.swimmers?.swimmer_code||x?.swimmer_code||'-',updatedAt:new Date().toISOString()},year);
+    }else{
+      setNationalRankCache(playerId,r.stroke,r.distance,r.course,{found:false,updatedAt:new Date().toISOString()},year);
+    }
+  });
   const found=results.filter(v=>v.x).length;
   const rows=results.map(v=>{
     const r=v.r;if(v.error)return `<div class="row"><div><b>${r.stroke} ${r.distance}m</b><br><span class="muted">${r.course}</span></div><span class="small" style="color:#a61b1b">${v.error}</span></div>`;
@@ -1133,7 +1150,14 @@ async function testPlayerJasfRanking(playerId){
     const x=v.x,rank=x?.ranking??x?.ranking_in_overall??'-',time=x?.record?.record||x?.record||'-',code=x?.swimmers?.swimmer_code||x?.swimmer_code||'-';
     return `<div class="row"><div><b>${r.stroke} ${r.distance}m・${r.course}</b><br><span class="muted">競技者コード ${code} ／ アプリBEST ${fmt(r.time_seconds)}</span></div><div style="text-align:right"><b style="font-size:20px">${rank}位</b><br><span class="muted">公式 ${time}</span></div></div>`;
   }).join('');
-  box.innerHTML=`<div class="result good"><b>✅ 全国ランキング照合が完了しました</b><br><span class="small">${year}年度 ／ 登録競技者ID ${athleteIds.join('・')} ／ ${found}/${results.length}種目で該当</span></div><div class="result" style="margin-top:10px">${rows}</div><div class="muted small" style="margin-top:8px">※ 登録競技者IDを確認したうえで、ランキングAPIには空白を除いた選手名で照会し、返却された競技者コード・氏名・タイムを照合します。本体の選手・記録データは変更しません。</div>`;
+  box.innerHTML=`<div class="result good"><b>✅ 全国ランキングを更新しました</b><br><span class="small">${year}年度 ／ 登録競技者ID ${athleteIds.join('・')} ／ ${found}/${results.length}種目でランキング掲載を確認</span></div><div class="result" style="margin-top:10px">${rows}</div><div class="muted small" style="margin-top:8px">※ 順位を確認できた種目だけ全国順位を表示します。見つからない種目は「ランキング掲載なし」として表示します。本体の選手・記録データは変更しません。</div>`;
+  results.forEach(v=>{
+    if(v.error)return;
+    const el=document.getElementById(rankBadgeId(playerId,v.r.stroke,v.r.distance,v.r.course));
+    if(!el)return;
+    if(v.x){const rank=v.x?.ranking??v.x?.ranking_in_overall??'-';el.textContent=`🇯🇵 全国 ${rank}位`;el.className='badge';}
+    else{el.textContent='🇯🇵 ランキング掲載なし';el.className='muted';}
+  });
 }
 
 function renderAnalysis(){
