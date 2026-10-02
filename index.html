@@ -134,6 +134,59 @@ async function fetchJasfRecord(athleteId,year,waterwayCode,swimmingStyleCode,dis
   return json;
 }
 
+function jasfResultIdFromMemo(memo){
+  const m=String(memo||'').match(/result_id:([^\s/]+)/);
+  return m&&m[1]&&m[1]!=='-'?m[1]:'';
+}
+
+async function cleanupJasfDuplicates(playerId){
+  const p=playerById(playerId);
+  if(!p)return;
+  if(!confirm(`${p.name} の日本水泳連盟から同期した重複記録を整理します。\n同じ result_id の公式記録だけを1件残し、手入力記録は削除しません。よろしいですか？`))return;
+  await loadCloud();
+  const rows=records.filter(r=>String(r.swimmer_id)===String(playerId) && String(r.memo||'').includes('日本水泳連盟'));
+  const groups=new Map();
+  rows.forEach(r=>{
+    const rid=jasfResultIdFromMemo(r.memo);
+    if(!rid)return;
+    const key=`${playerId}|${rid}`;
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(r);
+  });
+  const deleteIds=[];
+  for(const arr of groups.values()){
+    if(arr.length<2)continue;
+    arr.sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')) || String(a.id).localeCompare(String(b.id)));
+    deleteIds.push(...arr.slice(1).map(r=>r.id));
+  }
+  if(!deleteIds.length){alert('整理する重複公式記録はありませんでした。');return;}
+  for(let i=0;i<deleteIds.length;i+=100){
+    const {error}=await sb.from('swim_records').delete().in('id',deleteIds.slice(i,i+100));
+    if(error){alert('重複整理に失敗しました：'+error.message);return;}
+  }
+  await loadCloud();
+  // この選手の自己ベスト印を整理し直す
+  const mine=records.filter(r=>String(r.swimmer_id)===String(playerId));
+  const bestByEvent=new Map();
+  mine.forEach(r=>{
+    const key=`${r.stroke}|${Number(r.distance)}|${r.course}`;
+    const t=Number(r.time_seconds);
+    if(!Number.isFinite(t))return;
+    const cur=bestByEvent.get(key);
+    if(!cur||t<Number(cur.time_seconds))bestByEvent.set(key,r);
+  });
+  const {error:clearErr}=await sb.from('swim_records').update({is_personal_best:false}).eq('swimmer_id',playerId);
+  if(clearErr){alert('重複は整理しましたが、ベスト印の再計算でエラー：'+clearErr.message);await loadCloud();renderHome();return;}
+  for(const r of bestByEvent.values()){
+    const {error}=await sb.from('swim_records').update({is_personal_best:true}).eq('id',r.id);
+    if(error){alert('重複は整理しましたが、ベスト印の再計算でエラー：'+error.message);break;}
+  }
+  await loadCloud();
+  renderHome();
+  renderPlayers();
+  alert(`重複していた公式記録 ${deleteIds.length}件を削除しました。\n各公式記録は1件ずつ残しています。`);
+}
+
 async function fetchJasfLatest(playerId){
   const p=playerById(playerId);
   const athleteIds=jasfAthleteIds(p);
@@ -196,10 +249,14 @@ async function fetchJasfLatest(playerId){
       const meetName=x.game_short_name||x.game_name||'日本水泳連盟公式記録';
       if(!Number.isFinite(timeSeconds))continue;
 
-      const duplicate=records.some(r=>
-        String(r.swimmer_id)===String(playerId)&&r.stroke===stroke&&Number(r.distance)===distance&&r.course===item.course&&
-        Math.abs(Number(r.time_seconds)-timeSeconds)<0.001&&r.record_date===recordDate
-      );
+      const incomingResultId=String(x.result_id||'');
+      const duplicate=records.some(r=>{
+        if(String(r.swimmer_id)!==String(playerId))return false;
+        const existingResultId=jasfResultIdFromMemo(r.memo);
+        if(incomingResultId && existingResultId && incomingResultId===existingResultId)return true;
+        return r.stroke===stroke&&Number(r.distance)===distance&&r.course===item.course&&
+          Math.abs(Number(r.time_seconds)-timeSeconds)<0.001&&r.record_date===recordDate;
+      });
       if(duplicate){unchanged++;continue;}
 
       const currentBest=best(playerId,stroke,distance,item.course);
@@ -674,6 +731,9 @@ let trendOptions=trendKeys.map(key=>{
         </button>
         <button onclick="fetchJasfLatest('${p.id}')">
           🔄 全競技者IDの年度別ベストを同期
+        </button>
+        <button class="secondary" onclick="cleanupJasfDuplicates('${p.id}')">
+          🧹 重複した公式記録を整理
         </button>
         `:''}
 
