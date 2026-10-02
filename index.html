@@ -907,8 +907,17 @@ function renderTrendMode(playerId,mode){
     title='🏅 年度ベスト推移';footer=`4月1日〜翌年3月31日を1年度として、各年度の最速タイムを表示（${graphData.length}年度）`;
   }else{
     const fy=Number($('#trendYearSelect')?.value);
-    graphData=all.filter(r=>swimFiscalYear(r.record_date)===fy).map(r=>({label:String(r.record_date||'').slice(5).replace('-','/'),time:Number(r.time_seconds),date:r.record_date||'',meet:r.meet_name||''}));
-    title=`🏊 ${fy}年度 レース推移`;footer=`${fy}/4/1〜${fy+1}/3/31 の全レース（${graphData.length}記録）`;
+    const raceRows=all.filter(r=>swimFiscalYear(r.record_date)===fy);
+    // グラフ表示だけ、同日・同タイムの重複点を1点にまとめる。
+    // DB上の記録は削除しないため、予選・決勝など別記録の元データはそのまま残る。
+    const seenRacePoints=new Set();
+    graphData=raceRows.filter(r=>{
+      const pointKey=`${r.record_date||''}|${Number(r.time_seconds).toFixed(3)}`;
+      if(seenRacePoints.has(pointKey))return false;
+      seenRacePoints.add(pointKey);
+      return true;
+    }).map(r=>({label:String(r.record_date||'').slice(5).replace('-','/'),time:Number(r.time_seconds),date:r.record_date||'',meet:r.meet_name||''}));
+    title=`🏊 ${fy}年度 レース推移`;footer=`${fy}/4/1〜${fy+1}/3/31 のレース推移（表示 ${graphData.length}点／保存 ${raceRows.length}記録）`;
   }
   if(!graphData.length){box.innerHTML='<p class="muted">この条件の記録がありません。</p>';return;}
 
