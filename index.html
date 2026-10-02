@@ -1113,38 +1113,80 @@ function jasfSchoolInfo(x){
   return {schoolClassCode:sc?.code??99,schoolClassName:sc?.name||'',schoolGrade:grade??99};
 }
 function jasfPrefInfo(x){
-  const s=x?.swimmers||x||{};const eg=s.entry_group||{};const ng=s.non_entry_group||{};
-  const mg=ng.member_group||eg.member_group||{};
-  return {code:mg.code??'',name:mg.name||''};
+  const s=x?.swimmers||x||{};
+  // APIの版によって都道府県情報の格納場所が異なるため候補を順に確認する。
+  const candidates=[s.prefecture,s.prefectures,s.entry_group?.prefecture,s.non_entry_group?.prefecture,s.non_entry_group?.member_group,s.entry_group?.member_group];
+  for(const c of candidates){
+    if(c&&typeof c==='object'&&(c.code!=null||c.id!=null||c.name))return {code:c.code??c.id??'',name:c.name||c.prefecture_name||''};
+  }
+  return {code:'',name:''};
+}
+function jasfGradeFromBirthDate(player,year=2026){
+  if(!player?.birth_date)return null;
+  // 日本の学年は年度開始時点（4/1）の年齢から算出。小1=1 … 高3=12。
+  const ageApr1=ageOnDate(player.birth_date,`${year}-04-01`);
+  if(ageApr1==null)return null;
+  const n=ageApr1-5;
+  if(n>=1&&n<=6)return {schoolClassCode:1,schoolClassName:'小学',schoolGrade:n,label:`小学${n}年`};
+  if(n>=7&&n<=9)return {schoolClassCode:2,schoolClassName:'中学',schoolGrade:n-6,label:`中学${n-6}年`};
+  if(n>=10&&n<=12)return {schoolClassCode:3,schoolClassName:'高校',schoolGrade:n-9,label:`高校${n-9}年`};
+  return null;
+}
+function jasfSameSwimmer(row,player,athleteIds=[]){
+  const name=normalizeJasfName(row?.swimmers?.swimmer_name||row?.swimmer_name);
+  if(name!==normalizeJasfName(player?.name))return false;
+  // 名前一致を基本にし、競技者コードが取れる場合も許容（athlete_idとは別体系の場合がある）。
+  return true;
 }
 async function fetchJasfRankingForPlayer(player,stroke,distance,course,year=2026){
-  const target=normalizeJasfName(player.name);
-  // まず総合検索で本人の公式行を特定し、公式側の学校区分・学年・所属都道府県を取得する。
+  const target=normalizeJasfName(player.name), athleteIds=jasfAthleteIds(player);
+  // まず総合検索で本人の公式行を特定し、所属都道府県などを取得する。
   const overall=await fetchJasfRankingPage(player,stroke,distance,course,year,'99','99',target,1);
-  const base=overall.find(x=>normalizeJasfName(x?.swimmers?.swimmer_name||x?.swimmer_name)===target)||null;
-  if(!base)return {rows:overall,matched:[],gradeMatched:[],prefRank:null,prefName:''};
-  const si=jasfSchoolInfo(base),pi=jasfPrefInfo(base);
-  // 学年情報がAPIに無い場合は総合順位を誤って同学年順位として出さない。
-  if(String(si.schoolGrade)==='99'||si.schoolGrade==null)return {rows:overall,matched:[base],gradeMatched:[],prefRank:null,prefName:pi.name,gradeUnavailable:true};
-  const gradeRows=await fetchJasfRankingPage(player,stroke,distance,course,year,si.schoolClassCode,si.schoolGrade,target,1);
-  const gx=gradeRows.find(x=>normalizeJasfName(x?.swimmers?.swimmer_name||x?.swimmer_name)===target)||null;
-  if(!gx)return {rows:gradeRows,matched:[base],gradeMatched:[],prefRank:null,prefName:pi.name};
-  const gradeRank=Number(gx?.ranking??gx?.ranking_in_overall??0)||null;
-  let prefRank=null;
-  if(pi.code!==''&&gradeRank){
-    const pageSize=50,maxPage=Math.max(1,Math.ceil(gradeRank/pageSize));let before=0,foundSelf=false;
-    for(let page=1;page<=maxPage&&!foundSelf;page++){
-      const rows=await fetchJasfRankingPage(player,stroke,distance,course,year,si.schoolClassCode,si.schoolGrade,'',page);
-      for(const row of rows){
-        const rr=Number(row?.ranking??row?.ranking_in_overall??0)||999999;if(rr>gradeRank){foundSelf=true;break;}
-        const rpi=jasfPrefInfo(row);if(String(rpi.code)===String(pi.code))before++;
-        if(normalizeJasfName(row?.swimmers?.swimmer_name||row?.swimmer_name)===target){foundSelf=true;break;}
-      }
-      if(!rows.length)break;
-    }
-    if(before>0)prefRank=before;
+  const base=overall.find(x=>jasfSameSwimmer(x,player,athleteIds))||null;
+  if(!base)return {rows:overall,matched:[],gradeMatched:[],prefRank:null,prefName:'',notListed:true};
+
+  const apiSchool=jasfSchoolInfo(base);
+  const derived=jasfGradeFromBirthDate(player,year);
+  // 公式レスポンスの学年が欠けるケースがあるため、生年月日からの年度学年を優先して確実に絞る。
+  const schoolClassCode=derived?.schoolClassCode ?? (String(apiSchool.schoolClassCode)!=='99'?apiSchool.schoolClassCode:null);
+  const schoolGrade=derived?.schoolGrade ?? (String(apiSchool.schoolGrade)!=='99'?apiSchool.schoolGrade:null);
+  const schoolClassName=derived?.schoolClassName||apiSchool.schoolClassName||'';
+  if(schoolClassCode==null||schoolGrade==null)return {rows:overall,matched:[base],gradeMatched:[],prefRank:null,prefName:'',gradeUnavailable:true};
+
+  // 画面で確認した公式仕様：例）中学2年 = school_class_code=2 & school_grade=2。
+  // swimmer_nameを空にして同学年全体を取得し、本人の順位と都道府県内順位を同じ母集団から算出する。
+  let allGradeRows=[];
+  let self=null;
+  const maxPages=200;
+  for(let page=1;page<=maxPages;page++){
+    const rows=await fetchJasfRankingPage(player,stroke,distance,course,year,schoolClassCode,schoolGrade,'',page);
+    if(!rows.length)break;
+    allGradeRows.push(...rows);
+    if(!self)self=rows.find(x=>jasfSameSwimmer(x,player,athleteIds))||null;
+    // 通常50件/ページ。最終ページなら終了。
+    if(rows.length<50)break;
   }
-  return {rows:gradeRows,matched:[base],gradeMatched:gx?[gx]:[],gradeRank,prefRank,prefName:pi.name,schoolClassName:si.schoolClassName,schoolGrade:si.schoolGrade};
+  if(!self){
+    // 全件取得が重い/上限に達した場合に備え、氏名検索でも本人を確認。
+    const named=await fetchJasfRankingPage(player,stroke,distance,course,year,schoolClassCode,schoolGrade,target,1);
+    self=named.find(x=>jasfSameSwimmer(x,player,athleteIds))||null;
+    if(self&&!allGradeRows.some(x=>jasfSameSwimmer(x,player,athleteIds)))allGradeRows.push(self);
+  }
+  if(!self)return {rows:allGradeRows,matched:[base],gradeMatched:[],prefRank:null,prefName:'',schoolClassName,schoolGrade,notListed:true};
+
+  const gradeRank=Number(self?.ranking??self?.ranking_in_overall??0)||null;
+  const pi=jasfPrefInfo(self);
+  let prefRank=null;
+  if(pi.code!==''||pi.name){
+    const samePref=allGradeRows.filter(row=>{
+      const rpi=jasfPrefInfo(row);
+      return pi.code!=='' ? String(rpi.code)===String(pi.code) : (pi.name&&rpi.name===pi.name);
+    });
+    samePref.sort((a,b)=>(Number(a?.ranking??a?.ranking_in_overall??999999))-(Number(b?.ranking??b?.ranking_in_overall??999999)));
+    const idx=samePref.findIndex(row=>jasfSameSwimmer(row,player,athleteIds));
+    if(idx>=0)prefRank=idx+1;
+  }
+  return {rows:allGradeRows,matched:[base],gradeMatched:[self],gradeRank,prefRank,prefName:pi.name,schoolClassName,schoolGrade,gradeLabel:derived?.label||`${schoolClassName}${schoolGrade}年`};
 }
 async function testPlayerJasfRanking(playerId){
   const p=playerById(playerId),box=$('#playerJasfRankingBox');if(!p||!box)return;
@@ -1157,7 +1199,7 @@ async function testPlayerJasfRanking(playerId){
   for(const r of bests){try{const q=await fetchJasfRankingForPlayer(p,r.stroke,r.distance,r.course,year);const x=q.gradeMatched?.[0]||null;results.push({r,x,q});}catch(e){results.push({r,error:String(e?.message||e)});}}
   results.forEach(v=>{const r=v.r;if(v.error)return;if(v.x){const x=v.x;setNationalRankCache(playerId,r.stroke,r.distance,r.course,{found:true,rank:(v.q.gradeRank||x?.ranking||x?.ranking_in_overall||'-'),gradeRank:(v.q.gradeRank||x?.ranking||x?.ranking_in_overall||'-'),prefRank:v.q.prefRank||null,prefName:v.q.prefName||'',officialTime:x?.record?.record||x?.record||'-',swimmerCode:x?.swimmers?.swimmer_code||x?.swimmer_code||'-',updatedAt:new Date().toISOString()},year);}else setNationalRankCache(playerId,r.stroke,r.distance,r.course,{found:false,updatedAt:new Date().toISOString()},year);});
   const found=results.filter(v=>v.x).length;
-  const rows=results.map(v=>{const r=v.r;if(v.error)return `<div class="row"><div><b>${r.stroke} ${r.distance}m</b><br><span class="muted">${r.course}</span></div><span class="small" style="color:#a61b1b">${v.error}</span></div>`;if(!v.x)return `<div class="row"><div><b>${r.stroke} ${r.distance}m</b><br><span class="muted">${r.course}</span></div><span class="muted">${v.q?.gradeUnavailable?'学年情報なし':'同学年で該当なし'}</span></div>`;const x=v.x,time=x?.record?.record||x?.record||'-',code=x?.swimmers?.swimmer_code||x?.swimmer_code||'-';return `<div class="row"><div><b>${r.stroke} ${r.distance}m・${r.course}</b><br><span class="muted">競技者コード ${code} ／ アプリBEST ${fmt(r.time_seconds)}</span></div><div style="text-align:right"><b style="font-size:20px">同学年 全国 ${v.q.gradeRank}位</b><br><span class="muted">${v.q.prefRank?`${v.q.prefName||'都道府県内'} ${v.q.prefRank}位 ／ `:''}公式 ${time}</span></div></div>`;}).join('');
+  const rows=results.map(v=>{const r=v.r;if(v.error)return `<div class="row"><div><b>${r.stroke} ${r.distance}m</b><br><span class="muted">${r.course}</span></div><span class="small" style="color:#a61b1b">${v.error}</span></div>`;if(!v.x)return `<div class="row"><div><b>${r.stroke} ${r.distance}m</b><br><span class="muted">${r.course}</span></div><span class="muted">${v.q?.gradeUnavailable?'学年情報なし':'同学年で該当なし'}</span></div>`;const x=v.x,time=x?.record?.record||x?.record||'-',code=x?.swimmers?.swimmer_code||x?.swimmer_code||'-';return `<div class="row"><div><b>${r.stroke} ${r.distance}m・${r.course}</b><br><span class="muted">競技者コード ${code} ／ アプリBEST ${fmt(r.time_seconds)}</span></div><div style="text-align:right"><b style="font-size:20px">${v.q.gradeLabel?`${v.q.gradeLabel} `:''}全国 ${v.q.gradeRank}位</b><br><span class="muted">${v.q.prefRank?`${v.q.prefName||'都道府県内'} ${v.q.prefRank}位 ／ `:''}公式 ${time}</span></div></div>`;}).join('');
   box.innerHTML=`<div class="result good"><b>✅ 同学年ランキングを更新しました</b><br><span class="small">${year}年度 ／ ${found}/${results.length}種目で同学年順位を確認</span></div><div class="result" style="margin-top:10px">${rows}</div><div class="muted small" style="margin-top:8px">※ 日本水泳連盟ランキングAPIの学校区分・学年で絞り込みます。都道府県内順位は、同学年ランキング内で公式データの所属都道府県が同じ選手を数えて算出します。</div>`;
   showPlayerDetail(playerId,false);
 }
