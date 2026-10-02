@@ -298,6 +298,19 @@ async function fetchJasfLatest(playerId){
     if(!fetched.length)throw new Error('取得できる公式記録がありませんでした。競技者IDと年度を確認してください。');
 
     fetched.sort((a,b)=>a.year-b.year || String(a.x.result_date||'').localeCompare(String(b.x.result_date||'')));
+
+    // 保存直前にクラウドを再読込し、別端末や直前の同期結果も含めて重複判定する。
+    await loadCloud();
+    const existingOfficialResultIds=new Set();
+    const existingOfficialFallbackKeys=new Set();
+    records.forEach(r=>{
+      if(String(r.swimmer_id)!==String(playerId))return;
+      if(!String(r.memo||'').includes('日本水泳連盟'))return;
+      const rid=jasfResultIdFromMemo(r.memo);
+      if(rid)existingOfficialResultIds.add(rid);
+      existingOfficialFallbackKeys.add(`${r.stroke}|${Number(r.distance)}|${r.course}|${Number(r.time_seconds).toFixed(3)}|${r.record_date||''}`);
+    });
+
     let saved=0,unchanged=0;
     const savedRows=[];
 
@@ -310,14 +323,14 @@ async function fetchJasfLatest(playerId){
       const meetName=x.game_short_name||x.game_name||'日本水泳連盟公式記録';
       if(!Number.isFinite(timeSeconds))continue;
 
-      const incomingResultId=String(x.result_id||'');
-      const duplicate=records.some(r=>{
-        if(String(r.swimmer_id)!==String(playerId))return false;
-        const existingResultId=jasfResultIdFromMemo(r.memo);
-        if(incomingResultId && existingResultId && incomingResultId===existingResultId)return true;
-        return r.stroke===stroke&&Number(r.distance)===distance&&r.course===item.course&&
-          Math.abs(Number(r.time_seconds)-timeSeconds)<0.001&&r.record_date===recordDate;
-      });
+      const incomingResultId=String(x.result_id||'').trim();
+      const fallbackKey=`${stroke}|${Number(distance)}|${item.course}|${Number(timeSeconds).toFixed(3)}|${recordDate}`;
+      // result_id がある公式記録は result_id を最優先で判定。
+      // result_id が無い場合だけ、公式記録同士の「種目・水路・タイム・日付」で判定する。
+      // 手入力記録は重複判定の対象にしない。
+      const duplicate=incomingResultId
+        ? existingOfficialResultIds.has(incomingResultId)
+        : existingOfficialFallbackKeys.has(fallbackKey);
       if(duplicate){unchanged++;continue;}
 
       const currentBest=best(playerId,stroke,distance,item.course);
@@ -342,6 +355,8 @@ async function fetchJasfLatest(playerId){
       saved++;
       savedRows.push(`${item.year}年度 ${stroke} ${distance}m・${item.course} ${x.result_time}`);
       records.push({...payload,id:`jasf-temp-${Date.now()}-${saved}`});
+      if(incomingResultId)existingOfficialResultIds.add(incomingResultId);
+      existingOfficialFallbackKeys.add(fallbackKey);
     }
 
     await loadCloud();
