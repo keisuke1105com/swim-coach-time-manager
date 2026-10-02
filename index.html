@@ -394,7 +394,35 @@ function renderAuth(){setStatus('');$('#auth').innerHTML=`<div class="card auth"
 async function login(){let email=$('#email').value.trim(),password=$('#password').value;let {error}=await sb.auth.signInWithPassword({email,password});if(error)setStatus(error.message,'error')}
 async function signup(){let email=$('#email').value.trim(),password=$('#password').value;if(password.length<6){setStatus('パスワードは6文字以上にしてください。','error');return}let {error}=await sb.auth.signUp({email,password});setStatus(error?error.message:'登録しました。メール確認が必要な場合はメールを確認してください。',error?'error':'notice')}
 async function logout(){await sb.auth.signOut()}
-async function loadCloud(){setStatus('クラウドから読み込み中…');let [{data:p,error:pe},{data:r,error:re}]=await Promise.all([sb.from('swimmers').select('*').eq('active',true).order('sort_order'),sb.from('swim_records').select('*').order('created_at')]);if(pe||re){setStatus('クラウドDBにアクセスできません。RLSポリシーを確認してください。 '+(pe?.message||re?.message||''),'error');PLAYERS=[];records=[];return}PLAYERS=p||[];records=r||[];setStatus('')}
+async function fetchAllRows(table,buildQuery,pageSize=1000){
+  const all=[];
+  for(let from=0;;from+=pageSize){
+    let q=sb.from(table).select('*');
+    if(buildQuery)q=buildQuery(q);
+    const {data,error}=await q.range(from,from+pageSize-1);
+    if(error)throw error;
+    const rows=data||[];
+    all.push(...rows);
+    if(rows.length<pageSize)break;
+  }
+  return all;
+}
+async function loadCloud(){
+  setStatus('クラウドから読み込み中…');
+  try{
+    const [p,r]=await Promise.all([
+      fetchAllRows('swimmers',q=>q.eq('active',true).order('sort_order')),
+      fetchAllRows('swim_records',q=>q.order('created_at'))
+    ]);
+    PLAYERS=p;
+    records=r;
+    setStatus('');
+  }catch(e){
+    setStatus('クラウドDBにアクセスできません。RLSポリシーを確認してください。 '+String(e?.message||e||''),'error');
+    PLAYERS=[];
+    records=[];
+  }
+}
 function renderHome(){let today=new Date().toISOString().slice(0,10),td=records.filter(r=>r.record_date===today).length,b=records.filter(r=>r.is_personal_best).length,j=records.filter(r=>r.is_jo_qualified).length;$('#home').innerHTML=`<div class="grid"><div class="card"><div class="label">今日の入力</div><div class="stat">${td}</div></div><div class="card"><div class="label">ベスト更新</div><div class="stat">${b}</div></div><div class="card"><div class="label">JO突破記録</div><div class="stat">${j}</div></div><div class="card"><div class="label">登録選手</div><div class="stat">${PLAYERS.length}</div></div></div><div class="card"><h3>🚀 すぐ入力</h3><button style="width:100%" onclick="go('input')">タイムを入力する</button></div><div class="card"><h3>最近の記録</h3>${records.slice(-5).reverse().map(r=>{let p=playerById(r.swimmer_id);return `<div class="row"><div><b>${p?.name||'選手'}</b><br><span class="muted">${r.stroke} ${r.distance}m・${r.course}</span></div><b>${fmt(r.time_seconds)}</b></div>`}).join('')||'<p class="muted">まだ記録がありません。</p>'}</div>`}
 function renderPlayers(){ $('#players').innerHTML=`<div class="card"><div class="topline"><h2>👥 選手一覧</h2><button onclick="showAddPlayer()">＋ 選手追加</button></div><input class="search" id="pq" placeholder="選手名で検索" oninput="filterPlayers()"><div id="playerForm"></div><div id="plist"></div></div>`;filterPlayers()}
 function showAddPlayer(p=null){$('#playerForm').innerHTML=`<div class="result"><h3>${p?'選手編集':'新しい選手'}</h3><div class="field"><label>氏名</label><input id="pn" value="${p?.name||''}"></div><div class="field"><label>区分</label><select id="pd">${['9歳以下','10歳','11歳','12歳','13歳','14歳','15〜16歳','CS'].map(x=>`<option ${p?.age_group===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>性別</label><select id="pg"><option ${p?.gender==='男子'?'selected':''}>男子</option><option ${p?.gender==='女子'?'selected':''}>女子</option></select></div><div class="field"><label>生年月日（任意）</label><input id="pb" type="date" value="${p?.birth_date||''}"></div><div class="field"><label>チーム・メモ（任意）</label><input id="pt" value="${p?.team||''}"></div><div class="field"><label>日本水泳連盟 競技者ID（複数可）</label><input id="pj" placeholder="例：58337328, 12345678" value="${p?jasfAthleteIds(p).join(', '):''}"><div class="muted small" style="margin-top:6px">複数ある場合はカンマ区切りで入力してください。すべてのIDから記録を同期します。</div></div><div class="actions"><button onclick="savePlayer('${p?.id||''}')">保存</button><button class="secondary" onclick="$('#playerForm').innerHTML=''">キャンセル</button></div></div>`}
