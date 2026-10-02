@@ -859,115 +859,72 @@ let trendOptions=trendKeys.map(key=>{
   setTimeout(()=>renderTrendChart(id),0);
 }
  
-  function renderTrendChart(playerId){
+  function swimFiscalYear(dateValue){
+  const m=String(dateValue||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m)return null;
+  const y=Number(m[1]), month=Number(m[2]);
+  return month>=4?y:y-1;
+}
+
+function renderTrendChart(playerId){
   const select=$('#trendSelect');
   const chart=$('#trendChart');
   if(!select || !chart)return;
-
-  const key=select.value;
-  if(!key)return;
+  const key=select.value;if(!key)return;
   const [stroke,distance,course]=key.split('|');
-
-  const data=records
-    .filter(r=>
-      String(r.swimmer_id)===String(playerId) &&
-      r.stroke===stroke &&
-      Number(r.distance)===Number(distance) &&
-      r.course===course
-    )
+  const data=records.filter(r=>String(r.swimmer_id)===String(playerId)&&r.stroke===stroke&&Number(r.distance)===Number(distance)&&r.course===course&&Number.isFinite(Number(r.time_seconds)))
     .sort((a,b)=>String(a.record_date||'').localeCompare(String(b.record_date||'')));
+  if(!data.length){chart.innerHTML='<p class="muted">グラフにできる記録がありません。</p>';return;}
 
-  if(!data.length){
-    chart.innerHTML='<p class="muted">グラフにできる記録がありません。</p>';
-    return;
-  }
-
-  const times=data.map(r=>Number(r.time_seconds));
-  const joStandard=standard(playerId,stroke,distance,course);
-  const currentBest=Math.min(...times);
-  const firstTime=times[0];
-  const totalImprove=firstTime-currentBest;
-  const latest=times[times.length-1];
-  const prev=times.length>1?times[times.length-2]:null;
-  const prevDiff=prev!=null?latest-prev:null;
-  const joGap=joStandard!=null?currentBest-joStandard:null;
-  const joRate=joStandard!=null?(joStandard/currentBest)*100:null;
-
-  const annual={};
-  data.forEach(r=>{
-    const year=String(r.record_date||'').slice(0,4)||'日付なし';
-    const t=Number(r.time_seconds);
-    if(!annual[year] || t<annual[year].time){
-      annual[year]={time:t,date:r.record_date||''};
-    }
-  });
-  const graphData=Object.entries(annual).sort((a,b)=>a[0].localeCompare(b[0])).map(([year,v])=>({record_date:v.date,time_seconds:v.time,year}));
-  const annualHtml=Object.entries(annual).sort((a,b)=>a[0].localeCompare(b[0])).map(([year,v])=>`
-    <div style="background:#f5f9fc;border-radius:12px;padding:10px 12px;min-width:120px;flex:1">
-      <div class="muted small">${year==='日付なし'?year:year+'年度 BEST'}</div>
-      <div style="font-size:18px;font-weight:800;margin-top:3px">${fmt(v.time)}</div>
-      <div class="muted small">${v.date?String(v.date).slice(5).replace('-','/'):''}</div>
-    </div>`).join('');
-
-  const diffText=prevDiff==null?'—':prevDiff<0?`🔥 ${Math.abs(prevDiff).toFixed(2)}秒更新`:prevDiff>0?`+${prevDiff.toFixed(2)}秒`:'±0.00秒';
-  const improveText=totalImprove>0?`−${totalImprove.toFixed(2)}秒`:totalImprove<0?`+${Math.abs(totalImprove).toFixed(2)}秒`:'±0.00秒';
-  const joText=joStandard==null?'標準なし':joGap<=0?'🏆 JO突破':`あと ${joGap.toFixed(2)}秒`;
-
-  let values=[...times];
-  if(joStandard!=null)values.push(joStandard);
-  const min=Math.min(...values), max=Math.max(...values);
-  const padding=Math.max((max-min)*0.25,1);
-  const yMin=min-padding, yMax=max+padding;
-
-  const W=600,H=280,left=55,right=20,top=38,bottom=58;
-  const plotW=W-left-right, plotH=H-top-bottom;
-  const x=i=>graphData.length===1?left+plotW/2:left+(i/(graphData.length-1))*plotW;
-  const y=value=>top+((value-yMin)/(yMax-yMin))*plotH;
-  const linePoints=graphData.map((r,i)=>`${x(i)},${y(Number(r.time_seconds))}`).join(' ');
-
-  let runningBest=Infinity;
-  const points=graphData.map((r,i)=>{
-    const t=Number(r.time_seconds),cx=x(i),cy=y(t);
-    const isBest=i>0 && t<runningBest;
-    runningBest=Math.min(runningBest,t);
-    const fullDate=String(r.record_date||'');
-    const date=r.year?`${r.year}年度 BEST`:fullDate?`${fullDate.slice(0,4)}年度｜${fullDate.slice(5).replace('-', '/')}`:'';
-    return `
-      <circle cx="${cx}" cy="${cy}" r="${isBest?6:5}" fill="${isBest?'#16a34a':'#087fd1'}"></circle>
-      ${isBest?`<text x="${cx}" y="${cy-24}" text-anchor="middle" font-size="10" font-weight="800" fill="#16803b">🔥 BEST</text>`:''}
-      <text x="${cx}" y="${cy-10}" text-anchor="middle" font-size="12" font-weight="700" fill="#123">${fmt(t)}</text>
-      <text x="${cx}" y="${H-18}" text-anchor="${i===0?'start':i===graphData.length-1?'end':'middle'}" font-size="10" fill="#71808a">${date}</text>`;
-  }).join('');
-
-  let joLine='';
-  if(joStandard!=null){
-    const jy=y(joStandard);
-    joLine=`<line x1="${left}" x2="${W-right}" y1="${jy}" y2="${jy}" stroke="#e67e22" stroke-width="2" stroke-dasharray="7 5"></line>
-      <text x="${W-right}" y="${jy-6}" text-anchor="end" font-size="12" font-weight="700" fill="#b85d00">JO ${fmt(joStandard)}</text>`;
-  }
-
+  const years=[...new Set(data.map(r=>swimFiscalYear(r.record_date)).filter(y=>y!=null))].sort((a,b)=>a-b);
+  const currentFY=swimFiscalYear(new Date().toISOString().slice(0,10));
+  const defaultFY=years.includes(currentFY)?currentFY:years[years.length-1];
   chart.innerHTML=`
-    <div style="margin-top:14px">
-      <div style="font-weight:800;margin-bottom:8px">📊 成長サマリー</div>
-      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
-        <div style="background:#f5f9fc;border-radius:12px;padding:11px"><div class="muted small">現在BEST</div><div style="font-size:20px;font-weight:800">${fmt(currentBest)}</div></div>
-        <div style="background:#f5f9fc;border-radius:12px;padding:11px"><div class="muted small">初回からの成長</div><div style="font-size:20px;font-weight:800">${improveText}</div></div>
-        <div style="background:#f5f9fc;border-radius:12px;padding:11px"><div class="muted small">前回比</div><div style="font-size:18px;font-weight:800">${diffText}</div></div>
-        <div style="background:#fff7ed;border-radius:12px;padding:11px"><div class="muted small">JOまで</div><div style="font-size:18px;font-weight:800">${joText}</div>${joRate!=null?`<div class="muted small">達成率 ${joRate.toFixed(1)}%</div>`:''}</div>
-      </div>
-      <div style="font-weight:800;margin:14px 0 8px">🏅 年度BEST</div>
-      <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px">${annualHtml}</div>
+    <div class="actions" style="margin:8px 0 12px">
+      <button id="trendAnnualBtn" onclick="renderTrendMode('${playerId}','annual')">🏅 年度ベスト推移</button>
+      <button id="trendRaceBtn" class="secondary" onclick="renderTrendMode('${playerId}','race')">🏊 年度内レース推移</button>
     </div>
+    <div id="trendYearField" class="field hidden"><label>表示する年度</label><select id="trendYearSelect" onchange="renderTrendMode('${playerId}','race')">${years.slice().reverse().map(y=>`<option value="${y}" ${y===defaultFY?'selected':''}>${y}年度</option>`).join('')}</select></div>
+    <div id="trendModeChart"></div>`;
+  renderTrendMode(playerId,'annual');
+}
 
-    <div style="margin-top:14px;overflow-x:auto">
-      <svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:520px;background:#fff;border-radius:14px">
-        <text x="${left}" y="18" font-size="11" fill="#71808a">↑ タイムが速い</text>
-        ${joLine}
-        ${graphData.length>1?`<polyline points="${linePoints}" fill="none" stroke="#087fd1" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></polyline>`:''}
-        ${points}
-      </svg>
-    </div>
-    <div class="muted" style="margin-top:8px;text-align:center">${stroke} ${distance}m・${course} ／ グラフは年度BEST ${graphData.length}点（全${data.length}記録）</div>`;
+function renderTrendMode(playerId,mode){
+  const select=$('#trendSelect'), box=$('#trendModeChart');if(!select||!box)return;
+  const [stroke,distance,course]=select.value.split('|');
+  const all=records.filter(r=>String(r.swimmer_id)===String(playerId)&&r.stroke===stroke&&Number(r.distance)===Number(distance)&&r.course===course&&Number.isFinite(Number(r.time_seconds)))
+    .sort((a,b)=>String(a.record_date||'').localeCompare(String(b.record_date||'')));
+  const annualBtn=$('#trendAnnualBtn'),raceBtn=$('#trendRaceBtn'),yearField=$('#trendYearField');
+  if(annualBtn)annualBtn.className=mode==='annual'?'':'secondary';
+  if(raceBtn)raceBtn.className=mode==='race'?'':'secondary';
+  if(yearField)yearField.classList.toggle('hidden',mode!=='race');
+
+  let graphData=[],title='',footer='';
+  if(mode==='annual'){
+    const byYear={};
+    all.forEach(r=>{const fy=swimFiscalYear(r.record_date);if(fy==null)return;const t=Number(r.time_seconds);if(!byYear[fy]||t<byYear[fy].time)byYear[fy]={time:t,date:r.record_date,meet:r.meet_name||''};});
+    graphData=Object.entries(byYear).sort((a,b)=>Number(a[0])-Number(b[0])).map(([fy,v])=>({label:`${fy}年度`,time:v.time,date:v.date,meet:v.meet}));
+    title='🏅 年度ベスト推移';footer=`4月1日〜翌年3月31日を1年度として、各年度の最速タイムを表示（${graphData.length}年度）`;
+  }else{
+    const fy=Number($('#trendYearSelect')?.value);
+    graphData=all.filter(r=>swimFiscalYear(r.record_date)===fy).map(r=>({label:String(r.record_date||'').slice(5).replace('-','/'),time:Number(r.time_seconds),date:r.record_date||'',meet:r.meet_name||''}));
+    title=`🏊 ${fy}年度 レース推移`;footer=`${fy}/4/1〜${fy+1}/3/31 の全レース（${graphData.length}記録）`;
+  }
+  if(!graphData.length){box.innerHTML='<p class="muted">この条件の記録がありません。</p>';return;}
+
+  const joStandard=standard(playerId,stroke,distance,course);
+  let vals=graphData.map(x=>x.time);if(joStandard!=null)vals.push(joStandard);
+  const min=Math.min(...vals),max=Math.max(...vals),pad=Math.max((max-min)*.25,1),yMin=min-pad,yMax=max+pad;
+  const W=620,H=300,left=58,right=22,top=45,bottom=70,pw=W-left-right,ph=H-top-bottom;
+  const x=i=>graphData.length===1?left+pw/2:left+i/(graphData.length-1)*pw;
+  // 速いタイムほど上に表示
+  const y=v=>top+(v-yMin)/(yMax-yMin)*ph;
+  const line=graphData.map((r,i)=>`${x(i)},${y(r.time)}`).join(' ');
+  let running=Infinity;
+  const points=graphData.map((r,i)=>{const best=r.time<running-.001;running=Math.min(running,r.time);const cx=x(i),cy=y(r.time);return `<circle cx="${cx}" cy="${cy}" r="${best?6:5}" fill="${best?'#16a34a':'#087fd1'}"><title>${r.date} ${r.meet||''} ${fmt(r.time)}</title></circle>${best?`<text x="${cx}" y="${cy-25}" text-anchor="middle" font-size="10" font-weight="800" fill="#16803b">🔥 BEST</text>`:''}<text x="${cx}" y="${cy-10}" text-anchor="middle" font-size="11" font-weight="700" fill="#123">${fmt(r.time)}</text><text x="${cx}" y="${H-28}" text-anchor="middle" font-size="10" fill="#71808a">${r.label}</text>`}).join('');
+  let joLine='';if(joStandard!=null){const jy=y(joStandard);joLine=`<line x1="${left}" x2="${W-right}" y1="${jy}" y2="${jy}" stroke="#e67e22" stroke-width="2" stroke-dasharray="7 5"></line><text x="${W-right}" y="${jy-6}" text-anchor="end" font-size="11" font-weight="700" fill="#b85d00">JO ${fmt(joStandard)}</text>`;}
+  const best=Math.min(...graphData.map(r=>r.time)),first=graphData[0].time,last=graphData[graphData.length-1].time;
+  box.innerHTML=`<div style="font-weight:800;margin:10px 0">${title}</div><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px"><div style="background:#f5f9fc;border-radius:12px;padding:10px"><div class="muted small">BEST</div><b>${fmt(best)}</b></div><div style="background:#f5f9fc;border-radius:12px;padding:10px"><div class="muted small">最初→最新</div><b>${last<first?'−':''}${Math.abs(first-last).toFixed(2)}秒</b></div><div style="background:#f5f9fc;border-radius:12px;padding:10px"><div class="muted small">記録数</div><b>${graphData.length}</b></div></div><div style="overflow-x:auto"><svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:540px;background:#fff;border-radius:14px"><text x="${left}" y="20" font-size="11" fill="#71808a">↑ タイムが速い</text>${joLine}${graphData.length>1?`<polyline points="${line}" fill="none" stroke="#087fd1" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></polyline>`:''}${points}</svg></div><div class="muted small" style="text-align:center;margin-top:8px">${stroke} ${distance}m・${course} ／ ${footer}</div>`;
 }
   function renderInput(){if(!selectedPlayerId)selectedPlayerId=PLAYERS[0]?.id||'';if(!PLAYERS.length){$('#input').innerHTML='<div class="card"><h2>⏱️ タイム入力</h2><p>先に選手を登録してください。</p></div>';return}$('#input').innerHTML=`<div class="card"><h2>⏱️ タイム入力</h2><div class="field"><label>選手</label><select id="ip" onchange="selectedPlayerId=this.value;preview()">${PLAYERS.map(p=>`<option value="${p.id}" ${p.id===selectedPlayerId?'selected':''}>${p.name}</option>`).join('')}</select></div><div class="field"><label>種目</label><div class="eventgrid">${strokes.map(e=>`<button class="${e===selectedStroke?'active':''}" onclick="setStroke('${e}')">${e}</button>`).join('')}</div></div><div class="field"><label>距離</label><div class="eventgrid">${distances.map(d=>`<button class="${d===selectedDistance?'active':''}" onclick="setDistance(${d})">${d}m</button>`).join('')}</div></div><div class="field"><label>水路</label><div class="eventgrid"><button class="${selectedCourse==='長水路'?'active':''}" onclick="setCourse('長水路')">長水路</button><button class="${selectedCourse==='短水路'?'active':''}" onclick="setCourse('短水路')">短水路</button></div></div><div class="field"><label>タイム</label><input class="time" id="itime" inputmode="decimal" placeholder="1:02.35" oninput="preview()"><div class="field"><label>記録日</label><input type="date" id="recordDate" onchange="preview()"></div></div><div class="field"><label>大会名（任意）</label><input id="ime" placeholder="○○大会"></div><div id="preview"></div><button style="width:100%;font-size:18px" onclick="addRecord()">記録を保存</button></div>`;const rd=$('#recordDate');if(rd&&!rd.value)rd.value=new Date().toISOString().slice(0,10);preview()}
 function setStroke(e){selectedStroke=e;renderInput()}function setDistance(d){selectedDistance=d;renderInput()}function setCourse(p){selectedCourse=p;renderInput()}
