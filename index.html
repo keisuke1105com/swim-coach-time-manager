@@ -187,6 +187,67 @@ async function cleanupJasfDuplicates(playerId){
   alert(`重複していた公式記録 ${deleteIds.length}件を削除しました。\n各公式記録は1件ずつ残しています。`);
 }
 
+
+async function cleanupAllJasfDuplicates(){
+  if(!confirm(`全選手の日本水泳連盟から同期した重複公式記録を整理します。\n同じ選手・同じ result_id の公式記録だけを1件残します。\n手入力記録や result_id が異なる記録は削除しません。よろしいですか？`))return;
+  await loadCloud();
+
+  const official=records.filter(r=>String(r.memo||'').includes('日本水泳連盟'));
+  const groups=new Map();
+  official.forEach(r=>{
+    const rid=jasfResultIdFromMemo(r.memo);
+    if(!rid)return;
+    const key=`${r.swimmer_id}|${rid}`;
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(r);
+  });
+
+  const deleteIds=[];
+  const affectedPlayers=new Set();
+  for(const arr of groups.values()){
+    if(arr.length<2)continue;
+    arr.sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')) || String(a.id).localeCompare(String(b.id)));
+    arr.slice(1).forEach(r=>{deleteIds.push(r.id);affectedPlayers.add(String(r.swimmer_id));});
+  }
+
+  if(!deleteIds.length){
+    alert('全選手を確認しましたが、整理する重複公式記録はありませんでした。');
+    return;
+  }
+
+  for(let i=0;i<deleteIds.length;i+=100){
+    const {error}=await sb.from('swim_records').delete().in('id',deleteIds.slice(i,i+100));
+    if(error){alert('全選手の重複整理に失敗しました：'+error.message);return;}
+  }
+
+  await loadCloud();
+
+  // 重複があった選手だけ自己ベスト印を再計算
+  for(const playerId of affectedPlayers){
+    const mine=records.filter(r=>String(r.swimmer_id)===String(playerId));
+    const bestByEvent=new Map();
+    mine.forEach(r=>{
+      const key=`${r.stroke}|${Number(r.distance)}|${r.course}`;
+      const t=Number(r.time_seconds);
+      if(!Number.isFinite(t))return;
+      const cur=bestByEvent.get(key);
+      if(!cur || t<Number(cur.time_seconds) || (Math.abs(t-Number(cur.time_seconds))<0.001 && String(r.record_date||'')>String(cur.record_date||''))) bestByEvent.set(key,r);
+    });
+    const {error:clearErr}=await sb.from('swim_records').update({is_personal_best:false}).eq('swimmer_id',playerId);
+    if(clearErr){alert(`重複は整理しましたが、${playerById(playerId)?.name||'選手'}のベスト印再計算でエラー：${clearErr.message}`);continue;}
+    for(const r of bestByEvent.values()){
+      const {error}=await sb.from('swim_records').update({is_personal_best:true}).eq('id',r.id);
+      if(error){alert(`重複は整理しましたが、${playerById(playerId)?.name||'選手'}のベスト印再計算でエラー：${error.message}`);break;}
+    }
+  }
+
+  await loadCloud();
+  renderHome();
+  renderPlayers();
+  renderAnalysis();
+  alert(`全選手の重複整理が完了しました。\n削除した重複公式記録：${deleteIds.length}件\n対象選手：${affectedPlayers.size}名\n\n手入力記録と、result_id が異なる公式記録は残しています。`);
+}
+
 async function fetchJasfLatest(playerId){
   const p=playerById(playerId);
   const athleteIds=jasfAthleteIds(p);
@@ -1206,9 +1267,15 @@ let joRanking=Object.values(
         「選手」→「＋ 選手追加」から人数を増やせます。
         Mac・iPhoneで同じ一覧と記録を共有します。
       </p>
-      <button class="secondary" onclick="migrateLocalV3()">
-        このMacの旧v3記録をクラウドへ移行
-      </button>
+      <div class="actions">
+        <button class="secondary" onclick="migrateLocalV3()">
+          このMacの旧v3記録をクラウドへ移行
+        </button>
+        <button class="secondary" onclick="cleanupAllJasfDuplicates()">
+          🧹 全選手の重複公式記録を一括整理
+        </button>
+      </div>
+      <p class="muted small" style="margin-top:8px">同じ選手・同じ result_id の日本水泳連盟公式記録だけを1件に整理します。手入力記録は削除しません。</p>
     </div>
   `;
 }
