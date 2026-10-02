@@ -811,11 +811,15 @@ let trendOptions=trendKeys.map(key=>{
         <button class="secondary" onclick="cleanupJasfDuplicates('${p.id}')">
           🧹 重複した公式記録を整理
         </button>
+        <button class="secondary" onclick="testPlayerJasfRanking('${p.id}')">
+          🏆 全国ランキングを照合テスト
+        </button>
         `:''}
 
       </div>
 
       <div id="jasfLatestBox"></div>
+      <div id="playerJasfRankingBox" style="margin-bottom:12px"></div>
 
       <h3>🏆 種目別ベスト</h3>
 
@@ -1073,6 +1077,63 @@ async function testJasfRankingApi(){
     const cors=/Failed to fetch|Load failed|NetworkError|fetch/i.test(msg);
     box.innerHTML=`<div class="error"><b>❌ 全国ランキングAPIへ直接接続できませんでした</b><br><span class="small">${msg}</span>${cors?'<br><br><span class="small">SafariのCORS制限の可能性があります。この場合は、現在の公式記録同期と同じようにSupabase Edge Function経由へ進みます。</span>':''}</div>`;
   }
+}
+
+
+// 選手別・全国ランキング自動照合テスト（本体データは変更しない）
+function jasfEventCodes(stroke,distance){
+  const ev=JASF_EVENTS.find(x=>x.stroke===stroke);
+  const d=ev?.distances?.find(x=>Number(x.m)===Number(distance));
+  return ev&&d?{styleCode:ev.styleCode,distanceCode:d.code}:null;
+}
+function jasfGenderCode(player){return String(player?.gender||'').includes('女')?2:1;}
+function normalizeJasfName(v){return String(v||'').replace(/[\\s　]/g,'').trim();}
+async function fetchJasfRankingForPlayer(player,stroke,distance,course,year=2026){
+  const codes=jasfEventCodes(stroke,distance);
+  if(!codes)throw new Error(`${stroke}${distance}m はランキングAPIのコード対応がありません。`);
+  const params=new URLSearchParams({
+    year:String(year),
+    waterway_code:course==='短水路'?'2':'1',
+    gender_code:String(jasfGenderCode(player)),
+    distance_code:String(codes.distanceCode),
+    swimming_style_code:String(codes.styleCode),
+    school_class_code:'99',school_grade:'99',swimmer_name:String(player.name||''),page:'1'
+  });
+  const res=await fetch(`https://result.swim.or.jp/api/v1/rankings/results?${params.toString()}`,{headers:{Accept:'application/json'}});
+  const text=await res.text();let json=null;try{json=JSON.parse(text)}catch(e){}
+  if(!res.ok)throw new Error(`HTTP ${res.status}`);
+  if(!json)throw new Error('ランキングAPIの応答をJSONとして読み取れませんでした。');
+  const rows=Array.isArray(json.data)?json.data:Array.isArray(json?.data?.data)?json.data.data:[];
+  const target=normalizeJasfName(player.name);
+  const matched=rows.filter(x=>normalizeJasfName(x?.swimmers?.swimmer_name||x?.swimmer_name)===target);
+  return {rows,matched};
+}
+async function testPlayerJasfRanking(playerId){
+  const p=playerById(playerId),box=$('#playerJasfRankingBox');if(!p||!box)return;
+  const athleteIds=jasfAthleteIds(p);
+  if(!athleteIds.length){box.innerHTML='<div class="notice">先に日本水泳連盟の競技者IDを登録してください。</div>';return;}
+  const mine=records.filter(r=>String(r.swimmer_id)===String(playerId)&&Number.isFinite(Number(r.time_seconds)));
+  const bestMap=new Map();
+  mine.forEach(r=>{const k=`${r.stroke}|${Number(r.distance)}|${r.course}`;const old=bestMap.get(k);if(!old||Number(r.time_seconds)<Number(old.time_seconds))bestMap.set(k,r);});
+  const bests=[...bestMap.values()].filter(r=>jasfEventCodes(r.stroke,r.distance));
+  if(!bests.length){box.innerHTML='<div class="notice">照合できるベスト記録がありません。</div>';return;}
+  box.innerHTML=`<div class="notice">🇯🇵 ${p.name} の全国ランキングを ${bests.length}種目照合中…</div>`;
+  const year=2026,results=[];
+  for(const r of bests){
+    try{
+      const q=await fetchJasfRankingForPlayer(p,r.stroke,r.distance,r.course,year);
+      const x=q.matched[0]||null;
+      results.push({r,x,count:q.matched.length});
+    }catch(e){results.push({r,error:String(e?.message||e)});}
+  }
+  const found=results.filter(v=>v.x).length;
+  const rows=results.map(v=>{
+    const r=v.r;if(v.error)return `<div class="row"><div><b>${r.stroke} ${r.distance}m</b><br><span class="muted">${r.course}</span></div><span class="small" style="color:#a61b1b">${v.error}</span></div>`;
+    if(!v.x)return `<div class="row"><div><b>${r.stroke} ${r.distance}m</b><br><span class="muted">${r.course}</span></div><span class="muted">該当なし</span></div>`;
+    const x=v.x,rank=x?.ranking??x?.ranking_in_overall??'-',time=x?.record?.record||x?.record||'-',code=x?.swimmers?.swimmer_code||x?.swimmer_code||'-';
+    return `<div class="row"><div><b>${r.stroke} ${r.distance}m・${r.course}</b><br><span class="muted">競技者コード ${code} ／ アプリBEST ${fmt(r.time_seconds)}</span></div><div style="text-align:right"><b style="font-size:20px">${rank}位</b><br><span class="muted">公式 ${time}</span></div></div>`;
+  }).join('');
+  box.innerHTML=`<div class="result good"><b>✅ 全国ランキング照合が完了しました</b><br><span class="small">${year}年度 ／ 登録競技者ID ${athleteIds.join('・')} ／ ${found}/${results.length}種目で該当</span></div><div class="result" style="margin-top:10px">${rows}</div><div class="muted small" style="margin-top:8px">※ このテストはランキングAPIの選手名検索結果と登録選手名を照合します。本体の選手・記録データは変更しません。</div>`;
 }
 
 function renderAnalysis(){
