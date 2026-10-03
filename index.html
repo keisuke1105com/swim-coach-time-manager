@@ -1204,6 +1204,35 @@ async function testPlayerJasfRanking(playerId){
   showPlayerDetail(playerId,false);
 }
 
+
+async function updateAllPlayersSameGradeRankings(){
+  const box=$('#allPlayersRankingUpdateBox');
+  const targets=players.filter(p=>jasfAthleteIds(p).length>0);
+  if(!targets.length){if(box)box.innerHTML='<div class="notice">競技者IDが登録されている選手がいません。</div>';return;}
+  const btn=$('#allPlayersRankingUpdateBtn');
+  if(btn){btn.disabled=true;btn.textContent='⏳ 全選手を更新中…';}
+  let done=0, ok=0, failed=0;
+  if(box)box.innerHTML=`<div class="notice">🏆 全${targets.length}名の同学年ランキングを順番に更新します。画面を閉じずにお待ちください。<br><b>0 / ${targets.length}名</b></div>`;
+  for(const p of targets){
+    try{
+      // 既存の1選手更新処理をそのまま使うため、非表示の「選手」タブに詳細DOMを用意する。
+      showPlayerDetail(p.id,false);
+      await testPlayerJasfRanking(p.id);
+      ok++;
+    }catch(e){
+      console.error('一括ランキング更新:',p?.name,e); failed++;
+    }
+    done++;
+    const live=$('#allPlayersRankingUpdateBox');
+    if(live)live.innerHTML=`<div class="notice">🏆 同学年ランキングを一括更新中…<br><b>${done} / ${targets.length}名</b>　${p.name} まで完了</div>`;
+    // APIへ連続アクセスしすぎないよう少し間隔を空ける。
+    await new Promise(r=>setTimeout(r,250));
+  }
+  renderAnalysis();
+  const finalBox=$('#allPlayersRankingUpdateBox');
+  if(finalBox)finalBox.innerHTML=`<div class="result good"><b>✅ 全選手の同学年ランキング更新が完了しました</b><br><span class="small">対象 ${targets.length}名 ／ 完了 ${ok}名${failed?` ／ エラー ${failed}名`:''}</span></div>`;
+}
+
 function renderAnalysis(){
   let jo=records.filter(r=>r.is_jo_qualified).length;
   let bestRecords=records.filter(r=>r.is_personal_best).length;
@@ -1364,6 +1393,13 @@ let joRanking=Object.values(
         <div class="label">ベスト更新</div>
         <div class="stat">${bestRecords}</div>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>🏆 全選手・同学年ランキング一括更新</h2>
+      <p class="muted">競技者IDが登録されている全選手について、2026年度の同学年「全国順位＋都道府県内順位」をまとめて更新します。選手数・種目数によって数分かかる場合があります。</p>
+      <button id="allPlayersRankingUpdateBtn" style="width:100%" onclick="updateAllPlayersSameGradeRankings()">🏆 全選手の同学年ランキングを一括更新</button>
+      <div id="allPlayersRankingUpdateBox" style="margin-top:12px"></div>
     </div>
 
     <div class="card">
