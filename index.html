@@ -1057,44 +1057,14 @@ async function editRecord(id){
   alert('記録を更新しました！');
 }
   async function delRecord(id){if(!confirm('この記録を削除しますか？'))return;let {error}=await sb.from('swim_records').delete().eq('id',id);if(error)alert(error.message);else{await loadCloud();renderRecords();renderHome()}}
-// 日本水泳連盟 全国ランキングAPI 接続テスト（本体データは変更しない）
-async function testJasfRankingApi(){
-  const box=$('#jasfRankingTestBox');
-  if(!box)return;
-  box.innerHTML='<div class="notice">🇯🇵 全国ランキングAPIへ接続中…</div>';
-  const url='https://result.swim.or.jp/api/v1/rankings/results?year=2026&waterway_code=1&gender_code=1&distance_code=2&swimming_style_code=1&school_class_code=99&school_grade=99&swimmer_name=&page=1';
-  try{
-    const res=await fetch(url,{method:'GET',headers:{'Accept':'application/json'}});
-    const text=await res.text();
-    let json=null;
-    try{json=JSON.parse(text)}catch(e){}
-    if(!res.ok)throw new Error(`HTTP ${res.status}${text?` / ${text.slice(0,160)}`:''}`);
-    if(!json)throw new Error('JSONとして読み取れませんでした。');
-    const rows=Array.isArray(json.data)?json.data:Array.isArray(json?.data?.data)?json.data.data:[];
-    const sample=rows.slice(0,5).map(x=>{
-      const name=x?.swimmers?.swimmer_name||x?.swimmer_name||'-';
-      const rank=x?.ranking??x?.ranking_in_overall??'-';
-      const time=x?.record?.record||x?.record||'-';
-      const code=x?.swimmers?.swimmer_code||x?.swimmer_code||'-';
-      return `<div class="row"><div><b>${rank}位 ${name}</b><br><span class="muted">競技者コード ${code}</span></div><b>${time}</b></div>`;
-    }).join('');
-    box.innerHTML=`<div class="result good"><b>✅ 全国ランキングAPIへの接続に成功しました</b><br><span class="small">2026年度・男子50m自由形・長水路 ／ 取得 ${rows.length}件（1ページ目）</span></div>${sample?`<div class="result" style="margin-top:10px"><b>先頭5件の確認</b>${sample}</div>`:'<div class="notice">接続は成功しましたが、data配列を確認できませんでした。</div>'}`;
-  }catch(e){
-    const msg=String(e?.message||e);
-    const cors=/Failed to fetch|Load failed|NetworkError|fetch/i.test(msg);
-    box.innerHTML=`<div class="error"><b>❌ 全国ランキングAPIへ直接接続できませんでした</b><br><span class="small">${msg}</span>${cors?'<br><br><span class="small">SafariのCORS制限の可能性があります。この場合は、現在の公式記録同期と同じようにSupabase Edge Function経由へ進みます。</span>':''}</div>`;
-  }
-}
-
-
-// 選手別・全国ランキング自動照合テスト（本体データは変更しない）
+// 選手別・同学年ランキング自動照合
 function jasfEventCodes(stroke,distance){
   const ev=JASF_EVENTS.find(x=>x.stroke===stroke);
   const d=ev?.distances?.find(x=>Number(x.m)===Number(distance));
   return ev&&d?{styleCode:ev.styleCode,distanceCode:d.code}:null;
 }
 function jasfGenderCode(player){return String(player?.gender||'').includes('女')?2:1;}
-function normalizeJasfName(v){return String(v||'').replace(/[\\s　]/g,'').trim();}
+function normalizeJasfName(v){return String(v||'').normalize('NFKC').replace(/[\s　]/g,'').trim();}
 async function fetchJasfRankingPage(player,stroke,distance,course,year=2026,schoolClassCode='99',schoolGrade='99',swimmerName='',page=1){
   const codes=jasfEventCodes(stroke,distance);
   if(!codes)throw new Error(`${stroke}${distance}m はランキングAPIのコード対応がありません。`);
@@ -1148,9 +1118,11 @@ function jasfGradeFromBirthDate(player,year=2026){
 }
 function jasfSameSwimmer(row,player,athleteIds=[]){
   const name=normalizeJasfName(row?.swimmers?.swimmer_name||row?.swimmer_name);
-  if(name!==normalizeJasfName(player?.name))return false;
-  // 名前一致を基本にし、競技者コードが取れる場合も許容（athlete_idとは別体系の場合がある）。
-  return true;
+  const playerName=normalizeJasfName(player?.name);
+  if(name && playerName && name===playerName)return true;
+  const code=String(row?.swimmers?.swimmer_code||row?.swimmer_code||'').replace(/\D/g,'');
+  const ids=(athleteIds||[]).map(v=>String(v||'').replace(/\D/g,'')).filter(Boolean);
+  return !!code && ids.includes(code);
 }
 async function fetchJasfRankingForPlayer(player,stroke,distance,course,year=2026){
   const target=normalizeJasfName(player.name), athleteIds=jasfAthleteIds(player);
@@ -1413,13 +1385,6 @@ let joRanking=Object.values(
       <p class="muted">競技者IDが登録されている全選手について、2026年度の同学年「全国順位＋都道府県内順位」をまとめて更新します。選手数・種目数によって数分かかる場合があります。</p>
       <button id="allPlayersRankingUpdateBtn" style="width:100%" onclick="updateAllPlayersSameGradeRankings()">🏆 全選手の同学年ランキングを一括更新</button>
       <div id="allPlayersRankingUpdateBox" style="margin-top:12px"></div>
-    </div>
-
-    <div class="card">
-      <h2>🧪 全国ランキングAPI 接続テスト</h2>
-      <p class="muted">本体の選手・記録データは変更しません。2026年度・男子50m自由形・長水路のランキングAPIを1回だけ確認します。</p>
-      <button style="width:100%" onclick="testJasfRankingApi()">🇯🇵 全国ランキング接続をテスト</button>
-      <div id="jasfRankingTestBox" style="margin-top:12px"></div>
     </div>
 
     <div class="card">
