@@ -1189,7 +1189,13 @@ async function updatePlayerSameGradeRankings(playerId,{skipCached=false,silent=f
     const cached=getNationalRankCache(playerId,r.stroke,r.distance,r.course,year);
     if(skipCached && cached && !cached.error){results.push({r,cached,skipped:true});skipped++;continue;}
     try{
-      const q=await fetchJasfRankingForPlayer(p,r.stroke,r.distance,r.course,year);const x=q.gradeMatched?.[0]||null;
+      let q=null,lastErr=null;
+      for(let attempt=1;attempt<=3;attempt++){
+        try{q=await fetchJasfRankingForPlayer(p,r.stroke,r.distance,r.course,year);lastErr=null;break;}
+        catch(err){lastErr=err;if(attempt<3)await new Promise(res=>setTimeout(res,2500*attempt));}
+      }
+      if(lastErr)throw lastErr;
+      const x=q.gradeMatched?.[0]||null;
       const data=x?{found:true,rank:(q.gradeRank||x?.ranking||x?.ranking_in_overall||'-'),gradeRank:(q.gradeRank||x?.ranking||x?.ranking_in_overall||'-'),prefRank:q.prefRank||null,prefName:q.prefName||'',officialTime:x?.record?.record||x?.record||'-',swimmerCode:x?.swimmers?.swimmer_code||x?.swimmer_code||'-',updatedAt:new Date().toISOString()}:{found:false,status:q?.status||'not_listed',updatedAt:new Date().toISOString()};
       // 1種目終わるたびに保存。途中停止しても取得済み結果を失わない。
       setNationalRankCache(playerId,r.stroke,r.distance,r.course,data,year);
@@ -1199,7 +1205,7 @@ async function updatePlayerSameGradeRankings(playerId,{skipCached=false,silent=f
       setNationalRankCache(playerId,r.stroke,r.distance,r.course,data,year);
       results.push({r,error:data.errorMessage,cached:data}); processed++;
     }
-    await new Promise(res=>setTimeout(res,350));
+    await new Promise(res=>setTimeout(res,1200));
   }
   const found=results.filter(v=>v.x||v.cached?.found).length;
   if(box&&!silent){
@@ -1231,11 +1237,11 @@ async function updateAllPlayersSameGradeRankings(){
   let progress=loadRankingBulkProgress();
   const signature=allTargets.map(p=>String(p.id)).join('|');
   if(!progress||progress.signature!==signature||progress.completed){progress={signature,index:0,completed:false,ok:0,failed:0,startedAt:new Date().toISOString()};saveRankingBulkProgress(progress);}
-  const batchSize=5;
+  const batchSize=2;
   try{
     while(progress.index<allTargets.length){
       const batchEnd=Math.min(progress.index+batchSize,allTargets.length);
-      if(box)box.innerHTML=`<div class="notice">🏆 全${allTargets.length}名を5名ずつ安全に更新しています。<br><b>${progress.index} / ${allTargets.length}名</b> 完了<br><span class="small">途中で画面を閉じても、次回は保存済みの続きから再開できます。</span></div>`;
+      if(box)box.innerHTML=`<div class="notice">🏆 全${allTargets.length}名を2名ずつ安全に更新しています。<br><b>${progress.index} / ${allTargets.length}名</b> 完了<br><span class="small">途中で画面を閉じても、次回は保存済みの続きから再開できます。</span></div>`;
       while(progress.index<batchEnd){
         const p=allTargets[progress.index];
         try{
@@ -1244,11 +1250,11 @@ async function updateAllPlayersSameGradeRankings(){
         }catch(e){console.error('一括ランキング更新:',p?.name,e);progress.failed++;}
         progress.index++; saveRankingBulkProgress(progress);
         if(box)box.innerHTML=`<div class="notice">🏆 同学年ランキング更新中…<br><b>${progress.index} / ${allTargets.length}名</b>　${p.name} まで保存済み</div>`;
-        await new Promise(r=>setTimeout(r,700));
+        await new Promise(r=>setTimeout(r,1800));
       }
       if(progress.index<allTargets.length){
-        if(box)box.innerHTML=`<div class="notice">☕ ${progress.index} / ${allTargets.length}名まで保存済み。API負荷を下げるため2秒待って次の5名へ進みます…</div>`;
-        await new Promise(r=>setTimeout(r,2000));
+        if(box)box.innerHTML=`<div class="notice">☕ ${progress.index} / ${allTargets.length}名まで保存済み。API負荷を下げるため5秒待って次の2名へ進みます…</div>`;
+        await new Promise(r=>setTimeout(r,5000));
       }
     }
     progress.completed=true;progress.finishedAt=new Date().toISOString();saveRankingBulkProgress(progress);
