@@ -1472,7 +1472,7 @@ async function updateAllPlayersSameGradeRankings(){
 
 
 // 大会速報スクリーンショット解析（端末内OCR）
-let screenshotOcrReady=false, screenshotRows=[];
+let screenshotOcrReady=false, screenshotRows=[], screenshotEvent={stroke:'',distance:null,course:'長水路'};
 async function ensureTesseract(){
   if(window.Tesseract){screenshotOcrReady=true;return;}
   const box=$('#screenshotStatus'); if(box)box.innerHTML='<div class="notice">文字認識機能を読み込み中…</div>';
@@ -1500,25 +1500,18 @@ function detectShotEvent(text){
   // 種目名と距離が近接している表記を最優先。画面内の別種目名の混入に引っ張られにくくする。
   for(const [stroke,names] of Object.entries(aliases)){
     for(const name of names){
-      const esc=name.replace(/[.*+?^${}()|[\]\]/g,'\$&');
+      const esc=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
       let m=t.match(new RegExp(`(50|100|200|400|800|1500)\\s*m?\\s*${esc}`,'i'));
       if(m)return {stroke,distance:Number(m[1])};
       m=t.match(new RegExp(`${esc}\\s*(50|100|200|400|800|1500)\\s*m?`,'i'));
       if(m)return {stroke,distance:Number(m[1])};
     }
   }
-  // 近接表記が無い場合は、OCR全文で最も多く出た種目を採用。
-  let stroke='',score=0;
-  for(const [st,names] of Object.entries(aliases)){
-    const n=names.reduce((sum,name)=>sum+(t.match(new RegExp(name,'gi'))||[]).length,0);
-    if(n>score){score=n;stroke=st;}
-  }
-  const distances=[50,100,200,400,800,1500];
-  const found=distances.map(d=>({d,n:(t.match(new RegExp(`(^|\\D)${d}\\s*m?(?=\\D|$)`,'gi'))||[]).length})).sort((a,b)=>b.n-a.n);
-  return {stroke,distance:found[0]?.n?found[0].d:null};
+  // 近接表記が無い場合は誤判定を避け、保存前の共通種目指定を使う。
+  return {stroke:'',distance:null};
 }
 function parseShotRows(text){
-  const event=detectShotEvent(text); const lines=String(text||'').split(/\n+/).map(normalizeOcrText).filter(Boolean); const out=[];
+  const event=detectShotEvent(text); screenshotEvent={stroke:event.stroke||'',distance:event.distance||null,course:'長水路'}; const lines=String(text||'').split(/\n+/).map(normalizeOcrText).filter(Boolean); const out=[];
   const timeRe=/(\d{1,2}:\d{2}\.\d{1,2}|\d{2,3}\.\d{1,2})/;
   for(const line of lines){
     const tm=line.match(timeRe); if(!tm)continue; const time=tm[1];
@@ -1532,6 +1525,14 @@ function parseShotRows(text){
     out.push({playerId:player?.id||'',name,time:fixedTime,stroke:event.stroke,distance:event.distance,course:'長水路',save:!!player});
   }
   return out;
+}
+function applyScreenshotEvent(){
+  const stroke=$('#shotCommonStroke')?.value||'';
+  const distance=Number($('#shotCommonDistance')?.value)||null;
+  const course=$('#shotCommonCourse')?.value||'長水路';
+  screenshotEvent={stroke,distance,course};
+  screenshotRows.forEach(r=>{r.stroke=stroke;r.distance=distance;r.course=course;r.time=fixShotTime(r.time,distance);});
+  renderScreenshotRows();
 }
 function shotEvaluation(row){
   const p=playerById(row.playerId); const t=sec(row.time); if(!p||!Number.isFinite(t)||!row.stroke||!row.distance)return {html:'選手・種目を確認してください'};
@@ -1547,14 +1548,14 @@ function renderScreenshotRows(){
   const box=$('#screenshotResults'); if(!box)return;
   if(!screenshotRows.length){box.innerHTML='<p class="muted">解析結果がここに表示されます。</p>';return;}
   const playerOpts=PLAYERS.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
-  box.innerHTML=`<div style="overflow-x:auto"><table class="shotTable"><thead><tr><th>保存</th><th>選手</th><th>種目</th><th>タイム</th><th>判定</th></tr></thead><tbody>${screenshotRows.map((r,i)=>`<tr><td><input type="checkbox" class="shotSaveCheck" data-shot-index="${i}" ${r.save?'checked':''} onchange="screenshotRows[${i}].save=this.checked"></td><td><select onchange="screenshotRows[${i}].playerId=this.value;screenshotRows[${i}].name=this.options[this.selectedIndex].text;renderScreenshotRows()"><option value="">選択</option>${PLAYERS.map(p=>`<option value="${p.id}" ${p.id===r.playerId?'selected':''}>${p.name}</option>`).join('')}</select></td><td><select onchange="screenshotRows[${i}].stroke=this.value;renderScreenshotRows()">${['自由形','背泳ぎ','平泳ぎ','バタフライ','個人メドレー'].map(x=>`<option ${x===r.stroke?'selected':''}>${x}</option>`).join('')}</select><input style="width:74px;margin-top:4px" type="number" value="${r.distance||''}" onchange="screenshotRows[${i}].distance=Number(this.value);screenshotRows[${i}].time=fixShotTime(screenshotRows[${i}].time,screenshotRows[${i}].distance);renderScreenshotRows()"><select style="margin-top:4px" onchange="screenshotRows[${i}].course=this.value;renderScreenshotRows()"><option ${r.course==='長水路'?'selected':''}>長水路</option><option ${r.course==='短水路'?'selected':''}>短水路</option></select></td><td><input style="width:90px" value="${r.time}" onchange="screenshotRows[${i}].time=fixShotTime(this.value,screenshotRows[${i}].distance);renderScreenshotRows()"></td><td><div class="shotStatus">${shotEvaluation(r).html}</div></td></tr>`).join('')}</tbody></table></div><button style="width:100%;margin-top:12px" onclick="saveScreenshotRows()">☁️ チェックした記録を保存</button>`;
+  box.innerHTML=`<div class="result" style="margin-bottom:10px"><b>🏊 このスクショの種目</b><div style="display:grid;grid-template-columns:1.4fr .8fr 1fr;gap:6px;margin-top:8px"><select id="shotCommonStroke" onchange="applyScreenshotEvent()"><option value="">種目を選択</option>${['自由形','背泳ぎ','平泳ぎ','バタフライ','個人メドレー'].map(x=>`<option ${x===screenshotEvent.stroke?'selected':''}>${x}</option>`).join('')}</select><select id="shotCommonDistance" onchange="applyScreenshotEvent()"><option value="">距離</option>${[50,100,200,400,800,1500].map(x=>`<option value="${x}" ${Number(x)===Number(screenshotEvent.distance)?'selected':''}>${x}m</option>`).join('')}</select><select id="shotCommonCourse" onchange="applyScreenshotEvent()"><option ${screenshotEvent.course==='長水路'?'selected':''}>長水路</option><option ${screenshotEvent.course==='短水路'?'selected':''}>短水路</option></select></div><div class="muted small" style="margin-top:6px">1画面＝同一種目として全行へ適用します。OCRが不確かな時はここだけ確認してください。</div></div><div style="overflow-x:auto"><table class="shotTable"><thead><tr><th>保存</th><th>選手</th><th>種目</th><th>タイム</th><th>判定</th></tr></thead><tbody>${screenshotRows.map((r,i)=>`<tr><td><input type="checkbox" class="shotSaveCheck" data-shot-index="${i}" ${r.save?'checked':''} onchange="screenshotRows[${i}].save=this.checked"></td><td><select onchange="screenshotRows[${i}].playerId=this.value;screenshotRows[${i}].name=this.options[this.selectedIndex].text;renderScreenshotRows()"><option value="">選択</option>${PLAYERS.map(p=>`<option value="${p.id}" ${p.id===r.playerId?'selected':''}>${p.name}</option>`).join('')}</select></td><td><select onchange="screenshotRows[${i}].stroke=this.value;renderScreenshotRows()"><option value="">種目</option>${['自由形','背泳ぎ','平泳ぎ','バタフライ','個人メドレー'].map(x=>`<option ${x===r.stroke?'selected':''}>${x}</option>`).join('')}</select><input style="width:74px;margin-top:4px" type="number" value="${r.distance||''}" onchange="screenshotRows[${i}].distance=Number(this.value);screenshotRows[${i}].time=fixShotTime(screenshotRows[${i}].time,screenshotRows[${i}].distance);renderScreenshotRows()"><select style="margin-top:4px" onchange="screenshotRows[${i}].course=this.value;renderScreenshotRows()"><option ${r.course==='長水路'?'selected':''}>長水路</option><option ${r.course==='短水路'?'selected':''}>短水路</option></select></td><td><input style="width:90px" value="${r.time}" onchange="screenshotRows[${i}].time=fixShotTime(this.value,screenshotRows[${i}].distance);renderScreenshotRows()"></td><td><div class="shotStatus">${shotEvaluation(r).html}</div></td></tr>`).join('')}</tbody></table></div><button style="width:100%;margin-top:12px" onclick="saveScreenshotRows()">☁️ チェックした記録を保存</button>`;
 }
 async function analyzeScreenshot(){
   const file=$('#screenshotFile')?.files?.[0]; if(!file){alert('スクリーンショットを選んでください。');return;}
   const preview=$('#screenshotPreview'); preview.src=URL.createObjectURL(file); preview.classList.remove('hidden');
   try{await ensureTesseract(); const box=$('#screenshotStatus'); box.innerHTML='<div class="notice">🔎 スクリーンショットを解析中… 端末によって30秒ほどかかる場合があります。</div>';
     const result=await Tesseract.recognize(file,'jpn+eng',{logger:m=>{if(box&&m.status==='recognizing text')box.innerHTML=`<div class="notice">🔎 文字認識中… ${Math.round((m.progress||0)*100)}%</div>`;}});
-    screenshotRows=parseShotRows(result.data.text); box.innerHTML=screenshotRows.length?`<div class="result good"><b>✅ ${screenshotRows.length}件を読み取りました。</b><br><span class="small">保存前に選手・種目・タイムを確認してください。</span></div>`:'<div class="error">タイムを読み取れませんでした。スクリーンショットを少し拡大して再度お試しください。</div>'; renderScreenshotRows();
+    screenshotRows=parseShotRows(result.data.text); box.innerHTML=screenshotRows.length?`<div class="result good"><b>✅ ${screenshotRows.length}件を読み取りました。</b><br><span class="small">上の『このスクショの種目』と選手・タイムを確認してください。</span></div>`:'<div class="error">タイムを読み取れませんでした。スクリーンショットを少し拡大して再度お試しください。</div>'; renderScreenshotRows();
   }catch(e){$('#screenshotStatus').innerHTML=`<div class="error">解析に失敗しました：${String(e.message||e)}</div>`;}
 }
 async function saveScreenshotRows(){
@@ -1576,16 +1577,21 @@ async function saveScreenshotRows(){
   });
   const checked=screenshotRows.filter(r=>r.save);
   if(!checked.length){alert('保存する記録にチェックを入れてください。');return;}
+  // 1画面＝同一種目。上部の共通指定を保存時の最優先値にする。
+  const commonStroke=$('#shotCommonStroke')?.value||screenshotEvent.stroke||'';
+  const commonDistance=Number($('#shotCommonDistance')?.value||screenshotEvent.distance)||null;
+  const commonCourse=$('#shotCommonCourse')?.value||screenshotEvent.course||'長水路';
+  checked.forEach(r=>{r.stroke=commonStroke;r.distance=commonDistance;r.course=commonCourse;r.time=fixShotTime(r.time,commonDistance);});
 
   // OCRで一部行だけ距離・種目が空欄になった場合、同じスクショ内の他行から補完する。
   // Swim Record Mobile は1画面＝同一種目なので、この補完が安全に使える。
   const knownDistances=screenshotRows.map(r=>Number(r.distance)).filter(v=>Number.isFinite(v)&&v>0);
-  const commonDistance=knownDistances.length ? knownDistances.sort((a,b)=>knownDistances.filter(x=>x===b).length-knownDistances.filter(x=>x===a).length)[0] : null;
+  const fallbackDistance=knownDistances.length ? knownDistances.sort((a,b)=>knownDistances.filter(x=>x===b).length-knownDistances.filter(x=>x===a).length)[0] : null;
   const knownStrokes=screenshotRows.map(r=>r.stroke).filter(Boolean);
-  const commonStroke=knownStrokes.length ? knownStrokes.sort((a,b)=>knownStrokes.filter(x=>x===b).length-knownStrokes.filter(x=>x===a).length)[0] : '';
+  const fallbackStroke=knownStrokes.length ? knownStrokes.sort((a,b)=>knownStrokes.filter(x=>x===b).length-knownStrokes.filter(x=>x===a).length)[0] : '';
   checked.forEach(r=>{
-    if(!r.distance && commonDistance) r.distance=commonDistance;
-    if(!r.stroke && commonStroke) r.stroke=commonStroke;
+    if(!r.distance && fallbackDistance) r.distance=fallbackDistance;
+    if(!r.stroke && fallbackStroke) r.stroke=fallbackStroke;
     if(!r.course) r.course='長水路';
     r.time=fixShotTime(r.time,r.distance);
   });
@@ -1601,10 +1607,10 @@ async function saveScreenshotRows(){
   const today=new Date().toISOString().slice(0,10); let saved=0;
   for(const r of rows){const timeSeconds=sec(r.time); const meet=joMeetInfo(today); const st=standard(r.playerId,r.stroke,r.distance,r.course,meet?.date||null); const currentBest=best(r.playerId,r.stroke,r.distance,r.course); const isBest=currentBest==null||timeSeconds<Number(currentBest)-0.001;
     if(isBest&&currentBest!=null)await sb.from('swim_records').update({is_personal_best:false}).eq('swimmer_id',r.playerId).eq('stroke',r.stroke).eq('distance',r.distance).eq('course',r.course).eq('is_personal_best',true);
-    const payload={swimmer_id:r.playerId,stroke:r.stroke,distance:r.distance,course:r.course,time_seconds:timeSeconds,meet_name:'大会速報スクリーンショット',record_date:today,memo:'📱速報 / スクリーンショット解析から登録 / 日本水泳連盟公式記録取得時に自動置換',is_personal_best:isBest,is_jo_qualified:st!=null&&timeSeconds<=st}; const {error}=await sb.from('swim_records').insert(payload); if(error){alert('保存エラー：'+error.message);return;} saved++;}
-  await loadCloud();renderHome();renderPlayers();renderAnalysis();if(rows.length===1&&rows[0].playerId){showPlayerDetail(rows[0].playerId);}alert(`${saved}件を保存しました！`);
+    const payload={swimmer_id:r.playerId,stroke:r.stroke,distance:r.distance,course:r.course,time_seconds:timeSeconds,meet_name:'大会速報スクリーンショット',record_date:today,memo:'📱速報 / スクリーンショット解析から登録 / 日本水泳連盟公式記録取得時に自動置換',is_personal_best:isBest,is_jo_qualified:st!=null&&timeSeconds<=st}; const {data:inserted,error}=await sb.from('swim_records').insert(payload).select('id,swimmer_id,stroke,distance,course,time_seconds').single(); if(error){alert('保存エラー：'+error.message);return;} if(!inserted?.id){alert('保存確認に失敗しました。データベースへの追加を確認できませんでした。');return;} saved++;}
+  await loadCloud();renderHome();renderPlayers();renderAnalysis();const savedPlayerIds=[...new Set(rows.map(r=>r.playerId).filter(Boolean))];if(savedPlayerIds.length===1){showPlayerDetail(savedPlayerIds[0]);}alert(`${saved}件を保存しました！\nデータベースへの保存確認も完了しました。`);
 }
-function screenshotAnalysisCard(){return `<div class="card"><h2>📸 大会速報スクショ解析</h2><p class="muted">スイムレコードモバイルなどの結果画面を読み取り、登録選手と照合してJO・東京SC・ゆめカップまでの差をその場で判定します。</p><input id="screenshotFile" type="file" accept="image/*" onchange="const f=this.files?.[0];if(f){const p=$('#screenshotPreview');p.src=URL.createObjectURL(f);p.classList.remove('hidden')}"/><img id="screenshotPreview" class="shotPreview hidden" alt="スクリーンショット"><button style="width:100%;margin-top:10px" onclick="analyzeScreenshot()">🔎 スクリーンショットを解析</button><div id="screenshotStatus" style="margin-top:10px"></div><div id="screenshotResults"><p class="muted">解析結果がここに表示されます。</p></div></div>`;}
+function screenshotAnalysisCard(){return `<div class="card"><h2>📸 大会速報スクショ解析</h2><p class="muted">スイムレコードモバイルなどの結果画面を読み取り、登録選手と照合してJO・東京SC・ゆめカップまでの差をその場で判定します。種目・距離は画面全体から判定し、不確かな場合は保存前に1か所だけ指定できます。</p><input id="screenshotFile" type="file" accept="image/*" onchange="const f=this.files?.[0];if(f){const p=$('#screenshotPreview');p.src=URL.createObjectURL(f);p.classList.remove('hidden')}"/><img id="screenshotPreview" class="shotPreview hidden" alt="スクリーンショット"><button style="width:100%;margin-top:10px" onclick="analyzeScreenshot()">🔎 スクリーンショットを解析</button><div id="screenshotStatus" style="margin-top:10px"></div><div id="screenshotResults"><p class="muted">解析結果がここに表示されます。</p></div></div>`;}
 
 function renderAnalysis(){
   let jo=records.filter(r=>r.is_jo_qualified).length;
