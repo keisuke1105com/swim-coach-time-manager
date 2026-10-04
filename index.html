@@ -1412,6 +1412,29 @@ async function testPlayerJasfRanking(playerId){
 const ALL_RANKING_PROGRESS_KEY='sameGradeRankingBulkProgress_v4';
 function loadRankingBulkProgress(){try{return JSON.parse(localStorage.getItem(ALL_RANKING_PROGRESS_KEY)||'null');}catch(e){return null;}}
 function saveRankingBulkProgress(v){try{localStorage.setItem(ALL_RANKING_PROGRESS_KEY,JSON.stringify(v));}catch(e){}}
+
+// ランキング一括更新の進捗をSupabaseにも保存し、Mac/iPhoneで共有する。
+// ranking_update_state テーブルが未作成の場合は従来どおり端末内保存へ自動フォールバックする。
+async function loadSharedRankingBulkProgress(){
+  const local=loadRankingBulkProgress();
+  if(!sb)return local;
+  try{
+    const {data,error}=await sb.from('ranking_update_state').select('progress').eq('job_key','same_grade_2026').maybeSingle();
+    if(error)throw error;
+    const cloud=data?.progress||null;
+    if(cloud){saveRankingBulkProgress(cloud);return cloud;}
+  }catch(e){console.warn('ランキング進捗クラウド読込は端末保存へフォールバック:',e?.message||e);}
+  return local;
+}
+async function saveSharedRankingBulkProgress(v){
+  saveRankingBulkProgress(v);
+  if(!sb)return;
+  try{
+    const {error}=await sb.from('ranking_update_state').upsert({job_key:'same_grade_2026',progress:v,updated_at:new Date().toISOString()},{onConflict:'job_key'});
+    if(error)throw error;
+  }catch(e){console.warn('ランキング進捗クラウド保存は端末保存のみ継続:',e?.message||e);}
+}
+
 function clearRankingBulkProgress(){try{localStorage.removeItem(ALL_RANKING_PROGRESS_KEY);}catch(e){}}
 
 function sameGradeRankingSummaryHtml(year=2026,limit=30){
@@ -1516,10 +1539,10 @@ async function updateAllPlayersSameGradeRankings(){
   if(btn){btn.disabled=true;btn.textContent='⏳ 更新中…';}
 
   const signature=allTargets.map(p=>String(p.id)).join('|');
-  let progress=loadRankingBulkProgress();
+  let progress=await loadSharedRankingBulkProgress();
   if(!progress || progress.signature!==signature || progress.completed){
     progress={signature,phase:'first',index:0,retryIndex:0,completed:false,startedAt:new Date().toISOString()};
-    saveRankingBulkProgress(progress);
+    await saveSharedRankingBulkProgress(progress);
   }
 
   try{
@@ -1538,14 +1561,14 @@ async function updateAllPlayersSameGradeRankings(){
         }
 
         progress.index++;
-        saveRankingBulkProgress(progress);
+        await saveSharedRankingBulkProgress(progress);
         if(box)box.innerHTML=`<div class="notice">🏊 第1段階：全選手を一巡中…<br><b>${progress.index} / ${allTargets.length}名</b>　${p.name} まで保存済み</div>`;
         await jasfSleep(900);
       }
 
       progress.phase='retry';
       progress.retryIndex=0;
-      saveRankingBulkProgress(progress);
+      await saveSharedRankingBulkProgress(progress);
     }
 
     // 第2段階：第1段階で通信エラーになった種目だけ再試行。
@@ -1560,7 +1583,7 @@ async function updateAllPlayersSameGradeRankings(){
 
           await retryOneRankingEvent(item,2026);
           progress.retryIndex++;
-          saveRankingBulkProgress(progress);
+          await saveSharedRankingBulkProgress(progress);
           await jasfSleep(1800);
         }
         progress.phase='done';
@@ -1569,7 +1592,7 @@ async function updateAllPlayersSameGradeRankings(){
 
     progress.completed=true;
     progress.finishedAt=new Date().toISOString();
-    saveRankingBulkProgress(progress);
+    await saveSharedRankingBulkProgress(progress);
 
     const remaining=rankingFailedEvents(allTargets,2026);
     renderAnalysis();
