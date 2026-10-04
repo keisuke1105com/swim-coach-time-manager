@@ -331,6 +331,29 @@ async function fetchJasfLatest(playerId){
       const duplicate=incomingResultId
         ? existingOfficialResultIds.has(incomingResultId)
         : existingOfficialFallbackKeys.has(fallbackKey);
+
+      // 同じ選手・日付・種目・距離・水路の「大会速報スクリーンショット」があれば、
+      // 日本水泳連盟の公式記録を優先するため速報記録を削除する。
+      // タイムが速報と公式で違っていても、公式側を正として置き換える。
+      const provisionalRows=records.filter(r=>
+        String(r.swimmer_id)===String(playerId) &&
+        String(r.record_date||'')===String(recordDate) &&
+        r.stroke===stroke && Number(r.distance)===Number(distance) && r.course===item.course &&
+        (String(r.memo||'').includes('スクリーンショット解析から登録') || String(r.meet_name||'').includes('大会速報スクリーンショット'))
+      );
+      if(provisionalRows.length){
+        const ids=provisionalRows.map(r=>r.id).filter(Boolean);
+        if(ids.length){
+          const {error:delError}=await sb.from('swim_records').delete().in('id',ids);
+          if(delError)throw delError;
+        }
+        for(const pr of provisionalRows){
+          const idx=records.findIndex(r=>String(r.id)===String(pr.id));
+          if(idx>=0)records.splice(idx,1);
+        }
+      }
+
+      // 公式記録が既に保存済みなら、速報だけ整理して新規追加はしない。
       if(duplicate){unchanged++;continue;}
 
       const currentBest=best(playerId,stroke,distance,item.course);
@@ -733,6 +756,10 @@ let trendOptions=trendKeys.map(key=>{
         ${r.meet_name
           ? `<br><span class="muted">${r.meet_name}</span>`
           : ''
+        }
+        ${String(r.memo||'').includes('日本水泳連盟')
+          ? '<br><span class="badge">🇯🇵 公式</span>'
+          : (String(r.memo||'').includes('スクリーンショット解析') ? '<br><span class="badge">📱 速報</span>' : '')
         }
         ${r.improvement
           ? `<br><span class="badge">${r.improvement}</span>`
@@ -1551,7 +1578,7 @@ async function saveScreenshotRows(){
   const today=new Date().toISOString().slice(0,10); let saved=0;
   for(const r of rows){const timeSeconds=sec(r.time); const meet=joMeetInfo(today); const st=standard(r.playerId,r.stroke,r.distance,r.course,meet?.date||null); const currentBest=best(r.playerId,r.stroke,r.distance,r.course); const isBest=currentBest==null||timeSeconds<Number(currentBest)-0.001;
     if(isBest&&currentBest!=null)await sb.from('swim_records').update({is_personal_best:false}).eq('swimmer_id',r.playerId).eq('stroke',r.stroke).eq('distance',r.distance).eq('course',r.course).eq('is_personal_best',true);
-    const payload={swimmer_id:r.playerId,stroke:r.stroke,distance:r.distance,course:r.course,time_seconds:timeSeconds,meet_name:'大会速報スクリーンショット',record_date:today,memo:'スクリーンショット解析から登録',is_personal_best:isBest,is_jo_qualified:st!=null&&timeSeconds<=st}; const {error}=await sb.from('swim_records').insert(payload); if(error){alert('保存エラー：'+error.message);return;} saved++;}
+    const payload={swimmer_id:r.playerId,stroke:r.stroke,distance:r.distance,course:r.course,time_seconds:timeSeconds,meet_name:'大会速報スクリーンショット',record_date:today,memo:'📱速報 / スクリーンショット解析から登録 / 日本水泳連盟公式記録取得時に自動置換',is_personal_best:isBest,is_jo_qualified:st!=null&&timeSeconds<=st}; const {error}=await sb.from('swim_records').insert(payload); if(error){alert('保存エラー：'+error.message);return;} saved++;}
   await loadCloud();renderHome();renderAnalysis();alert(`${saved}件を保存しました！`);
 }
 function screenshotAnalysisCard(){return `<div class="card"><h2>📸 大会速報スクショ解析</h2><p class="muted">スイムレコードモバイルなどの結果画面を読み取り、登録選手と照合してJO・東京SC・ゆめカップまでの差をその場で判定します。</p><input id="screenshotFile" type="file" accept="image/*" onchange="const f=this.files?.[0];if(f){const p=$('#screenshotPreview');p.src=URL.createObjectURL(f);p.classList.remove('hidden')}"/><img id="screenshotPreview" class="shotPreview hidden" alt="スクリーンショット"><button style="width:100%;margin-top:10px" onclick="analyzeScreenshot()">🔎 スクリーンショットを解析</button><div id="screenshotStatus" style="margin-top:10px"></div><div id="screenshotResults"><p class="muted">解析結果がここに表示されます。</p></div></div>`;}
