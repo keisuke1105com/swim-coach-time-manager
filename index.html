@@ -1514,8 +1514,26 @@ async function saveScreenshotRows(){
   });
   const checked=screenshotRows.filter(r=>r.save);
   if(!checked.length){alert('保存する記録にチェックを入れてください。');return;}
-  const invalid=checked.filter(r=>!r.playerId||!Number.isFinite(sec(fixShotTime(r.time,r.distance)))||!r.stroke||!r.distance);
-  if(invalid.length){alert(`チェックした${invalid.length}件に未入力があります。選手・種目・距離・タイムを確認してください。`);return;}
+
+  // OCRで一部行だけ距離・種目が空欄になった場合、同じスクショ内の他行から補完する。
+  // Swim Record Mobile は1画面＝同一種目なので、この補完が安全に使える。
+  const knownDistances=screenshotRows.map(r=>Number(r.distance)).filter(v=>Number.isFinite(v)&&v>0);
+  const commonDistance=knownDistances.length ? knownDistances.sort((a,b)=>knownDistances.filter(x=>x===b).length-knownDistances.filter(x=>x===a).length)[0] : null;
+  const knownStrokes=screenshotRows.map(r=>r.stroke).filter(Boolean);
+  const commonStroke=knownStrokes.length ? knownStrokes.sort((a,b)=>knownStrokes.filter(x=>x===b).length-knownStrokes.filter(x=>x===a).length)[0] : '';
+  checked.forEach(r=>{
+    if(!r.distance && commonDistance) r.distance=commonDistance;
+    if(!r.stroke && commonStroke) r.stroke=commonStroke;
+    if(!r.course) r.course='長水路';
+    r.time=fixShotTime(r.time,r.distance);
+  });
+  renderScreenshotRows();
+
+  const invalid=checked.filter(r=>!r.playerId||!Number.isFinite(sec(r.time))||!r.stroke||!r.distance);
+  if(invalid.length){
+    const details=invalid.map(r=>{const miss=[];if(!r.playerId)miss.push('選手');if(!r.stroke)miss.push('種目');if(!r.distance)miss.push('距離');if(!Number.isFinite(sec(r.time)))miss.push('タイム');return `${r.name||'選択中の記録'}：${miss.join('・')}`;}).join('\n');
+    alert(`保存できない項目があります。\n${details}`);return;
+  }
   const rows=checked.map(r=>({...r,time:fixShotTime(r.time,r.distance)}));
   if(!confirm(`${rows.length}件をタイム管理Cloudへ保存します。よろしいですか？`))return;
   const today=new Date().toISOString().slice(0,10); let saved=0;
