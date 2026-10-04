@@ -1490,9 +1490,32 @@ function fixShotTime(time,distance){
 }
 function detectShotEvent(text){
   const t=normalizeOcrText(text);
-  const stroke=t.includes('個人メドレー')?'個人メドレー':t.includes('自由形')?'自由形':t.includes('背泳ぎ')?'背泳ぎ':t.includes('平泳ぎ')?'平泳ぎ':t.includes('バタフライ')?'バタフライ':'';
-  const m=t.match(/(50|100|200|400|800|1500)\s*m?\s*(?:自由形|背泳ぎ|平泳ぎ|バタフライ|個人メドレー)/i)||t.match(/(?:自由形|背泳ぎ|平泳ぎ|バタフライ|個人メドレー)\s*(50|100|200|400|800|1500)\s*m?/i);
-  return {stroke,distance:m?Number(m[1]):null};
+  const aliases={
+    '個人メドレー':['個人メドレー','個メ'],
+    '自由形':['自由形','フリー'],
+    '背泳ぎ':['背泳ぎ','背泳','バック'],
+    '平泳ぎ':['平泳ぎ','平泳','ブレ'],
+    'バタフライ':['バタフライ','バッタ','Fly','FLY']
+  };
+  // 種目名と距離が近接している表記を最優先。画面内の別種目名の混入に引っ張られにくくする。
+  for(const [stroke,names] of Object.entries(aliases)){
+    for(const name of names){
+      const esc=name.replace(/[.*+?^${}()|[\]\]/g,'\$&');
+      let m=t.match(new RegExp(`(50|100|200|400|800|1500)\\s*m?\\s*${esc}`,'i'));
+      if(m)return {stroke,distance:Number(m[1])};
+      m=t.match(new RegExp(`${esc}\\s*(50|100|200|400|800|1500)\\s*m?`,'i'));
+      if(m)return {stroke,distance:Number(m[1])};
+    }
+  }
+  // 近接表記が無い場合は、OCR全文で最も多く出た種目を採用。
+  let stroke='',score=0;
+  for(const [st,names] of Object.entries(aliases)){
+    const n=names.reduce((sum,name)=>sum+(t.match(new RegExp(name,'gi'))||[]).length,0);
+    if(n>score){score=n;stroke=st;}
+  }
+  const distances=[50,100,200,400,800,1500];
+  const found=distances.map(d=>({d,n:(t.match(new RegExp(`(^|\\D)${d}\\s*m?(?=\\D|$)`,'gi'))||[]).length})).sort((a,b)=>b.n-a.n);
+  return {stroke,distance:found[0]?.n?found[0].d:null};
 }
 function parseShotRows(text){
   const event=detectShotEvent(text); const lines=String(text||'').split(/\n+/).map(normalizeOcrText).filter(Boolean); const out=[];
@@ -1579,7 +1602,7 @@ async function saveScreenshotRows(){
   for(const r of rows){const timeSeconds=sec(r.time); const meet=joMeetInfo(today); const st=standard(r.playerId,r.stroke,r.distance,r.course,meet?.date||null); const currentBest=best(r.playerId,r.stroke,r.distance,r.course); const isBest=currentBest==null||timeSeconds<Number(currentBest)-0.001;
     if(isBest&&currentBest!=null)await sb.from('swim_records').update({is_personal_best:false}).eq('swimmer_id',r.playerId).eq('stroke',r.stroke).eq('distance',r.distance).eq('course',r.course).eq('is_personal_best',true);
     const payload={swimmer_id:r.playerId,stroke:r.stroke,distance:r.distance,course:r.course,time_seconds:timeSeconds,meet_name:'大会速報スクリーンショット',record_date:today,memo:'📱速報 / スクリーンショット解析から登録 / 日本水泳連盟公式記録取得時に自動置換',is_personal_best:isBest,is_jo_qualified:st!=null&&timeSeconds<=st}; const {error}=await sb.from('swim_records').insert(payload); if(error){alert('保存エラー：'+error.message);return;} saved++;}
-  await loadCloud();renderHome();renderAnalysis();alert(`${saved}件を保存しました！`);
+  await loadCloud();renderHome();renderPlayers();renderAnalysis();if(rows.length===1&&rows[0].playerId){showPlayerDetail(rows[0].playerId);}alert(`${saved}件を保存しました！`);
 }
 function screenshotAnalysisCard(){return `<div class="card"><h2>📸 大会速報スクショ解析</h2><p class="muted">スイムレコードモバイルなどの結果画面を読み取り、登録選手と照合してJO・東京SC・ゆめカップまでの差をその場で判定します。</p><input id="screenshotFile" type="file" accept="image/*" onchange="const f=this.files?.[0];if(f){const p=$('#screenshotPreview');p.src=URL.createObjectURL(f);p.classList.remove('hidden')}"/><img id="screenshotPreview" class="shotPreview hidden" alt="スクリーンショット"><button style="width:100%;margin-top:10px" onclick="analyzeScreenshot()">🔎 スクリーンショットを解析</button><div id="screenshotStatus" style="margin-top:10px"></div><div id="screenshotResults"><p class="muted">解析結果がここに表示されます。</p></div></div>`;}
 
