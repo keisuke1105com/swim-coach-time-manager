@@ -174,6 +174,30 @@ async function recalcPersonalBests(playerIds){
     }
   }
 }
+
+async function cleanupExactDuplicatesForPlayerSilent(playerId){
+  await loadCloud();
+  const mine=records.filter(r=>String(r.swimmer_id)===String(playerId));
+  const groups=new Map();
+  mine.forEach(r=>{const k=recordExactKey(r);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r);});
+  const deleteIds=[];
+  for(const arr of groups.values()){
+    if(arr.length<2)continue;
+    const keep=chooseDuplicateKeeper(arr);
+    arr.filter(r=>String(r.id)!==String(keep.id)).forEach(r=>deleteIds.push(r.id));
+  }
+  for(let i=0;i<deleteIds.length;i+=100){
+    const {error}=await sb.from('swim_records').delete().in('id',deleteIds.slice(i,i+100));
+    if(error)throw error;
+  }
+  if(deleteIds.length){
+    await loadCloud();
+    await recalcPersonalBests([String(playerId)]);
+    await loadCloud();
+  }
+  return deleteIds.length;
+}
+
 async function cleanupAllExactDuplicates(){
   if(!confirm('全選手の完全一致した重複記録を整理します。\n\n同じ選手・日付・種目・距離・水路・タイムがすべて同じ記録だけが対象です。\n残す優先順位は「🇯🇵公式 ＞ 📱速報 ＞ 手入力」です。よろしいですか？'))return;
   await loadCloud();
@@ -385,9 +409,11 @@ async function fetchJasfLatest(playerId){
       // result_id がある公式記録は result_id を最優先で判定。
       // result_id が無い場合だけ、公式記録同士の「種目・水路・タイム・日付」で判定する。
       // 手入力記録は重複判定の対象にしない。
-      const duplicate=incomingResultId
-        ? existingOfficialResultIds.has(incomingResultId)
-        : existingOfficialFallbackKeys.has(fallbackKey);
+      // 同じ result_id はもちろん、result_id が違っていても
+      // 「種目・距離・水路・タイム・日付」が完全一致する公式記録は再登録しない。
+      // これにより年度別ベスト同期を何度押しても同じ記録が増えない。
+      const duplicate=(incomingResultId && existingOfficialResultIds.has(incomingResultId))
+        || existingOfficialFallbackKeys.has(fallbackKey);
 
       // 同じ選手・日付・種目・距離・水路の「大会速報スクリーンショット」があれば、
       // 日本水泳連盟の公式記録を優先するため速報記録を削除する。
@@ -439,6 +465,9 @@ async function fetchJasfLatest(playerId){
       existingOfficialFallbackKeys.add(fallbackKey);
     }
 
+    // 同期完了時に、この選手の完全一致重複を自動整理する。
+    // 公式 ＞ 速報 ＞ 手入力の優先順位で1件だけ残す。
+    const autoCleaned=await cleanupExactDuplicatesForPlayerSilent(playerId);
     await loadCloud();
     const yearGroups=years.map(year=>{
       const rows=fetched.filter(v=>v.year===year);
@@ -448,7 +477,7 @@ async function fetchJasfLatest(playerId){
         <div style="text-align:right"><b style="font-size:20px">${x.result_time||'-'}</b><br><span class="muted">${x.division?.name||''}${x.is_best_record?' ★':''}</span></div></div>`).join('')}</div>`;
     }).join('');
 
-    box.innerHTML=`<div class="result good"><b>✅ 日本水泳連盟との同期が完了しました</b><br><span class="small">競技者ID：${athleteIds.join('・')} ／ 新規保存：${saved}件 ／ 登録済み：${unchanged}件</span>${savedRows.length?`<div class="small" style="margin-top:8px">保存：${savedRows.join('、')}</div>`:''}</div>${yearGroups}${errors.length?`<div class="notice small" style="margin-top:10px">一部取得エラー：<br>${errors.slice(0,10).join('<br>')}</div>`:''}`;
+    box.innerHTML=`<div class="result good"><b>✅ 日本水泳連盟との同期が完了しました</b><br><span class="small">競技者ID：${athleteIds.join('・')} ／ 新規公式記録：${saved}件 ／ 登録済み：${unchanged}件 ／ 重複整理：${autoCleaned}件</span>${saved===0?`<div class="small" style="margin-top:8px">✨ 新しい公式記録はありません。登録済みデータは増やしていません。</div>`:''}${savedRows.length?`<div class="small" style="margin-top:8px">保存：${savedRows.join('、')}</div>`:''}</div>${yearGroups}${errors.length?`<div class="notice small" style="margin-top:10px">一部取得エラー：<br>${errors.slice(0,10).join('<br>')}</div>`:''}`;
     renderHome();
   }catch(e){
     await loadCloud();
