@@ -1453,6 +1453,14 @@ async function ensureTesseract(){
   screenshotOcrReady=true;
 }
 function normalizeOcrText(t){return String(t||'').replace(/[：]/g,':').replace(/[。]/g,'.').replace(/\s+/g,' ').trim();}
+function fixShotTime(time,distance){
+  let x=normalizeOcrText(time);
+  // OCRで 1:19.90 → 19.90 のように分が落ちるケースを安全側で補正
+  if(Number(distance)>=100 && /^\d{1,2}\.\d{2}$/.test(x)){
+    const v=Number(x); if(Number.isFinite(v) && v<20) x='1:'+x.padStart(5,'0');
+  }
+  return x;
+}
 function detectShotEvent(text){
   const t=normalizeOcrText(text);
   const stroke=t.includes('個人メドレー')?'個人メドレー':t.includes('自由形')?'自由形':t.includes('背泳ぎ')?'背泳ぎ':t.includes('平泳ぎ')?'平泳ぎ':t.includes('バタフライ')?'バタフライ':'';
@@ -1470,7 +1478,8 @@ function parseShotRows(text){
     const player=PLAYERS.find(p=>{const n=String(p.name||'').replace(/[ 　]/g,'');const b=before.replace(/[ 　]/g,'');return n&&b.includes(n);});
     let name=player?.name||before.replace(/\([^)]*\).*$/,'').replace(/（[^）]*）.*$/,'').trim();
     if(!name||name.length>24)continue;
-    out.push({playerId:player?.id||'',name,time,stroke:event.stroke,distance:event.distance,course:'長水路',save:!!player});
+    const fixedTime=fixShotTime(time,event.distance);
+    out.push({playerId:player?.id||'',name,time:fixedTime,stroke:event.stroke,distance:event.distance,course:'長水路',save:!!player});
   }
   return out;
 }
@@ -1488,7 +1497,7 @@ function renderScreenshotRows(){
   const box=$('#screenshotResults'); if(!box)return;
   if(!screenshotRows.length){box.innerHTML='<p class="muted">解析結果がここに表示されます。</p>';return;}
   const playerOpts=PLAYERS.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
-  box.innerHTML=`<div style="overflow-x:auto"><table class="shotTable"><thead><tr><th>保存</th><th>選手</th><th>種目</th><th>タイム</th><th>判定</th></tr></thead><tbody>${screenshotRows.map((r,i)=>`<tr><td><input type="checkbox" ${r.save?'checked':''} onchange="screenshotRows[${i}].save=this.checked"></td><td><select onchange="screenshotRows[${i}].playerId=this.value;screenshotRows[${i}].name=this.options[this.selectedIndex].text;renderScreenshotRows()"><option value="">選択</option>${PLAYERS.map(p=>`<option value="${p.id}" ${p.id===r.playerId?'selected':''}>${p.name}</option>`).join('')}</select></td><td><select onchange="screenshotRows[${i}].stroke=this.value;renderScreenshotRows()">${['自由形','背泳ぎ','平泳ぎ','バタフライ','個人メドレー'].map(x=>`<option ${x===r.stroke?'selected':''}>${x}</option>`).join('')}</select><input style="width:74px;margin-top:4px" type="number" value="${r.distance||''}" onchange="screenshotRows[${i}].distance=Number(this.value);renderScreenshotRows()"><select style="margin-top:4px" onchange="screenshotRows[${i}].course=this.value;renderScreenshotRows()"><option ${r.course==='長水路'?'selected':''}>長水路</option><option ${r.course==='短水路'?'selected':''}>短水路</option></select></td><td><input style="width:90px" value="${r.time}" onchange="screenshotRows[${i}].time=this.value;renderScreenshotRows()"></td><td><div class="shotStatus">${shotEvaluation(r).html}</div></td></tr>`).join('')}</tbody></table></div><button style="width:100%;margin-top:12px" onclick="saveScreenshotRows()">☁️ チェックした記録を保存</button>`;
+  box.innerHTML=`<div style="overflow-x:auto"><table class="shotTable"><thead><tr><th>保存</th><th>選手</th><th>種目</th><th>タイム</th><th>判定</th></tr></thead><tbody>${screenshotRows.map((r,i)=>`<tr><td><input type="checkbox" class="shotSaveCheck" data-shot-index="${i}" ${r.save?'checked':''} onchange="screenshotRows[${i}].save=this.checked"></td><td><select onchange="screenshotRows[${i}].playerId=this.value;screenshotRows[${i}].name=this.options[this.selectedIndex].text;renderScreenshotRows()"><option value="">選択</option>${PLAYERS.map(p=>`<option value="${p.id}" ${p.id===r.playerId?'selected':''}>${p.name}</option>`).join('')}</select></td><td><select onchange="screenshotRows[${i}].stroke=this.value;renderScreenshotRows()">${['自由形','背泳ぎ','平泳ぎ','バタフライ','個人メドレー'].map(x=>`<option ${x===r.stroke?'selected':''}>${x}</option>`).join('')}</select><input style="width:74px;margin-top:4px" type="number" value="${r.distance||''}" onchange="screenshotRows[${i}].distance=Number(this.value);screenshotRows[${i}].time=fixShotTime(screenshotRows[${i}].time,screenshotRows[${i}].distance);renderScreenshotRows()"><select style="margin-top:4px" onchange="screenshotRows[${i}].course=this.value;renderScreenshotRows()"><option ${r.course==='長水路'?'selected':''}>長水路</option><option ${r.course==='短水路'?'selected':''}>短水路</option></select></td><td><input style="width:90px" value="${r.time}" onchange="screenshotRows[${i}].time=fixShotTime(this.value,screenshotRows[${i}].distance);renderScreenshotRows()"></td><td><div class="shotStatus">${shotEvaluation(r).html}</div></td></tr>`).join('')}</tbody></table></div><button style="width:100%;margin-top:12px" onclick="saveScreenshotRows()">☁️ チェックした記録を保存</button>`;
 }
 async function analyzeScreenshot(){
   const file=$('#screenshotFile')?.files?.[0]; if(!file){alert('スクリーンショットを選んでください。');return;}
@@ -1499,7 +1508,16 @@ async function analyzeScreenshot(){
   }catch(e){$('#screenshotStatus').innerHTML=`<div class="error">解析に失敗しました：${String(e.message||e)}</div>`;}
 }
 async function saveScreenshotRows(){
-  const rows=screenshotRows.filter(r=>r.save&&r.playerId&&Number.isFinite(sec(r.time))&&r.stroke&&r.distance); if(!rows.length){alert('保存する記録を選んでください。');return;}
+  // 画面上のチェック状態を保存直前に読み直す（Safari/PWAでも確実に反映）
+  document.querySelectorAll('.shotSaveCheck').forEach(el=>{
+    const i=Number(el.dataset.shotIndex); if(Number.isInteger(i)&&screenshotRows[i]) screenshotRows[i].save=el.checked;
+  });
+  const checked=screenshotRows.filter(r=>r.save);
+  if(!checked.length){alert('保存する記録にチェックを入れてください。');return;}
+  const invalid=checked.filter(r=>!r.playerId||!Number.isFinite(sec(fixShotTime(r.time,r.distance)))||!r.stroke||!r.distance);
+  if(invalid.length){alert(`チェックした${invalid.length}件に未入力があります。選手・種目・距離・タイムを確認してください。`);return;}
+  const rows=checked.map(r=>({...r,time:fixShotTime(r.time,r.distance)}));
+  if(!confirm(`${rows.length}件をタイム管理Cloudへ保存します。よろしいですか？`))return;
   const today=new Date().toISOString().slice(0,10); let saved=0;
   for(const r of rows){const timeSeconds=sec(r.time); const meet=joMeetInfo(today); const st=standard(r.playerId,r.stroke,r.distance,r.course,meet?.date||null); const currentBest=best(r.playerId,r.stroke,r.distance,r.course); const isBest=currentBest==null||timeSeconds<Number(currentBest)-0.001;
     if(isBest&&currentBest!=null)await sb.from('swim_records').update({is_personal_best:false}).eq('swimmer_id',r.playerId).eq('stroke',r.stroke).eq('distance',r.distance).eq('course',r.course).eq('is_personal_best',true);
