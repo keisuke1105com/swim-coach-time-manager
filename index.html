@@ -1208,28 +1208,34 @@ async function fetchJasfRankingForPlayer(player,stroke,distance,course,year=2026
     let samePrefCount=0;
     let reachedSelf=false;
 
-    for(let page=1;page<=pagesToFetch;page++){
-      const rows=await safeFetchJasfRankingPage(player,stroke,distance,course,year,schoolClassCode,schoolGrade,'',page);
-      if(!rows.length)break;
-      for(const row of rows){
-        const rr=Number(row?.ranking??row?.ranking_in_overall??0)||0;
-        if(rr && rr>gradeRank){reachedSelf=true;break;}
-        const rpi=jasfPrefInfo(row);
-        const samePref=pi.code!=='' ? String(rpi.code)===String(pi.code) : (!!pi.name&&rpi.name===pi.name);
-        if(samePref)samePrefCount++;
-        if(jasfSameSwimmer(row,player,athleteIds)){reachedSelf=true;break;}
+    // 県順位の通信だけ失敗しても、ここまで取得済みの全国順位は必ず返す。
+    try{
+      for(let page=1;page<=pagesToFetch;page++){
+        const rows=await safeFetchJasfRankingPage(player,stroke,distance,course,year,schoolClassCode,schoolGrade,'',page);
+        if(!rows.length)break;
+        for(const row of rows){
+          const rr=Number(row?.ranking??row?.ranking_in_overall??0)||0;
+          if(rr && rr>gradeRank){reachedSelf=true;break;}
+          const rpi=jasfPrefInfo(row);
+          const samePref=pi.code!=='' ? String(rpi.code)===String(pi.code) : (!!pi.name&&rpi.name===pi.name);
+          if(samePref)samePrefCount++;
+          if(jasfSameSwimmer(row,player,athleteIds)){reachedSelf=true;break;}
+        }
+        if(reachedSelf)break;
+        if(rows.length<pageSize)break;
+        await jasfSleep(650);
       }
-      if(reachedSelf)break;
-      if(rows.length<pageSize)break;
-      await jasfSleep(650);
-    }
-    if(reachedSelf && samePrefCount>0){
-      prefRank=samePrefCount;
-      prefStatus='found';
-    }else if(neededPages>maxPrefPages){
-      prefStatus='too_deep';
-    }else{
-      prefStatus='not_found';
+      if(reachedSelf && samePrefCount>0){
+        prefRank=samePrefCount;
+        prefStatus='found';
+      }else if(neededPages>maxPrefPages){
+        prefStatus='too_deep';
+      }else{
+        prefStatus='not_found';
+      }
+    }catch(prefError){
+      console.warn('都道府県順位取得失敗（全国順位は保持）',player?.name,stroke,distance,course,prefError);
+      prefStatus='error';
     }
   }
 
@@ -1273,7 +1279,7 @@ async function updatePlayerSameGradeRankings(playerId,{skipCached=false,silent=f
   }
   const found=results.filter(v=>v.x||v.cached?.found).length;
   if(box&&!silent){
-    const rows=results.map(v=>{const r=v.r,c=v.cached||{};if(v.error)return `<div class="row"><div><b>${r.stroke} ${r.distance}m</b><br><span class="muted">${r.course}</span></div><span class="small" style="color:#a61b1b">${v.error}</span></div>`;if(!c.found)return `<div class="row"><div><b>${r.stroke} ${r.distance}m</b><br><span class="muted">${r.course}</span></div><span class="muted">同学年で該当なし</span></div>`;return `<div class="row"><div><b>${r.stroke} ${r.distance}m・${r.course}</b><br><span class="muted">競技者コード ${c.swimmerCode||'-'} ／ アプリBEST ${fmt(r.time_seconds)}</span></div><div style="text-align:right"><b style="font-size:20px">全国 ${c.gradeRank||c.rank}位</b><br><span class="muted">${c.prefRank?`🗻 ${c.prefName||'都道府県内'} ${c.prefRank}位 ／ `:(c.prefStatus==='too_deep'?'🗻 県順位 取得待ち ／ ':c.prefStatus==='pref_unknown'?'🗻 県情報なし ／ ':'🗻 県順位 再取得可 ／ ')}公式 ${c.officialTime||'-'}</span></div></div>`;}).join('');
+    const rows=results.map(v=>{const r=v.r,c=v.cached||{};if(v.error)return `<div class="row"><div><b>${r.stroke} ${r.distance}m</b><br><span class="muted">${r.course}</span></div><span class="small" style="color:#a61b1b">${v.error}</span></div>`;if(!c.found)return `<div class="row"><div><b>${r.stroke} ${r.distance}m</b><br><span class="muted">${r.course}</span></div><span class="muted">同学年で該当なし</span></div>`;return `<div class="row"><div><b>${r.stroke} ${r.distance}m・${r.course}</b><br><span class="muted">競技者コード ${c.swimmerCode||'-'} ／ アプリBEST ${fmt(r.time_seconds)}</span></div><div style="text-align:right"><b style="font-size:20px">全国 ${c.gradeRank||c.rank}位</b><br><span class="muted">${c.prefRank?`🗻 ${c.prefName||'都道府県内'} ${c.prefRank}位 ／ `:(c.prefStatus==='too_deep'?'🗻 県順位 取得待ち ／ ':c.prefStatus==='pref_unknown'?'🗻 県情報なし ／ ':c.prefStatus==='error'?'🗻 県順位 通信エラー・再取得可 ／ ':'🗻 県順位 再取得可 ／ ')}公式 ${c.officialTime||'-'}</span></div></div>`;}).join('');
     box.innerHTML=`<div class="result good"><b>✅ 同学年ランキングを更新しました</b><br><span class="small">${year}年度 ／ ${found}/${results.length}種目で同学年順位を確認</span></div><div class="result" style="margin-top:10px">${rows}</div>`;
   }
   return {ok:true,found,total:bests.length,processed,skipped};
@@ -1284,47 +1290,156 @@ async function testPlayerJasfRanking(playerId){
   return result;
 }
 
-const ALL_RANKING_PROGRESS_KEY='sameGradeRankingBulkProgress_v3';
+const ALL_RANKING_PROGRESS_KEY='sameGradeRankingBulkProgress_v4';
 function loadRankingBulkProgress(){try{return JSON.parse(localStorage.getItem(ALL_RANKING_PROGRESS_KEY)||'null');}catch(e){return null;}}
 function saveRankingBulkProgress(v){try{localStorage.setItem(ALL_RANKING_PROGRESS_KEY,JSON.stringify(v));}catch(e){}}
 function clearRankingBulkProgress(){try{localStorage.removeItem(ALL_RANKING_PROGRESS_KEY);}catch(e){}}
-function rankingPlayerNeedsUpdate(p,year=2026){
-  const mine=records.filter(r=>String(r.swimmer_id)===String(p.id)&&Number.isFinite(Number(r.time_seconds))),best=new Map();
-  mine.forEach(r=>{if(!jasfEventCodes(r.stroke,r.distance))return;const k=`${r.stroke}|${Number(r.distance)}|${r.course}`;const old=best.get(k);if(!old||Number(r.time_seconds)<Number(old.time_seconds))best.set(k,r);});
-  return [...best.values()].some(r=>{const c=getNationalRankCache(p.id,r.stroke,r.distance,r.course,year);return !c||c.error;});
+
+function rankingBestRecordsForPlayer(p){
+  const mine=records.filter(r=>String(r.swimmer_id)===String(p.id)&&Number.isFinite(Number(r.time_seconds)));
+  const best=new Map();
+  mine.forEach(r=>{
+    if(!jasfEventCodes(r.stroke,r.distance))return;
+    const k=`${r.stroke}|${Number(r.distance)}|${r.course}`;
+    const old=best.get(k);
+    if(!old||Number(r.time_seconds)<Number(old.time_seconds))best.set(k,r);
+  });
+  return [...best.values()];
 }
+
+function rankingPlayerNeedsUpdate(p,year=2026){
+  return rankingBestRecordsForPlayer(p).some(r=>{
+    const c=getNationalRankCache(p.id,r.stroke,r.distance,r.course,year);
+    return !c || c.error || (c.found && ['error','not_found','pending'].includes(c.prefStatus));
+  });
+}
+
+function rankingFailedEvents(allTargets,year=2026){
+  const failed=[];
+  allTargets.forEach(p=>{
+    rankingBestRecordsForPlayer(p).forEach(r=>{
+      const c=getNationalRankCache(p.id,r.stroke,r.distance,r.course,year);
+      if(c?.error || (c?.found && c?.prefStatus==='error')){
+        failed.push({playerId:p.id,playerName:p.name,stroke:r.stroke,distance:r.distance,course:r.course});
+      }
+    });
+  });
+  return failed;
+}
+
+async function retryOneRankingEvent(item,year=2026){
+  const p=playerById(item.playerId);
+  if(!p)return false;
+  try{
+    const q=await fetchJasfRankingForPlayer(p,item.stroke,item.distance,item.course,year);
+    const x=q.gradeMatched?.[0]||null;
+    const previous=getNationalRankCache(item.playerId,item.stroke,item.distance,item.course,year)||{};
+    const data=x?{
+      ...previous,
+      found:true,error:false,errorMessage:'',
+      rank:(q.gradeRank||x?.ranking||x?.ranking_in_overall||previous.rank||'-'),
+      gradeRank:(q.gradeRank||x?.ranking||x?.ranking_in_overall||previous.gradeRank||'-'),
+      prefRank:q.prefRank||previous.prefRank||null,
+      prefName:q.prefName||previous.prefName||'',
+      prefStatus:q.prefStatus||previous.prefStatus||'pending',
+      officialTime:x?.record?.record||x?.record||previous.officialTime||'-',
+      swimmerCode:x?.swimmers?.swimmer_code||x?.swimmer_code||previous.swimmerCode||'-',
+      updatedAt:new Date().toISOString()
+    }:{
+      ...previous,found:false,error:false,errorMessage:'',
+      status:q?.status||'not_listed',updatedAt:new Date().toISOString()
+    };
+    setNationalRankCache(item.playerId,item.stroke,item.distance,item.course,data,year);
+    return true;
+  }catch(e){
+    const previous=getNationalRankCache(item.playerId,item.stroke,item.distance,item.course,year)||{};
+    // すでに全国順位がある場合は絶対に消さない。
+    const data=previous.found
+      ? {...previous,error:false,prefStatus:'error',updatedAt:new Date().toISOString()}
+      : {...previous,found:false,error:true,errorMessage:String(e?.message||e),updatedAt:new Date().toISOString()};
+    setNationalRankCache(item.playerId,item.stroke,item.distance,item.course,data,year);
+    return false;
+  }
+}
+
 async function updateAllPlayersSameGradeRankings(){
   const box=$('#allPlayersRankingUpdateBox');
   const allTargets=PLAYERS.filter(p=>jasfAthleteIds(p).length>0);
-  if(!allTargets.length){if(box)box.innerHTML='<div class="notice">競技者IDが登録されている選手がいません。</div>';return;}
-  const btn=$('#allPlayersRankingUpdateBtn'); if(btn){btn.disabled=true;btn.textContent='⏳ 更新中…';}
-  let progress=loadRankingBulkProgress();
+  if(!allTargets.length){
+    if(box)box.innerHTML='<div class="notice">競技者IDが登録されている選手がいません。</div>';
+    return;
+  }
+
+  const btn=$('#allPlayersRankingUpdateBtn');
+  if(btn){btn.disabled=true;btn.textContent='⏳ 更新中…';}
+
   const signature=allTargets.map(p=>String(p.id)).join('|');
-  if(!progress||progress.signature!==signature||progress.completed){progress={signature,index:0,completed:false,ok:0,failed:0,startedAt:new Date().toISOString()};saveRankingBulkProgress(progress);}
-  const batchSize=2;
+  let progress=loadRankingBulkProgress();
+  if(!progress || progress.signature!==signature || progress.completed){
+    progress={signature,phase:'first',index:0,retryIndex:0,completed:false,startedAt:new Date().toISOString()};
+    saveRankingBulkProgress(progress);
+  }
+
   try{
-    while(progress.index<allTargets.length){
-      const batchEnd=Math.min(progress.index+batchSize,allTargets.length);
-      if(box)box.innerHTML=`<div class="notice">🏆 全${allTargets.length}名を1名ずつ安全に更新しています。<br><b>${progress.index} / ${allTargets.length}名</b> 完了<br><span class="small">1選手ずつ・1種目ごとに保存します。通信の間隔を空け、途中で画面を閉じても次回は保存済みを飛ばして続きから再開します。通信エラーの種目だけ再試行できます。</span></div>`;
-      while(progress.index<batchEnd){
+    // 第1段階：エラーを追いかけず、とにかく全選手を最後まで一巡する。
+    if(progress.phase==='first'){
+      while(progress.index<allTargets.length){
         const p=allTargets[progress.index];
+        if(box)box.innerHTML=`<div class="notice">🏊 第1段階：全${allTargets.length}名を最後まで更新中…<br><b>${progress.index} / ${allTargets.length}名</b> 完了<br><span class="small">通信エラーはここでは追いかけず、最後にまとめて再試行します。1種目ごとに保存します。</span></div>`;
+
         try{
-          if(rankingPlayerNeedsUpdate(p,2026)) await updatePlayerSameGradeRankings(p.id,{skipCached:true,silent:true});
-          progress.ok++;
-        }catch(e){console.error('一括ランキング更新:',p?.name,e);progress.failed++;}
-        progress.index++; saveRankingBulkProgress(progress);
-        if(box)box.innerHTML=`<div class="notice">🏆 同学年ランキング更新中…<br><b>${progress.index} / ${allTargets.length}名</b>　${p.name} まで保存済み</div>`;
-        await new Promise(r=>setTimeout(r,700));
+          if(rankingPlayerNeedsUpdate(p,2026)){
+            await updatePlayerSameGradeRankings(p.id,{skipCached:true,silent:true});
+          }
+        }catch(e){
+          console.warn('第1段階ランキング更新:',p?.name,e);
+        }
+
+        progress.index++;
+        saveRankingBulkProgress(progress);
+        if(box)box.innerHTML=`<div class="notice">🏊 第1段階：全選手を一巡中…<br><b>${progress.index} / ${allTargets.length}名</b>　${p.name} まで保存済み</div>`;
+        await jasfSleep(900);
       }
-      if(progress.index<allTargets.length){
-        if(box)box.innerHTML=`<div class="notice">☕ ${progress.index} / ${allTargets.length}名まで保存済み。API負荷を下げるため2秒待って次の2名へ進みます…</div>`;
-        await new Promise(r=>setTimeout(r,2000));
+
+      progress.phase='retry';
+      progress.retryIndex=0;
+      saveRankingBulkProgress(progress);
+    }
+
+    // 第2段階：第1段階で通信エラーになった種目だけ再試行。
+    if(progress.phase==='retry'){
+      const failed=rankingFailedEvents(allTargets,2026);
+      if(!failed.length){
+        progress.phase='done';
+      }else{
+        while(progress.retryIndex<failed.length){
+          const item=failed[progress.retryIndex];
+          if(box)box.innerHTML=`<div class="notice">🔁 第2段階：通信エラーの種目だけ再試行中…<br><b>${progress.retryIndex} / ${failed.length}種目</b><br><span class="small">${item.playerName} ／ ${item.stroke} ${item.distance}m ${item.course}</span></div>`;
+
+          await retryOneRankingEvent(item,2026);
+          progress.retryIndex++;
+          saveRankingBulkProgress(progress);
+          await jasfSleep(1800);
+        }
+        progress.phase='done';
       }
     }
-    progress.completed=true;progress.finishedAt=new Date().toISOString();saveRankingBulkProgress(progress);
+
+    progress.completed=true;
+    progress.finishedAt=new Date().toISOString();
+    saveRankingBulkProgress(progress);
+
+    const remaining=rankingFailedEvents(allTargets,2026);
     renderAnalysis();
-    const finalBox=$('#allPlayersRankingUpdateBox');if(finalBox)finalBox.innerHTML=`<div class="result good"><b>✅ 全選手の同学年ランキング更新が完了しました</b><br><span class="small">対象 ${allTargets.length}名 ／ 処理完了 ${progress.ok}名${progress.failed?` ／ エラー ${progress.failed}名`:''}</span></div>`;
-  }finally{if(btn){btn.disabled=false;btn.textContent='🏆 全選手の同学年ランキングを一括更新';}}
+    const finalBox=$('#allPlayersRankingUpdateBox');
+    if(finalBox){
+      finalBox.innerHTML=remaining.length
+        ? `<div class="result"><b>✅ 全${allTargets.length}名の一巡と再試行が完了しました</b><br><span class="small">残り ${remaining.length}種目は通信状況により未取得です。取得済みの全国順位・県順位は保持されています。もう一度押すと未取得分だけ再試行できます。</span></div>`
+        : `<div class="result good"><b>✅ 全${allTargets.length}名の同学年ランキング更新が完了しました</b><br><span class="small">全国順位と都道府県内順位を保存しました。</span></div>`;
+    }
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='🏆 全選手の同学年ランキングを一括更新';}
+  }
 }
 
 
