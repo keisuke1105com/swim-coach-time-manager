@@ -1413,26 +1413,49 @@ const ALL_RANKING_PROGRESS_KEY='sameGradeRankingBulkProgress_v4';
 function loadRankingBulkProgress(){try{return JSON.parse(localStorage.getItem(ALL_RANKING_PROGRESS_KEY)||'null');}catch(e){return null;}}
 function saveRankingBulkProgress(v){try{localStorage.setItem(ALL_RANKING_PROGRESS_KEY,JSON.stringify(v));}catch(e){}}
 
-// ランキング一括更新の進捗をSupabaseにも保存し、Mac/iPhoneで共有する。
-// ranking_update_state テーブルが未作成の場合は従来どおり端末内保存へ自動フォールバックする。
+// ランキング一括更新の進捗と取得済み順位をSupabaseにも保存し、Mac/iPhoneで共有する。
+// SQLで作成済みの ranking_update_progress テーブルを使用する。
+function rankingCacheSnapshot(year=2026){
+  const cache={};
+  PLAYERS.forEach(p=>rankingBestRecordsForPlayer(p).forEach(r=>{
+    const key=nationalRankCacheKey(p.id,r.stroke,r.distance,r.course,year);
+    try{const raw=localStorage.getItem(key);if(raw)cache[key]=JSON.parse(raw);}catch(e){}
+  }));
+  return cache;
+}
+function applyRankingCacheSnapshot(cache){
+  if(!cache||typeof cache!=='object')return;
+  Object.entries(cache).forEach(([key,value])=>{
+    if(!key.startsWith('nationalRank|'))return;
+    try{localStorage.setItem(key,JSON.stringify(value));}catch(e){}
+  });
+}
 async function loadSharedRankingBulkProgress(){
   const local=loadRankingBulkProgress();
   if(!sb)return local;
   try{
-    const {data,error}=await sb.from('ranking_update_state').select('progress').eq('job_key','same_grade_2026').maybeSingle();
+    const {data,error}=await sb.from('ranking_update_progress').select('progress').eq('job_key','same_grade_2026').maybeSingle();
     if(error)throw error;
     const cloud=data?.progress||null;
-    if(cloud){saveRankingBulkProgress(cloud);return cloud;}
+    if(cloud){
+      applyRankingCacheSnapshot(cloud.rankingCache);
+      saveRankingBulkProgress(cloud);
+      return cloud;
+    }
   }catch(e){console.warn('ランキング進捗クラウド読込は端末保存へフォールバック:',e?.message||e);}
+  if(local?.rankingCache)applyRankingCacheSnapshot(local.rankingCache);
   return local;
 }
 async function saveSharedRankingBulkProgress(v){
+  // 各種目の取得結果も進捗JSONへ含めることで、端末が変わっても順位表示を一致させる。
+  v={...v,rankingCache:rankingCacheSnapshot(2026),updatedAt:new Date().toISOString()};
   saveRankingBulkProgress(v);
-  if(!sb)return;
+  if(!sb)return v;
   try{
-    const {error}=await sb.from('ranking_update_state').upsert({job_key:'same_grade_2026',progress:v,updated_at:new Date().toISOString()},{onConflict:'job_key'});
+    const {error}=await sb.from('ranking_update_progress').upsert({job_key:'same_grade_2026',progress:v,updated_at:new Date().toISOString()},{onConflict:'job_key'});
     if(error)throw error;
   }catch(e){console.warn('ランキング進捗クラウド保存は端末保存のみ継続:',e?.message||e);}
+  return v;
 }
 
 function clearRankingBulkProgress(){try{localStorage.removeItem(ALL_RANKING_PROGRESS_KEY);}catch(e){}}
@@ -1542,7 +1565,7 @@ async function updateAllPlayersSameGradeRankings(){
   let progress=await loadSharedRankingBulkProgress();
   if(!progress || progress.signature!==signature || progress.completed){
     progress={signature,phase:'first',index:0,retryIndex:0,completed:false,startedAt:new Date().toISOString()};
-    await saveSharedRankingBulkProgress(progress);
+    progress=await saveSharedRankingBulkProgress(progress);
   }
 
   try{
@@ -1561,14 +1584,14 @@ async function updateAllPlayersSameGradeRankings(){
         }
 
         progress.index++;
-        await saveSharedRankingBulkProgress(progress);
+        progress=await saveSharedRankingBulkProgress(progress);
         if(box)box.innerHTML=`<div class="notice">🏊 第1段階：全選手を一巡中…<br><b>${progress.index} / ${allTargets.length}名</b>　${p.name} まで保存済み</div>`;
         await jasfSleep(900);
       }
 
       progress.phase='retry';
       progress.retryIndex=0;
-      await saveSharedRankingBulkProgress(progress);
+      progress=await saveSharedRankingBulkProgress(progress);
     }
 
     // 第2段階：第1段階で通信エラーになった種目だけ再試行。
@@ -1583,7 +1606,7 @@ async function updateAllPlayersSameGradeRankings(){
 
           await retryOneRankingEvent(item,2026);
           progress.retryIndex++;
-          await saveSharedRankingBulkProgress(progress);
+          progress=await saveSharedRankingBulkProgress(progress);
           await jasfSleep(1800);
         }
         progress.phase='done';
@@ -1592,7 +1615,7 @@ async function updateAllPlayersSameGradeRankings(){
 
     progress.completed=true;
     progress.finishedAt=new Date().toISOString();
-    await saveSharedRankingBulkProgress(progress);
+    progress=await saveSharedRankingBulkProgress(progress);
 
     const remaining=rankingFailedEvents(allTargets,2026);
     renderAnalysis();
