@@ -1414,6 +1414,29 @@ function loadRankingBulkProgress(){try{return JSON.parse(localStorage.getItem(AL
 function saveRankingBulkProgress(v){try{localStorage.setItem(ALL_RANKING_PROGRESS_KEY,JSON.stringify(v));}catch(e){}}
 function clearRankingBulkProgress(){try{localStorage.removeItem(ALL_RANKING_PROGRESS_KEY);}catch(e){}}
 
+function sameGradeRankingSummaryHtml(year=2026,limit=30){
+  const rows=[];
+  PLAYERS.forEach(p=>{
+    if(!jasfAthleteIds(p).length)return;
+    let best=null;
+    rankingBestRecordsForPlayer(p).forEach(r=>{
+      const c=getNationalRankCache(p.id,r.stroke,r.distance,r.course,year);
+      const rank=Number(c?.gradeRank||c?.rank||0);
+      if(!c?.found||!rank)return;
+      const item={p,r,c,rank};
+      if(!best || rank<best.rank || (rank===best.rank && Number(r.time_seconds)<Number(best.r.time_seconds)))best=item;
+    });
+    if(best)rows.push(best);
+  });
+  rows.sort((a,b)=>a.rank-b.rank || Number(a.r.time_seconds)-Number(b.r.time_seconds));
+  const top=rows.slice(0,limit);
+  if(!top.length)return '<p class="muted">まだ同学年ランキングを取得していません。上の「全選手の同学年ランキングを一括更新」を押すと、取得済みの公式記録・ベスト記録から反映します。</p>';
+  return top.map((x,i)=>{
+    const pref=x.c.prefRank?` ／ 🗻 ${x.c.prefName||'都道府県内'} ${x.c.prefRank}位`:'';
+    return `<div class="row"><div><b>${i+1}. ${x.p.name}</b><br><span class="muted">${x.r.stroke} ${x.r.distance}m・${x.r.course} ／ BEST ${fmt(x.r.time_seconds)}</span></div><div style="text-align:right"><b style="font-size:19px">🇯🇵 ${x.rank}位</b><br><span class="muted">${pref?pref.replace(' ／ ',''):''}</span></div></div>`;
+  }).join('');
+}
+
 function rankingBestRecordsForPlayer(p){
   const mine=records.filter(r=>String(r.swimmer_id)===String(p.id)&&Number.isFinite(Number(r.time_seconds)));
   const best=new Map();
@@ -1874,6 +1897,12 @@ let joRanking=Object.values(
       <p class="muted">競技者IDが登録されている全選手について、2026年度の同学年「全国順位＋都道府県内順位」をまとめて更新します。選手数・種目数によって数分かかる場合があります。</p>
       <button id="allPlayersRankingUpdateBtn" style="width:100%" onclick="updateAllPlayersSameGradeRankings()">🏆 全選手の同学年ランキングを一括更新</button>
       <div id="allPlayersRankingUpdateBox" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card">
+      <h2>🇯🇵 同学年ランキング（1人1種目・上位30名）</h2>
+      <p class="muted">2026年度の日本水泳連盟ランキング照合結果から、各選手で全国順位が最も高い1種目だけを採用して並べています。都道府県内順位を取得できた選手は併記します。</p>
+      ${sameGradeRankingSummaryHtml(2026,30)}
     </div>
 
     <div class="card">
