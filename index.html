@@ -1508,9 +1508,21 @@ async function analyzeScreenshot(){
   }catch(e){$('#screenshotStatus').innerHTML=`<div class="error">解析に失敗しました：${String(e.message||e)}</div>`;}
 }
 async function saveScreenshotRows(){
-  // 画面上のチェック状態を保存直前に読み直す（Safari/PWAでも確実に反映）
-  document.querySelectorAll('.shotSaveCheck').forEach(el=>{
-    const i=Number(el.dataset.shotIndex); if(Number.isInteger(i)&&screenshotRows[i]) screenshotRows[i].save=el.checked;
+  // 画面に現在表示されている値を保存直前に直接読み直す。
+  // OCR内部値とSafari/iPhoneのselect表示がずれても、画面の選択内容を正として保存する。
+  document.querySelectorAll('.shotTable tbody tr').forEach((tr,i)=>{
+    const r=screenshotRows[i]; if(!r)return;
+    const check=tr.querySelector('.shotSaveCheck');
+    const selects=tr.querySelectorAll('select');
+    const inputs=tr.querySelectorAll('input');
+    r.save=!!check?.checked;
+    if(selects[0]){r.playerId=selects[0].value; r.name=selects[0].options[selects[0].selectedIndex]?.text||r.name;}
+    if(selects[1])r.stroke=selects[1].value;
+    if(selects[2])r.course=selects[2].value;
+    const distanceInput=[...inputs].find(el=>el.type==='number');
+    const timeInput=[...inputs].find(el=>el.type!=='checkbox'&&el.type!=='number');
+    if(distanceInput)r.distance=Number(distanceInput.value);
+    if(timeInput)r.time=fixShotTime(timeInput.value,r.distance);
   });
   const checked=screenshotRows.filter(r=>r.save);
   if(!checked.length){alert('保存する記録にチェックを入れてください。');return;}
