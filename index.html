@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b84d8"><link rel="manifest" href="manifest.json"><title>水泳コーチ・タイム管理 Cloud</title>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b84d8"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><link rel="manifest" href="manifest.json?v=20261005-1220"><title>水泳コーチ・タイム管理 Cloud</title>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;background:#eef7fc;color:#123}header{background:linear-gradient(135deg,#087fd1,#38bdf8);color:white;padding:18px 16px 22px;border-radius:0 0 24px 24px}h1{font-size:22px;margin:0 0 5px}header small{opacity:.9}.wrap{max-width:760px;margin:auto;padding:14px 12px 90px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.card{background:white;border-radius:18px;padding:16px;box-shadow:0 3px 14px #0b84d81a;margin-bottom:12px}.stat{font-size:27px;font-weight:800;margin-top:5px}.label{font-size:13px;color:#637786}button,select,input{font:inherit}button{border:0;border-radius:14px;padding:14px 16px;background:#087fd1;color:white;font-weight:700;cursor:pointer}.secondary{background:#e7f3fb;color:#0869a8}.danger{background:#ffe8e8;color:#b42318}.field{margin:12px 0}.field label{display:block;font-size:13px;font-weight:700;margin-bottom:6px;color:#47606f}select,input{width:100%;padding:14px;border:1px solid #c9dce8;border-radius:13px;background:#fff}input.time{font-size:28px;text-align:center;font-weight:800;letter-spacing:1px}.eventgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.eventgrid button{padding:12px 5px;background:#e8f5fd;color:#0869a8}.eventgrid button.active{background:#087fd1;color:white}.result{border-radius:16px;padding:14px;background:#f1f8fc;margin-top:12px}.good{background:#e8f8ef;color:#14753b}.bad{background:#fff2e8;color:#a64b00}.tabs{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #d6e5ed;display:grid;grid-template-columns:repeat(5,1fr);padding:7px max(7px,env(safe-area-inset-left)) calc(7px + env(safe-area-inset-bottom));z-index:5}.tabs button{background:none;color:#55717f;padding:7px 2px;font-size:11px}.tabs button.active{color:#087fd1}.row{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:12px 0;border-bottom:1px solid #edf1f3}.badge{display:inline-block;padding:4px 8px;border-radius:99px;background:#e8f8ef;color:#14753b;font-size:12px;font-weight:700}.muted{color:#71808a}.hidden{display:none}.search{margin-bottom:10px}.topline{display:flex;justify-content:space-between;gap:10px;align-items:center}.notice{padding:12px;border-radius:14px;background:#fff8e7;color:#835400;margin-bottom:12px}.error{padding:12px;border-radius:14px;background:#ffeaea;color:#a61b1b;margin-bottom:12px}.auth{max-width:520px;margin:24px auto}.actions{display:flex;gap:8px;flex-wrap:wrap}.actions button{flex:1}.small{font-size:12px}.shotPreview{max-width:100%;max-height:360px;border-radius:14px;margin-top:10px;border:1px solid #c9dce8}.shotTable{width:100%;border-collapse:collapse;margin-top:10px}.shotTable th,.shotTable td{padding:8px 5px;border-bottom:1px solid #edf1f3;text-align:left;font-size:12px}.shotTable input,.shotTable select{padding:8px;border-radius:9px}.shotTable input[type=checkbox]{width:auto}.shotStatus{font-size:12px;margin-top:4px}.shotGood{color:#14753b;font-weight:700}.shotBad{color:#a64b00;font-weight:700}@media(max-width:649px){
 .shotTable{display:block;width:100%;margin-top:10px}.shotTable thead{display:none}.shotTable tbody{display:block}.shotTable tr{display:grid;grid-template-columns:46px minmax(0,1fr) 104px;gap:8px 10px;padding:14px 0;border-bottom:1px solid #dbe8ef;align-items:start}.shotTable td{display:block;padding:0;border:0;min-width:0}.shotTable td:nth-child(1){grid-column:1;grid-row:1 / span 2;display:flex;justify-content:center;padding-top:14px}.shotTable td:nth-child(2){grid-column:2 / 4;grid-row:1}.shotTable td:nth-child(3){grid-column:2;grid-row:2}.shotTable td:nth-child(4){grid-column:3;grid-row:2}.shotTable td:nth-child(5){grid-column:2 / 4;grid-row:3}.shotTable td:nth-child(2) select{width:100%;min-width:0;font-size:16px;font-weight:700;padding:12px 36px 12px 12px}.shotTable td:nth-child(3) select{width:100%;font-size:14px;padding:10px 28px 10px 10px}.shotTable td:nth-child(3) input{width:100%!important;font-size:14px;padding:10px}.shotTable td:nth-child(4) input{width:100%!important;font-size:16px;font-weight:700;padding:10px}.shotTable .shotStatus{font-size:13px;line-height:1.45;padding:4px 0}.shotTable input[type=checkbox]{width:24px;height:24px}.shotTable+button{margin-top:14px!important}
@@ -2072,5 +2072,28 @@ async function migrateLocalV3(){
   renderHome();
 }
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis()}
-$$('.tabs button').forEach(b=>b.onclick=()=>go(b.dataset.tab));document.addEventListener('blur',e=>{if(e.target&&e.target.id==='itime')formatTimeInput()},true);init();
+// iPhone/PWAでも最新版を検知して自動更新する仕組み
+const APP_BUILD_VERSION='20261005-1220';
+let __versionCheckBusy=false;
+async function checkForAppUpdate(){
+  if(__versionCheckBusy||!navigator.onLine)return;
+  __versionCheckBusy=true;
+  try{
+    const base=location.href.split('#')[0].split('?')[0];
+    const res=await fetch(base+'?__version_check='+Date.now(),{cache:'no-store',headers:{'Cache-Control':'no-cache'}});
+    if(!res.ok)return;
+    const html=await res.text();
+    const m=html.match(/APP_BUILD_VERSION=['\"]([^'\"]+)/);
+    if(m&&m[1]!==APP_BUILD_VERSION){
+      const u=new URL(location.href);
+      u.searchParams.set('v',m[1]);
+      location.replace(u.toString());
+    }
+  }catch(e){console.log('version check skipped',e)}
+  finally{__versionCheckBusy=false}
+}
+window.addEventListener('pageshow',()=>setTimeout(checkForAppUpdate,800));
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')setTimeout(checkForAppUpdate,500)});
+window.addEventListener('focus',()=>setTimeout(checkForAppUpdate,500));
+$$('.tabs button').forEach(b=>b.onclick=()=>go(b.dataset.tab));document.addEventListener('blur',e=>{if(e.target&&e.target.id==='itime')formatTimeInput()},true);init();setTimeout(checkForAppUpdate,1500);
 </script></body></html>
