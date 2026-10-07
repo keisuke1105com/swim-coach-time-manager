@@ -592,7 +592,33 @@ console.log(
         <div style="text-align:right"><b style="font-size:20px">${x.result_time||'-'}</b><br><span class="muted">${x.division?.name||''}${x.is_best_record?' ★':''}</span></div></div>`).join('')}</div>`;
     }).join('');
 
-    box.innerHTML=`<div class="result good"><b>✅ 日本水泳連盟との同期が完了しました</b><br><span class="small">競技者ID：${athleteIds.join('・')} ／ 新規公式記録：${saved}件 ／ 登録済み：${unchanged}件 ／ 重複整理：${autoCleaned}件</span>${saved===0?`<div class="small" style="margin-top:8px">✨ 新しい公式記録はありません。登録済みデータは増やしていません。</div>`:''}${savedRows.length?`<div class="small" style="margin-top:8px">保存：${savedRows.join('、')}</div>`:''}</div>${yearGroups}${errors.length?`<div class="notice small" style="margin-top:10px">一部取得エラー：<br>${errors.slice(0,10).join('<br>')}</div>`:''}`;
+    box.innerHTML=`
+  <div class="result good">
+    <b>✅ 日本水泳連盟との同期が完了しました</b>
+    <br>
+    <span class="small">
+      競技者ID：${athleteIds.join('・')}
+    </span>
+
+    <div style="
+      margin-top:10px;
+      padding:10px 12px;
+      background:#eef7ff;
+      border-radius:10px;
+      line-height:1.8;
+    ">
+      <b>🏊 ラップ取得結果</b><br>
+      ✅ 取得・更新：<b>${lapUpdated}件</b><br>
+      ⏭️ 対象外・スキップ：<b>${lapSkipped}件</b><br>
+      ${lapFailed > 0
+        ? `⚠️ 取得できなかった記録：<b>${lapFailed}件</b>`
+        : `✨ 取得失敗：<b>0件</b>`
+      }
+    </div>
+
+    ${yearGroups.join('')}
+  </div>
+`;
     renderHome();
   }catch(e){
     await loadCloud();
