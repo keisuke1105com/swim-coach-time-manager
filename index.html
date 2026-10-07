@@ -467,24 +467,93 @@ async function fetchJasfLatest(playerId){
       if(incomingResultId)existingOfficialResultIds.add(incomingResultId);
       existingOfficialFallbackKeys.add(fallbackKey);
     }
-    // 公式記録のラップも取得する
-    for(const item of fetched){
-      const x=item.x;
-      if(!x?.result_id) continue;
+    // ========================================
+// 日本水泳連盟公式記録のラップを自動取得
+// 100m以上の記録だけを対象にする
+// 1件失敗しても同期全体は止めない
+// ========================================
+let lapUpdated = 0;
+let lapSkipped = 0;
+let lapFailed = 0;
 
-      await importTestJasfLaps({
-        silent:true,
-        athlete_id:item.athleteId,
-        swimmer_id:playerId,
+for(const item of fetched){
+  const x = item.x;
+
+  // result_id がない記録は取得できない
+  if(!x?.result_id){
+    lapSkipped++;
+    continue;
+  }
+
+  // 50m種目は途中ラップがないので取得しない
+  if(Number(item.distance) < 100){
+    lapSkipped++;
+    continue;
+  }
+
+  const timeSeconds = sec(x.result_time);
+  const recordDate = jasfRecordDate(item.year, x.result_date);
+
+  if(!Number.isFinite(timeSeconds) || !recordDate){
+    lapSkipped++;
+    continue;
+  }
+
+  try{
+    const lapResult = await importTestJasfLaps({
+      silent: true,
+
+      athlete_id: item.athleteId,
+      swimmer_id: playerId,
+
+      stroke: item.stroke,
+      distance: Number(item.distance),
+      course: item.course,
+
+      record_date: recordDate,
+      time_seconds: timeSeconds,
+
+      meet_name:
+        x.game_short_name ||
+        x.game_name ||
+        '日本水泳連盟公式記録',
+
+      result_id: String(x.result_id)
+    });
+
+    if(lapResult?.success){
+      lapUpdated++;
+    }else{
+      lapFailed++;
+      console.warn(
+        'JASF lap import skipped:',
+        item.stroke,
+        item.distance,
+        x.result_id,
+        lapResult
+      );
+    }
+
+  }catch(err){
+    lapFailed++;
+
+    // 1件のラップ取得失敗で公式記録同期全体を止めない
+    console.warn(
+      'JASF lap import failed:',
+      {
         stroke:item.stroke,
         distance:item.distance,
         course:item.course,
-        record_date:jasfRecordDate(item.year,x.result_date),
-        time_seconds:sec(x.result_time),
-        meet_name:x.game_short_name||x.game_name||'日本水泳連盟公式記録',
-        result_id:String(x.result_id)
-      });
-    }
+        result_id:x.result_id,
+        error:String(err?.message || err)
+      }
+    );
+  }
+}
+
+console.log(
+  `JASF LAP SYNC: updated=${lapUpdated}, skipped=${lapSkipped}, failed=${lapFailed}`
+);
     // 同期完了時に、この選手の完全一致重複を自動整理する。
     // 公式 ＞ 速報 ＞ 手入力の優先順位で1件だけ残す。
     const autoCleaned=await cleanupExactDuplicatesForPlayerSilent(playerId);
