@@ -2298,7 +2298,294 @@ let joRanking=Object.values(
       return `${head}<div class="row"><div><span>${x.stroke} ${x.distance}m・${x.course}</span><br><span class="muted">${sub}</span></div><div style="text-align:right"><b>🏆 ${fmt(x.time)}</b><br><span class="muted">標準 ${fmt(x.standard)}</span></div></div>`;
     }).join('');
   }
+  // ==========================================
+  // 🏊 ラップ分析
+  // ==========================================
+  const lapRecords = records
+    .map(r=>{
+      let laps=r.laps;
 
+      if(typeof laps==='string'){
+        try{
+          laps=JSON.parse(laps);
+        }catch(e){
+          laps=[];
+        }
+      }
+
+      return {
+        ...r,
+        laps:Array.isArray(laps)?laps:[]
+      };
+    })
+    .filter(r=>r.laps.length>0)
+    .sort((a,b)=>
+      String(b.record_date||'').localeCompare(String(a.record_date||''))
+    );
+
+  // 選手ごとにまとめる
+  const lapPlayerMap={};
+
+  lapRecords.forEach(r=>{
+    const p=playerById(r.swimmer_id);
+    if(!p)return;
+
+    if(!lapPlayerMap[r.swimmer_id]){
+      lapPlayerMap[r.swimmer_id]={
+        player:p,
+        records:[]
+      };
+    }
+
+    lapPlayerMap[r.swimmer_id].records.push(r);
+  });
+
+  const lapAnalysisHtml=Object.values(lapPlayerMap).length
+    ? Object.values(lapPlayerMap)
+        .sort((a,b)=>a.player.name.localeCompare(b.player.name,'ja'))
+        .map(group=>{
+
+          // 種目ごとにまとめる
+          const eventMap={};
+
+          group.records.forEach(r=>{
+            const key=`${r.stroke}|${r.distance}|${r.course}`;
+
+            if(!eventMap[key]){
+              eventMap[key]={
+                stroke:r.stroke,
+                distance:r.distance,
+                course:r.course,
+                records:[]
+              };
+            }
+
+            eventMap[key].records.push(r);
+          });
+
+          const eventHtml=Object.values(eventMap)
+            .sort((a,b)=>
+              a.stroke.localeCompare(b.stroke,'ja') ||
+              a.distance-b.distance ||
+              a.course.localeCompare(b.course,'ja')
+            )
+            .map(event=>{
+
+              const raceRows=event.records
+                .sort((a,b)=>
+                  String(b.record_date||'').localeCompare(
+                    String(a.record_date||'')
+                  )
+                );
+
+              // この種目の最速記録
+              const bestRace=[...raceRows]
+                .filter(r=>Number.isFinite(Number(r.time_seconds)))
+                .sort((a,b)=>
+                  Number(a.time_seconds)-Number(b.time_seconds)
+                )[0];
+
+              const racesHtml=raceRows.map(r=>{
+
+                const isBest=
+                  bestRace &&
+                  String(bestRace.id)===String(r.id);
+
+                const lapRows=r.laps.map((lap,index)=>{
+                  const split=lap.split_time||'-';
+                  const cumulative=lap.cumulative_time||'-';
+
+                  let bestLapDiff='';
+
+                  // ベストレースの同じ区間と比較
+                  if(bestRace && !isBest && bestRace.laps?.[index]){
+                    const thisSplit=sec(split);
+                    const bestSplit=sec(
+                      bestRace.laps[index].split_time
+                    );
+
+                    if(
+                      Number.isFinite(thisSplit) &&
+                      Number.isFinite(bestSplit)
+                    ){
+                      const diff=thisSplit-bestSplit;
+
+                      bestLapDiff=
+                        diff===0
+                          ? '＝'
+                          : diff>0
+                            ? `+${diff.toFixed(2)}`
+                            : diff.toFixed(2);
+                    }
+                  }
+
+                  return `
+                    <div style="
+                      display:grid;
+                      grid-template-columns:55px 1fr 1fr 65px;
+                      gap:6px;
+                      padding:6px 0;
+                      border-bottom:1px solid #e5edf3;
+                      align-items:center;
+                    ">
+                      <b>${lap.distance}m</b>
+
+                      <span>
+                        Split<br>
+                        <b>${split}</b>
+                      </span>
+
+                      <span>
+                        通過<br>
+                        <b>${cumulative}</b>
+                      </span>
+
+                      <span style="text-align:right">
+                        ${
+                          bestLapDiff
+                            ? `<span class="small">${bestLapDiff}秒</span>`
+                            : ''
+                        }
+                      </span>
+                    </div>
+                  `;
+                }).join('');
+
+                // 前半・後半
+                let halfHtml='';
+
+                if(r.laps.length>=2){
+                  const total=Number(r.time_seconds);
+
+                  const halfDistance=Number(r.distance)/2;
+
+                  const halfLap=r.laps.find(
+                    l=>Number(l.distance)===halfDistance
+                  );
+
+                  if(
+                    halfLap &&
+                    Number.isFinite(total)
+                  ){
+                    const firstHalf=sec(
+                      halfLap.cumulative_time
+                    );
+
+                    if(Number.isFinite(firstHalf)){
+                      const secondHalf=total-firstHalf;
+                      const difference=secondHalf-firstHalf;
+
+                      halfHtml=`
+                        <div style="
+                          margin-top:8px;
+                          padding:8px 10px;
+                          background:#f7fafc;
+                          border-radius:8px;
+                        ">
+                          <span class="small">
+                            前半 <b>${fmt(firstHalf)}</b>
+                             ／
+                            後半 <b>${fmt(secondHalf)}</b>
+                             ／
+                            後半差
+                            <b>
+                              ${difference>=0?'+':''}${difference.toFixed(2)}秒
+                            </b>
+                          </span>
+                        </div>
+                      `;
+                    }
+                  }
+                }
+
+                return `
+                  <div style="
+                    margin-top:10px;
+                    padding:10px;
+                    border:1px solid #dce7ef;
+                    border-radius:10px;
+                  ">
+                    <div style="
+                      display:flex;
+                      justify-content:space-between;
+                      gap:10px;
+                    ">
+                      <div>
+                        <b>
+                          ${r.record_date||'-'}
+                          ${isBest?' 🏆 BEST':''}
+                        </b>
+                        <br>
+                        <span class="muted small">
+                          ${r.meet_name||'大会名なし'}
+                        </span>
+                      </div>
+
+                      <div style="text-align:right">
+                        <b style="font-size:18px">
+                          ${fmt(Number(r.time_seconds))}
+                        </b>
+                      </div>
+                    </div>
+
+                    <div style="margin-top:8px">
+                      ${lapRows}
+                    </div>
+
+                    ${halfHtml}
+                  </div>
+                `;
+              }).join('');
+
+              return `
+                <details style="
+                  margin-top:10px;
+                  border-top:1px solid #e5edf3;
+                  padding-top:10px;
+                ">
+                  <summary style="
+                    cursor:pointer;
+                    font-weight:700;
+                  ">
+                    ${event.stroke}
+                    ${event.distance}m・${event.course}
+                    <span class="muted small">
+                      （${event.records.length}レース）
+                    </span>
+                  </summary>
+
+                  ${racesHtml}
+                </details>
+              `;
+            }).join('');
+
+          return `
+            <details style="
+              margin-top:12px;
+              padding:10px;
+              background:#f8fbfd;
+              border-radius:10px;
+            ">
+              <summary style="
+                cursor:pointer;
+                font-size:17px;
+                font-weight:700;
+              ">
+                🏊 ${group.player.name}
+                <span class="muted small">
+                  （ラップあり ${group.records.length}件）
+                </span>
+              </summary>
+
+              ${eventHtml}
+            </details>
+          `;
+        }).join('')
+    : `
+        <p class="muted">
+          ラップデータのある公式記録がまだありません。
+        </p>
+      `;
   $('#analysis').innerHTML=`
     <div class="grid">
       <div class="card">
@@ -2330,7 +2617,28 @@ let joRanking=Object.values(
     </div>
 
     ${screenshotAnalysisCard()}
+    <div class="card">
+      <h2>🏊 ラップ分析</h2>
+      <p class="muted">
+        日本水泳連盟公式記録から取得したラップを、
+        選手・種目ごとに比較します。
+        BEST以外のレースでは、BESTレースの同じ区間とのタイム差も表示します。
+      </p>
 
+      <div class="grid" style="margin-bottom:10px">
+        <div>
+          <div class="label">ラップ取得済み記録</div>
+          <div class="stat">${lapRecords.length}</div>
+        </div>
+
+        <div>
+          <div class="label">対象選手</div>
+          <div class="stat">${Object.keys(lapPlayerMap).length}</div>
+        </div>
+      </div>
+
+      ${lapAnalysisHtml}
+    </div>
     <div class="card">
       <h2>🏆 全選手・同学年ランキング一括更新</h2>
       <p class="muted">競技者IDが登録されている全選手について、2026年度の同学年「全国順位＋都道府県内順位」をまとめて更新します。選手数・種目数によって数分かかる場合があります。</p>
