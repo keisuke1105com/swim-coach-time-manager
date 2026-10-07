@@ -647,12 +647,13 @@ console.log(
       line-height:1.8;
     ">
       <b>🏊 ラップ取得結果</b><br>
-      ✅ 取得・更新：<b>${lapUpdated}件</b><br>
-      ⏭️ 対象外・スキップ：<b>${lapSkipped}件</b><br>
-      ${lapFailed > 0
-        ? `⚠️ 取得できなかった記録：<b>${lapFailed}件</b>`
-        : `✨ 取得失敗：<b>0件</b>`
-      }
+🆕 新規取得・更新：<b>${lapUpdated}件</b><br>
+✅ 取得済み：<b>${lapAlreadyExists}件</b><br>
+⏭️ 対象外：<b>${lapNotTarget}件</b><br>
+${lapFailed > 0
+  ? `⚠️ 取得失敗：<b>${lapFailed}件</b>`
+  : `✨ 取得失敗：<b>0件</b>`
+}
     </div>
 
     ${yearGroups}
