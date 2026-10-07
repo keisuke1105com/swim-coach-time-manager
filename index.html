@@ -608,8 +608,22 @@ if(options.silent){
     );
 
   }catch(e){
-    alert(`ラップ取込に失敗しました。\n${e.message||e}`);
+  console.warn('ラップ取込失敗:', e);
+
+  if(options.silent){
+    return {
+      success:false,
+      error:String(e?.message || e)
+    };
   }
+
+  alert(`ラップ取込に失敗しました。\n${e.message||e}`);
+
+  return {
+    success:false,
+    error:String(e?.message || e)
+  };
+}
 }
 function ageOnDate(birthDate, targetDate){
   if(!birthDate || !targetDate) return null;
