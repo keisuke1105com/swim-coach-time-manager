@@ -665,6 +665,86 @@ ${lapFailed > 0
     box.innerHTML=`<div class="error">公式記録の同期に失敗しました。<br><span class="small">${String(e.message||e)}</span></div>`;
   }
 }
+  // =====================================================
+// 🏊 全選手の日本水泳連盟公式記録＋ラップを一括更新
+// =====================================================
+async function updateAllPlayersJasfLaps(){
+  const box=$('#jasfLatestBox');
+
+  const targets=PLAYERS.filter(p=>{
+    return jasfAthleteIds(p).length>0;
+  });
+
+  if(!targets.length){
+    if(box){
+      box.innerHTML=`
+        <div class="notice">
+          競技者IDが登録されている選手がいません。
+        </div>
+      `;
+    }
+    return;
+  }
+
+  const ok=[];
+  const failed=[];
+
+  for(let i=0;i<targets.length;i++){
+    const p=targets[i];
+
+    if(box){
+      box.innerHTML=`
+        <div class="notice">
+          🏊 全選手の公式記録・ラップを更新中...<br>
+          <b>${i+1} / ${targets.length}人</b><br>
+          現在：<b>${p.name}</b>
+        </div>
+      `;
+    }
+
+    try{
+      await fetchJasfLatest(p.id);
+      ok.push(p.name);
+    }catch(err){
+      failed.push({
+        name:p.name,
+        error:String(err?.message || err)
+      });
+
+      console.warn(
+        'All player JASF sync failed:',
+        p.name,
+        err
+      );
+    }
+
+    // APIへ一気にアクセスしすぎないよう少し待つ
+    await new Promise(resolve=>setTimeout(resolve,500));
+  }
+
+  await loadCloud();
+
+  if(box){
+    box.innerHTML=`
+      <div class="result good">
+        <b>✅ 全選手の公式記録・ラップ更新が完了しました</b><br><br>
+
+        🏊 対象選手：<b>${targets.length}名</b><br>
+        ✅ 完了：<b>${ok.length}名</b><br>
+        ${
+          failed.length
+            ? `⚠️ 失敗：<b>${failed.length}名</b><br>
+               <span class="small">${failed.map(x=>x.name).join('、')}</span>`
+            : `✨ 失敗：<b>0名</b>`
+        }
+      </div>
+    `;
+  }
+
+  renderHome();
+  renderRecords();
+  renderAnalysis();
+}
 async function importTestJasfLaps(options={}){
   try{
     setStatus('公式結果からラップを取得しています…','notice');
@@ -1164,8 +1244,8 @@ let trendOptions=trendKeys.map(key=>{
         <button onclick="fetchJasfLatest('${p.id}')">
           🔄 全競技者IDの年度別ベストを同期
         </button>
-        <button class="secondary" onclick="importTestJasfLaps()">
-  🏊 公式結果からラップ取込
+        <button class="secondary" onclick="updateAllPlayersJasfLaps()">
+  🏊 全選手の公式ラップを一括更新
 </button>
         <button class="secondary" onclick="cleanupJasfDuplicates('${p.id}')">
           🧹 重複した公式記録を整理
