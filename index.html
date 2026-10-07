@@ -1287,17 +1287,178 @@ async function addRecord(){
 
 let recordsPlayerFilter='';
 function renderRecords(){
-  const selected=recordsPlayerFilter && PLAYERS.some(p=>String(p.id)===String(recordsPlayerFilter)) ? recordsPlayerFilter : '';
+  const selected=
+    recordsPlayerFilter &&
+    PLAYERS.some(p=>String(p.id)===String(recordsPlayerFilter))
+      ? recordsPlayerFilter
+      : '';
+
   recordsPlayerFilter=selected;
+
   let rs=[...records]
     .filter(r=>!selected || String(r.swimmer_id)===String(selected))
-    .sort((a,b)=>String(b.record_date||'').localeCompare(String(a.record_date||'')) || String(b.created_at||'').localeCompare(String(a.created_at||'')));
-  const options=PLAYERS.map(p=>`<option value="${p.id}" ${String(p.id)===String(selected)?'selected':''}>${p.name}</option>`).join('');
-  $('#records').innerHTML=`<div class="card"><h2>📋 タイム履歴</h2>
-    <div class="field"><label>選手で絞り込み</label><select id="recordsPlayerFilter" onchange="recordsPlayerFilter=this.value;renderRecords()"><option value="">全選手</option>${options}</select></div>
-    <div class="muted small" style="margin-bottom:8px">${selected?(playerById(selected)?.name||'選手')+'：'+rs.length+'件':'全選手：'+rs.length+'件'}</div>
-    ${rs.map(r=>{let p=playerById(r.swimmer_id);return `<div class="row"><div><b>${p?.name||'選手'}</b><br><span class="muted">${r.record_date||''}・${r.stroke} ${r.distance}m・${r.course}</span><br>${r.is_jo_qualified?'<span class="badge">JO突破</span> ':''}${r.is_personal_best?'<span class="badge">BEST</span> ':''}</div><div style="text-align:right"><b>${fmt(r.time_seconds)}</b><br><button class="secondary" onclick="editRecord('${r.id}')">編集</button>
-<button class="danger" onclick="delRecord('${r.id}')">削除</button></div></div>`}).join('')||'<p class="muted">この選手の記録はありません。</p>'}</div>`
+    .sort((a,b)=>
+      String(b.record_date||'').localeCompare(String(a.record_date||'')) ||
+      String(b.created_at||'').localeCompare(String(a.created_at||''))
+    );
+
+  const options=PLAYERS.map(p=>
+    `<option value="${p.id}" ${
+      String(p.id)===String(selected)?'selected':''
+    }>${p.name}</option>`
+  ).join('');
+
+  $('#records').innerHTML=`
+    <div class="card">
+      <h2>📋 タイム履歴</h2>
+
+      <div class="field">
+        <label>選手で絞り込み</label>
+        <select
+          id="recordsPlayerFilter"
+          onchange="recordsPlayerFilter=this.value;renderRecords()"
+        >
+          <option value="">全選手</option>
+          ${options}
+        </select>
+      </div>
+
+      <div class="muted small" style="margin-bottom:8px">
+        ${
+          selected
+            ? (playerById(selected)?.name||'選手')+'：'+rs.length+'件'
+            : '全選手：'+rs.length+'件'
+        }
+      </div>
+
+      ${
+        rs.map(r=>{
+          const p=playerById(r.swimmer_id);
+
+          // =========================
+          // ラップデータ
+          // =========================
+          let laps=[];
+
+          if(Array.isArray(r.laps)){
+            laps=r.laps;
+          }else if(typeof r.laps==='string'){
+            try{
+              const parsed=JSON.parse(r.laps);
+              if(Array.isArray(parsed)) laps=parsed;
+            }catch(e){
+              console.warn('laps parse error',e);
+            }
+          }
+
+          const lapHtml=laps.length
+            ? `
+              <div
+                style="
+                  margin-top:10px;
+                  padding:10px 12px;
+                  background:#f3f9ff;
+                  border-radius:10px;
+                  font-size:14px;
+                "
+              >
+                <div style="font-weight:700;margin-bottom:6px">
+                  🏊 ラップ
+                </div>
+
+                ${laps.map(l=>`
+                  <div
+                    style="
+                      display:flex;
+                      justify-content:space-between;
+                      gap:12px;
+                      padding:4px 0;
+                      border-bottom:1px solid rgba(0,0,0,.06);
+                    "
+                  >
+                    <span>
+                      <b>${l.distance}m</b>
+                    </span>
+
+                    <span style="text-align:right">
+                      通過
+                      <b>${l.cumulative_time||'-'}</b>
+                      <span class="muted">
+                        ／ Split ${l.split_time||'-'}
+                      </span>
+                    </span>
+                  </div>
+                `).join('')}
+              </div>
+            `
+            : '';
+
+          return `
+            <div class="row">
+              <div style="flex:1;min-width:0">
+
+                <b>${p?.name||'選手'}</b>
+
+                <br>
+
+                <span class="muted">
+                  ${r.record_date||''}・
+                  ${r.stroke} ${r.distance}m・
+                  ${r.course}
+                </span>
+
+                <br>
+
+                ${
+                  r.is_jo_qualified
+                    ? '<span class="badge">JO突破</span> '
+                    : ''
+                }
+
+                ${
+                  r.is_personal_best
+                    ? '<span class="badge">BEST</span> '
+                    : ''
+                }
+
+                ${lapHtml}
+
+              </div>
+
+              <div
+                style="
+                  text-align:right;
+                  margin-left:12px;
+                  flex-shrink:0;
+                "
+              >
+                <b>${fmt(r.time_seconds)}</b>
+
+                <br>
+
+                <button
+                  class="secondary"
+                  onclick="editRecord('${r.id}')"
+                >
+                  編集
+                </button>
+
+                <button
+                  class="danger"
+                  onclick="delRecord('${r.id}')"
+                >
+                  削除
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('')
+        ||
+        '<p class="muted">この選手の記録はありません。</p>'
+      }
+
+    </div>
+  `;
 }
 async function editRecord(id){
   const r=records.find(x=>String(x.id)===String(id));
