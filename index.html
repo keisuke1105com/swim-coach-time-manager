@@ -617,7 +617,7 @@ for(const item of fetched){
 }
 
 console.log(
-  `JASF LAP SYNC: updated=${lapUpdated}, skipped=${lapSkipped}, failed=${lapFailed}`
+  `JASF LAP SYNC: updated=${lapUpdated}, existing=${lapAlreadyExists}, notTarget=${lapNotTarget}, failed=${lapFailed}`
 );
     // 同期完了時に、この選手の完全一致重複を自動整理する。
     // 公式 ＞ 速報 ＞ 手入力の優先順位で1件だけ残す。
