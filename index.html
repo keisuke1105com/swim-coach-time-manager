@@ -495,22 +495,51 @@ async function fetchJasfLatest(playerId){
 // 100m以上の記録だけを対象にする
 // 1件失敗しても同期全体は止めない
 // ========================================
-let lapUpdated = 0;
-let lapSkipped = 0;
-let lapFailed = 0;
+let lapUpdated = 0;          // 今回新しく取得・更新
+let lapAlreadyExists = 0;    // すでにラップ取得済み
+let lapNotTarget = 0;        // 50mなど対象外
+let lapFailed = 0;           // 取得失敗
 
 for(const item of fetched){
   const x = item.x;
 
-  // result_id がない記録は取得できない
+  // result_id がない記録は対象外
   if(!x?.result_id){
-    lapSkipped++;
+    lapNotTarget++;
     continue;
   }
 
-  // 50m種目は途中ラップがないので取得しない
+  // 50m種目は途中ラップがないので対象外
   if(Number(item.distance) < 100){
-    lapSkipped++;
+    lapNotTarget++;
+    continue;
+  }
+
+  const incomingResultId = String(x.result_id);
+
+  // ==========================================
+  // すでにSupabaseに保存されている同じ公式記録を探す
+  // memo内の result_id を使って照合
+  // ==========================================
+  const existingRecord = records.find(r =>
+    String(r.swimmer_id) === String(playerId) &&
+    String(extractJasfResultId(r.memo || '')) === incomingResultId
+  );
+
+  // laps がすでに入っていれば公式APIへ再アクセスしない
+  let existingLaps = existingRecord?.laps;
+
+  // JSON文字列で保存されている場合にも対応
+  if(typeof existingLaps === 'string'){
+    try{
+      existingLaps = JSON.parse(existingLaps);
+    }catch(e){
+      existingLaps = [];
+    }
+  }
+
+  if(Array.isArray(existingLaps) && existingLaps.length > 0){
+    lapAlreadyExists++;
     continue;
   }
 
@@ -518,7 +547,7 @@ for(const item of fetched){
   const recordDate = jasfRecordDate(item.year, x.result_date);
 
   if(!Number.isFinite(timeSeconds) || !recordDate){
-    lapSkipped++;
+    lapNotTarget++;
     continue;
   }
 
@@ -532,10 +561,12 @@ for(const item of fetched){
       stroke: item.stroke,
       distance: Number(item.distance),
       course: item.course,
-waterway_code: item.waterwayCode,
-swimming_style_code: item.swimmingStyleCode,
-distance_code: item.distanceCode,
-race_division_code: 0,
+
+      waterway_code: item.waterwayCode,
+      swimming_style_code: item.swimmingStyleCode,
+      distance_code: item.distanceCode,
+      race_division_code: 0,
+
       record_date: recordDate,
       time_seconds: timeSeconds,
 
@@ -544,13 +575,21 @@ race_division_code: 0,
         x.game_name ||
         '日本水泳連盟公式記録',
 
-      result_id: String(x.result_id)
+      result_id: incomingResultId
     });
 
     if(lapResult?.success){
       lapUpdated++;
+
+      // 同じ同期処理中に再判定できるよう、
+      // ローカルrecordsにも取得結果を反映
+      if(existingRecord && Array.isArray(lapResult.laps)){
+        existingRecord.laps = lapResult.laps;
+      }
+
     }else{
       lapFailed++;
+
       console.warn(
         'JASF lap import skipped:',
         item.stroke,
@@ -563,15 +602,15 @@ race_division_code: 0,
   }catch(err){
     lapFailed++;
 
-    // 1件のラップ取得失敗で公式記録同期全体を止めない
+    // 1件失敗しても同期全体は止めない
     console.warn(
       'JASF lap import failed:',
       {
-        stroke:item.stroke,
-        distance:item.distance,
-        course:item.course,
-        result_id:x.result_id,
-        error:String(err?.message || err)
+        stroke: item.stroke,
+        distance: item.distance,
+        course: item.course,
+        result_id: x.result_id,
+        error: String(err?.message || err)
       }
     );
   }
