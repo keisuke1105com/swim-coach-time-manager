@@ -523,7 +523,7 @@ for(const item of fetched){
   // ==========================================
   const existingRecord = records.find(r =>
     String(r.swimmer_id) === String(playerId) &&
-    String(extractJasfResultId(r.memo || '')) === incomingResultId
+    String(jasfResultIdFromMemo(r.memo || '')) === incomingResultId
   );
 
   // laps がすでに入っていれば公式APIへ再アクセスしない
