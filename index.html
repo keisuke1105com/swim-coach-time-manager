@@ -2419,7 +2419,14 @@ let joRanking=Object.values(
 
     lapPlayerMap[r.swimmer_id].records.push(r);
   });
-
+const lapPlayerOptions = Object.values(lapPlayerMap)
+  .sort((a,b)=>a.player.name.localeCompare(b.player.name,'ja'))
+  .map(g=>`<option value="${g.player.id}">${g.player.name}（${g.records.length}件）</option>`)
+  .join('');
+  const lapPlayerOptions = Object.values(lapPlayerMap)
+  .sort((a,b)=>a.player.name.localeCompare(b.player.name,'ja'))
+  .map(group=>`<option value="${group.player.id}">${group.player.name}</option>`)
+  .join('');
   const lapAnalysisHtml=Object.values(lapPlayerMap).length
     ? Object.values(lapPlayerMap)
         .sort((a,b)=>a.player.name.localeCompare(b.player.name,'ja'))
@@ -2781,12 +2788,13 @@ ${racesHtml}
             }).join('');
 
           return `
-            <details style="
-              margin-top:12px;
-              padding:10px;
-              background:#f8fbfd;
-              border-radius:10px;
-            ">
+            <details class="lap-player-group" data-player-id="${group.player.id}" style="
+  display:none;
+  margin-top:12px;
+  padding:10px;
+  background:#f8fbfd;
+  border-radius:10px;
+">
               <summary style="
                 cursor:pointer;
                 font-size:17px;
@@ -2858,7 +2866,34 @@ ${racesHtml}
         </div>
       </div>
 
-      ${lapAnalysisHtml}
+      <div style="margin-bottom:12px">
+  <label for="lapPlayerSelect">🏊 分析する選手</label>
+  <select id="lapPlayerSelect"
+    onchange="
+      document.querySelectorAll('.lap-player-group').forEach(el=>{
+        el.style.display =
+          el.dataset.playerId===this.value ? '' : 'none';
+      });
+    ">
+    <option value="">選手を選択してください</option>
+    ${lapPlayerOptions}
+  </select>
+</div>
+
+<div style="margin-bottom:14px">
+  <label for="lapPlayerSelect">分析する選手</label>
+  <select id="lapPlayerSelect" onchange="
+    document.querySelectorAll('.lap-player-group').forEach(el=>{
+      el.style.display =
+        el.dataset.playerId===this.value ? '' : 'none';
+    });
+  ">
+    <option value="">選手を選択してください</option>
+    ${lapPlayerOptions}
+  </select>
+</div>
+
+${lapAnalysisHtml}
     </div>
     <div class="card">
       <h2>🏆 全選手・同学年ランキング一括更新</h2>
