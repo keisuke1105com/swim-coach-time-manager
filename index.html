@@ -354,9 +354,22 @@ async function fetchJasfLatest(playerId){
     athleteIds.forEach(athleteId=>[1,2].forEach(waterwayCode=>{
       JASF_EVENTS.forEach(ev=>ev.distances.forEach(d=>{
         jobs.push({
-          athleteId,year:currentYear,course:waterwayCode===1?'長水路':'短水路',stroke:ev.stroke,distance:d.m,
-          promise:fetchJasfRecord(athleteId,currentYear,waterwayCode,ev.styleCode,d.code)
-        });
+  athleteId,
+  year:currentYear,
+  course:waterwayCode===1?'長水路':'短水路',
+  stroke:ev.stroke,
+  distance:d.m,
+  waterwayCode,
+  swimmingStyleCode:ev.styleCode,
+  distanceCode:d.code,
+  promise:fetchJasfRecord(
+    athleteId,
+    currentYear,
+    waterwayCode,
+    ev.styleCode,
+    d.code
+  )
+});
       }));
     }));
 
@@ -370,7 +383,17 @@ async function fetchJasfLatest(playerId){
         const groups=Array.isArray(json?.data?.result)?json.data.result:[];
         groups.forEach(g=>{
           const rows=Array.isArray(g?.data)?g.data:[];
-          rows.forEach(x=>fetched.push({x,athleteId:job.athleteId,course:job.course,year:Number(g.year||json.year||job.year),stroke:job.stroke,distance:job.distance}));
+          rows.forEach(x=>fetched.push({
+  x,
+  athleteId:job.athleteId,
+  course:job.course,
+  year:Number(g.year||json.year||job.year),
+  stroke:job.stroke,
+  distance:job.distance,
+  waterwayCode:job.waterwayCode,
+  swimmingStyleCode:job.swimmingStyleCode,
+  distanceCode:job.distanceCode
+}));
         });
       }else{
         const msg=String(r.reason?.message||r.reason||'');
@@ -509,7 +532,10 @@ for(const item of fetched){
       stroke: item.stroke,
       distance: Number(item.distance),
       course: item.course,
-
+waterway_code: item.waterwayCode,
+swimming_style_code: item.swimmingStyleCode,
+distance_code: item.distanceCode,
+race_division_code: 0,
       record_date: recordDate,
       time_seconds: timeSeconds,
 
