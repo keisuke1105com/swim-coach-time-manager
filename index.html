@@ -2384,7 +2384,147 @@ let joRanking=Object.values(
                 .sort((a,b)=>
                   Number(a.time_seconds)-Number(b.time_seconds)
                 )[0];
+// ==========================================
+// 📊 この種目のBEST比較・自動分析
+// ==========================================
+let eventSummaryHtml='';
 
+if(bestRace && Array.isArray(bestRace.laps) && bestRace.laps.length){
+
+  const latestRace=raceRows[0];
+
+  if(latestRace && String(latestRace.id)!==String(bestRace.id)){
+
+    const comparisons=[];
+
+    latestRace.laps.forEach((lap,index)=>{
+      const bestLap=bestRace.laps[index];
+      if(!bestLap)return;
+
+      const latestSplit=sec(lap.split_time);
+      const bestSplit=sec(bestLap.split_time);
+
+      if(
+        Number.isFinite(latestSplit) &&
+        Number.isFinite(bestSplit)
+      ){
+        comparisons.push({
+          distance:lap.distance,
+          diff:latestSplit-bestSplit
+        });
+      }
+    });
+
+    const totalDiff=
+      Number(latestRace.time_seconds) -
+      Number(bestRace.time_seconds);
+
+    let analysisText='';
+
+    if(comparisons.length){
+
+      const worst=[...comparisons]
+        .sort((a,b)=>b.diff-a.diff)[0];
+
+      const best=[...comparisons]
+        .sort((a,b)=>a.diff-b.diff)[0];
+
+      if(totalDiff < -0.005){
+        analysisText=
+          `最新レースはBESTを${Math.abs(totalDiff).toFixed(2)}秒更新しています。`;
+      }
+      else if(Math.abs(totalDiff)<=0.005){
+        analysisText=
+          `最新レースはBESTとほぼ同タイムです。`;
+      }
+      else{
+        analysisText=
+          `最新レースはBESTまであと${totalDiff.toFixed(2)}秒です。`;
+      }
+
+      if(worst && worst.diff>0.005){
+        analysisText+=
+          ` 特に${worst.distance}m区間でBESTより${worst.diff.toFixed(2)}秒遅く、この区間が改善ポイントです。`;
+      }
+
+      if(best && best.diff<-0.005){
+        analysisText+=
+          ` 一方、${best.distance}m区間はBESTより${Math.abs(best.diff).toFixed(2)}秒速く泳げています。`;
+      }
+    }
+
+    const comparisonRows=comparisons.map(c=>{
+      const good=c.diff<0;
+      const equal=Math.abs(c.diff)<=0.005;
+
+      const mark=equal
+        ? '＝'
+        : good
+          ? '🟢'
+          : '🔴';
+
+      const diffText=equal
+        ? '±0.00秒'
+        : `${c.diff>0?'+':''}${c.diff.toFixed(2)}秒`;
+
+      return `
+        <div style="
+          display:flex;
+          justify-content:space-between;
+          gap:10px;
+          padding:5px 0;
+          border-bottom:1px solid #e7edf2;
+        ">
+          <span>${mark} ${c.distance}m区間</span>
+          <b>${diffText}</b>
+        </div>
+      `;
+    }).join('');
+
+    eventSummaryHtml=`
+      <div style="
+        margin:12px 0;
+        padding:12px;
+        background:#eef7ff;
+        border-radius:10px;
+      ">
+        <b>🔍 最新レース vs BEST</b>
+
+        <div style="
+          margin-top:8px;
+          display:flex;
+          justify-content:space-between;
+        ">
+          <span>TOTAL</span>
+          <b>
+            ${totalDiff>=0?'+':''}${totalDiff.toFixed(2)}秒
+          </b>
+        </div>
+
+        <div style="margin-top:6px">
+          ${comparisonRows}
+        </div>
+
+        ${
+          analysisText
+            ? `
+              <div style="
+                margin-top:10px;
+                padding:10px;
+                background:white;
+                border-radius:8px;
+                line-height:1.6;
+              ">
+                <b>🧠 レース分析</b><br>
+                ${analysisText}
+              </div>
+            `
+            : ''
+        }
+      </div>
+    `;
+  }
+}
               const racesHtml=raceRows.map(r=>{
 
                 const isBest=
@@ -2554,7 +2694,8 @@ let joRanking=Object.values(
                     </span>
                   </summary>
 
-                  ${racesHtml}
+                  ${eventSummaryHtml}
+${racesHtml}
                 </details>
               `;
             }).join('');
