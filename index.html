@@ -970,6 +970,9 @@ let trendOptions=trendKeys.map(key=>{
         <button onclick="fetchJasfLatest('${p.id}')">
           🔄 全競技者IDの年度別ベストを同期
         </button>
+        <button class="secondary" onclick="importTestJasfLaps()">
+  🏊 公式結果からラップ取込
+</button>
         <button class="secondary" onclick="cleanupJasfDuplicates('${p.id}')">
           🧹 重複した公式記録を整理
         </button>
