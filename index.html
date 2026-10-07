@@ -467,7 +467,24 @@ async function fetchJasfLatest(playerId){
       if(incomingResultId)existingOfficialResultIds.add(incomingResultId);
       existingOfficialFallbackKeys.add(fallbackKey);
     }
+    // 公式記録のラップも取得する
+    for(const item of fetched){
+      const x=item.x;
+      if(!x?.result_id) continue;
 
+      await importTestJasfLaps({
+        silent:true,
+        athlete_id:item.athleteId,
+        swimmer_id:playerId,
+        stroke:item.stroke,
+        distance:item.distance,
+        course:item.course,
+        record_date:jasfRecordDate(item.year,x.result_date),
+        time_seconds:sec(x.result_time),
+        meet_name:x.game_short_name||x.game_name||'日本水泳連盟公式記録',
+        result_id:String(x.result_id)
+      });
+    }
     // 同期完了時に、この選手の完全一致重複を自動整理する。
     // 公式 ＞ 速報 ＞ 手入力の優先順位で1件だけ残す。
     const autoCleaned=await cleanupExactDuplicatesForPlayerSilent(playerId);
@@ -487,7 +504,7 @@ async function fetchJasfLatest(playerId){
     box.innerHTML=`<div class="error">公式記録の同期に失敗しました。<br><span class="small">${String(e.message||e)}</span></div>`;
   }
 }
-async function importTestJasfLaps(){
+async function importTestJasfLaps(options={}){
   try{
     setStatus('公式結果からラップを取得しています…','notice');
 
@@ -498,7 +515,7 @@ async function importTestJasfLaps(){
         'Content-Type':'application/json',
         'apikey':window.SUPABASE_PUBLISHABLE_KEY
       },
-      body:JSON.stringify({})
+      body:JSON.stringify(options)
     });
 
     const json=await res.json();
@@ -509,7 +526,9 @@ async function importTestJasfLaps(){
 
     await loadCloud();
     renderHome();
-
+if(options.silent){
+  return json;
+}
     alert(
       `ラップ取込完了\n\n`+
       `${json.swimmer}\n`+
