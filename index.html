@@ -515,7 +515,7 @@ async function importTestJasfLaps(){
       `${json.swimmer}\n`+
       `${json.time}\n\n`+
       json.laps.map(l=>
-        `${l.distance}m：${l.cumulative_time}（区間 ${l.split_time}）`
+        `${l.distance}m：${l.cumulative_time}（ラップ ${l.split_time}）`
       ).join('\n')
     );
 
