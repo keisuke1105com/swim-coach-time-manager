@@ -1398,6 +1398,9 @@ function showPlayerLapComparison(playerId) {
           <div style="display:flex;align-items:center;gap:16px;margin-top:5px">
   <span style="width:55px;flex-shrink:0">${l.distance}m</span>
   <b>${l.cumulative_time || '-'}</b>
+  <span style="color:#718096;font-size:12px">
+    ラップ ${l.split_time || '-'}
+  </span>
 </div>
         `).join('')}
       </div>
