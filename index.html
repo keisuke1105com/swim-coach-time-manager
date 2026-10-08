@@ -1540,6 +1540,89 @@ const signed = n => {
     summary = '<p class="muted small">比較できるラップ付き記録が不足しています。</p>';
   }
 
+  // JO目標ラップ：自己ベストの実際の区間ラップを基準にした参考シミュレーション。
+  // レース記録や公式標準記録そのものは変更しない。
+  let joTargetHtml = '';
+  const raceMeters = Number(distance);
+  const joDate = joMeetInfo(new Date().toISOString().slice(0,10))?.date || null;
+  const joStandard = standard(playerId, stroke, raceMeters, course, joDate);
+  const fastest = [...valid].sort((a,b) => Number(a.time_seconds)-Number(b.time_seconds))[0];
+  const fastestLaps = fastest ? getLaps(fastest) : [];
+  const segments = [];
+  let previousMeters = 0;
+  for (const lap of fastestLaps) {
+    if (lap.distance > previousMeters && lap.distance <= raceMeters && Number.isFinite(lap.split) && lap.split > 0) {
+      segments.push({distance:lap.distance, start:previousMeters, split:lap.split});
+      previousMeters = lap.distance;
+    }
+  }
+  const fullLaps = segments.length > 0 && previousMeters === raceMeters &&
+    Math.abs(segments.reduce((sum,l)=>sum+l.split,0)-Number(fastest.time_seconds)) < 0.15;
+  if (Number.isFinite(joStandard) && joStandard > 0 && fastest && fullLaps) {
+    const bestSeconds = Number(fastest.time_seconds);
+    const required = bestSeconds - joStandard;
+    const eventLabel = `${stroke} ${raceMeters}m・${course}`;
+    const targetCents = Math.round(joStandard * 100);
+    const currentCents = segments.map(x=>Math.round(x.split*100));
+    const allocate = (weights) => {
+      // 合計がJO標準と完全一致するよう0.01秒単位で端数を調整。
+      const weightTotal = weights.reduce((a,b)=>a+b,0);
+      const improvement = Math.round(bestSeconds*100)-targetCents;
+      const raw = weights.map(w=>improvement*w/weightTotal);
+      const cuts = raw.map(v=>Math.floor(v));
+      let remainder = improvement-cuts.reduce((a,b)=>a+b,0);
+      const order = raw.map((v,i)=>({i,fraction:v-Math.floor(v)})).sort((a,b)=>b.fraction-a.fraction);
+      for(let j=0;j<remainder;j++) cuts[order[j%order.length].i]++;
+      const out = currentCents.map((v,i)=>v-cuts[i]);
+      // 記録の丸め誤差も最後の区間で補正する。
+      out[out.length-1] += targetCents-out.reduce((a,b)=>a+b,0);
+      return out;
+    };
+    const formatCents = cents => fmt(cents/100);
+    if (required > 0.005) {
+      const midpoint = raceMeters/2;
+      const plans = [
+        {name:'均等短縮型',weights:segments.map(()=>1),note:'各区間をほぼ同じ秒数ずつ短縮'},
+        {name:'後半強化型',weights:segments.map(x=>x.start>=midpoint?2:1),note:'後半の区間に短縮目標を多めに配分'},
+        {name:'前半強化型',weights:segments.map(x=>x.start<midpoint?2:1),note:'前半の区間に短縮目標を多めに配分'}
+      ];
+      const tables = plans.map((plan,i)=>{
+        const targets = allocate(plan.weights);
+        const possible = targets.every(x=>x>0);
+        if (!possible) return '';
+        let cumulative=0;
+        const rows = targets.map((t,j)=>{
+          cumulative+=t;
+          const diff=(currentCents[j]-t)/100;
+          return `<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;padding:7px 0;border-bottom:1px solid #e6eef4;align-items:center">
+            <span>${segments[j].distance}m区間</span><span style="color:#64748b">${formatCents(currentCents[j])}</span><b>${formatCents(t)} <span style="color:#16803b;font-size:12px">(-${diff.toFixed(2)})</span></b>
+          </div>`;
+        }).join('');
+        return `<div class="jo-lap-plan" data-jo-plan="${i}" style="display:${i===0?'block':'none'}">
+          <div class="muted small" style="margin:8px 0">${plan.note} ／ 左：BEST区間、右：目標区間</div>${rows}
+          <div style="display:flex;justify-content:space-between;margin-top:10px"><b>目標合計</b><b>${formatCents(cumulative)}</b></div>
+        </div>`;
+      }).join('');
+      joTargetHtml = `<div style="background:#f0fdf4;border:1px solid #bbebcb;border-radius:12px;padding:14px;margin:14px 0;line-height:1.6">
+        <b>🎯 JO突破への目標ラップ</b><div class="small muted">${eventLabel} ／ ${joDate||'登録区分'}基準</div>
+        <div style="display:flex;justify-content:space-between;gap:8px;margin-top:8px"><span>現在BEST</span><b>${fmt(bestSeconds)}</b></div>
+        <div style="display:flex;justify-content:space-between;gap:8px"><span>JO標準</span><b>${fmt(joStandard)}</b></div>
+        <div style="display:flex;justify-content:space-between;gap:8px"><span>必要な短縮</span><b style="color:#15803d">${required.toFixed(2)}秒</b></div>
+        <label class="small" style="display:block;margin-top:12px;font-weight:700" for="joLapPlanSelect">目標の立て方</label>
+        <select id="joLapPlanSelect" style="margin-top:5px" onchange="document.querySelectorAll('.jo-lap-plan').forEach((e,i)=>e.style.display=i===Number(this.value)?'block':'none')">
+          ${plans.map((p,i)=>`<option value="${i}">${p.name}</option>`).join('')}
+        </select>${tables}
+        <p class="muted small" style="margin:10px 0 0">※BESTのラップから逆算した参考目標です。実現可能性や理想的な配分を保証するものではありません。泳法・体力・レース展開に合わせてコーチが調整してください。</p>
+      </div>`;
+    } else {
+      joTargetHtml = `<div class="result good" style="margin:12px 0"><b>🏆 JO標準突破済み！</b><div class="small">BEST ${fmt(bestSeconds)} ／ JO標準 ${fmt(joStandard)}</div></div>`;
+    }
+  } else if (joStandard == null) {
+    joTargetHtml = '<div class="result small muted">🎯 JO目標ラップ：この種目・年齢区分の標準記録が見つかりません。</div>';
+  } else {
+    joTargetHtml = '<div class="result small muted">🎯 JO目標ラップ：BESTの全区間ラップがそろうと表示できます。</div>';
+  }
+
   const history = selected.map(r => {
     const laps = getLaps(r);
     if (!laps.length) return '';
@@ -1562,6 +1645,7 @@ const signed = n => {
 
   target.innerHTML =
     summary +
+    joTargetHtml +
     '<h4 style="margin:16px 0 6px">📋 ラップ履歴</h4>' +
     (history || '<p class="muted">ラップデータがありません。</p>');
 }
