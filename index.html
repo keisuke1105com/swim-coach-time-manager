@@ -964,12 +964,15 @@ async function fetchAllRows(table,buildQuery,pageSize=1000){
 async function loadCloud(){
   setStatus('クラウドから読み込み中…');
   try{
-    const [p,r]=await Promise.all([
-      fetchAllRows('swimmers',q=>q.eq('active',true).order('sort_order')),
-      fetchAllRows('swim_records',q=>q.order('created_at'))
-    ]);
-    PLAYERS=p;
-    records=r;
+    const [p,r,m]=await Promise.all([
+  fetchAllRows('swimmers',q=>q.eq('active',true).order('sort_order')),
+  fetchAllRows('swim_records',q=>q.order('created_at')),
+  fetchAllRows('swim_manual_laps',q=>q.order('distance'))
+]);
+
+PLAYERS=p;
+records=r;
+manualLaps=m;
     setStatus('');
   }catch(e){
     setStatus('クラウドDBにアクセスできません。RLSポリシーを確認してください。 '+String(e?.message||e||''),'error');
@@ -1430,8 +1433,8 @@ async function addRecord(){
   alert(isBest?(jo?'🏆 JO突破＆自己ベスト更新！':'🔥 自己ベスト更新！'):(jo?'🏆 JO突破！':'記録を保存しました'));
   renderHome();renderInput();
 }
-
 let recordsPlayerFilter='';
+let manualLaps=[];
 function renderRecords(){
   const selected=
     recordsPlayerFilter &&
@@ -1496,8 +1499,36 @@ function renderRecords(){
               console.warn('laps parse error',e);
             }
           }
+// 公式ラップと手入力ラップを統合する
+const officialLaps = laps.map(l => ({
+  ...l,
+  lap_source: 'official'
+}));
 
-          const lapHtml=laps.length
+const addedLaps = manualLaps
+  .filter(m => String(m.record_id) === String(r.id))
+  .map(m => ({
+    distance: Number(m.distance),
+    cumulative_time: fmt(Number(m.cumulative_seconds)),
+    lap_source: 'manual'
+  }));
+
+const combinedLaps = [...officialLaps, ...addedLaps]
+  .sort((a, b) => Number(a.distance) - Number(b.distance));
+          // 距離順の通過タイムから区間Splitを計算
+let previousTime = 0;
+
+combinedLaps.forEach(l => {
+  const currentTime = sec(String(l.cumulative_time || ''));
+
+  if (Number.isFinite(currentTime) && currentTime >= previousTime) {
+    l.split_time = fmt(currentTime - previousTime);
+    previousTime = currentTime;
+  } else {
+    l.split_time = '-';
+  }
+});
+          const lapHtml=combinedLaps.length
             ? `
               <div
                 style="
@@ -1512,7 +1543,7 @@ function renderRecords(){
                   🏊 ラップ
                 </div>
 
-                ${laps.map(l=>`
+                ${combinedLaps.map(l=>`
                   <div
                     style="
                       display:flex;
@@ -1523,7 +1554,14 @@ function renderRecords(){
                     "
                   >
                     <span>
-                      <b>${l.distance}m</b>
+                      <b>
+  ${l.distance}m
+  ${
+    l.lap_source === 'manual'
+      ? '<span style="color:#e67e22;font-size:11px">✏️手入力</span>'
+      : '<span style="color:#2980b9;font-size:11px">公式</span>'
+  }
+</b>
                     </span>
 
                     <span style="text-align:right">
@@ -1581,11 +1619,16 @@ function renderRecords(){
                 <b>${fmt(r.time_seconds)}</b>
 
                 <br>
-
+<button
+  class="secondary"
+  onclick="addManualLap('${r.id}')"
+>
+  ✏️ 通過タイム入力
+</button>
                 <button
                   class="secondary"
                   onclick="editRecord('${r.id}')"
-                >
+                
                   編集
                 </button>
 
@@ -1605,6 +1648,120 @@ function renderRecords(){
 
     </div>
   `;
+}
+  async function addManualLap(recordId){
+  const r=records.find(x=>String(x.id)===String(recordId));
+  if(!r){
+    alert('記録が見つかりません。');
+    return;
+  }
+
+  const distanceText=prompt(
+    '通過距離を入力してください（例：25、75、150）'
+  );
+  if(distanceText===null)return;
+
+  const distance=Number(distanceText);
+  if(
+    !Number.isInteger(distance) ||
+    distance<=0 ||
+    distance>=Number(r.distance)
+  ){
+    alert('レース距離より短い正しい通過距離を入力してください。');
+    return;
+  }
+
+  const existingManual=manualLaps.find(m=>
+    String(m.record_id)===String(recordId) &&
+    Number(m.distance)===distance
+  );
+
+  if(existingManual){
+    alert('この距離には手入力データがあります。');
+    return;
+  }
+
+  let official=[];
+  try{
+    official=Array.isArray(r.laps)
+      ? r.laps
+      : JSON.parse(r.laps||'[]');
+  }catch(e){
+    official=[];
+  }
+
+  if(official.some(l=>Number(l.distance)===distance)){
+    alert('この距離には公式通過タイムがあります。公式データは変更できません。');
+    return;
+  }
+
+  const timeText=prompt(
+    `${distance}mの通過タイムを入力してください\n例：15.20 または 1:02.35`
+  );
+  if(timeText===null)return;
+
+  const timeSeconds=sec(timeText.trim());
+
+  if(!Number.isFinite(timeSeconds)||timeSeconds<=0){
+    alert('正しいタイムを入力してください。');
+    return;
+  }
+
+  if(timeSeconds>=Number(r.time_seconds)){
+    alert('通過タイムはゴールタイムより短くしてください。');
+    return;
+  }
+
+  const checkpoints=[
+    {distance:0,time:0},
+    ...official.map(l=>({
+      distance:Number(l.distance),
+      time:sec(String(l.cumulative_time||''))
+    })),
+    ...manualLaps
+      .filter(m=>String(m.record_id)===String(recordId))
+      .map(m=>({
+        distance:Number(m.distance),
+        time:Number(m.cumulative_seconds)
+      })),
+    {distance:Number(r.distance),time:Number(r.time_seconds)}
+  ].filter(x=>Number.isFinite(x.distance)&&Number.isFinite(x.time));
+
+  const before=checkpoints
+    .filter(x=>x.distance<distance)
+    .sort((a,b)=>b.distance-a.distance)[0];
+
+  const after=checkpoints
+    .filter(x=>x.distance>distance)
+    .sort((a,b)=>a.distance-b.distance)[0];
+
+  if(
+    !before || !after ||
+    timeSeconds<=before.time ||
+    timeSeconds>=after.time
+  ){
+    alert('前後の通過タイムと矛盾しています。入力値を確認してください。');
+    return;
+  }
+
+  const {data,error}=await sb
+    .from('swim_manual_laps')
+    .insert({
+      record_id:r.id,
+      distance,
+      cumulative_seconds:timeSeconds
+    })
+    .select()
+    .single();
+
+  if(error){
+    alert('保存できませんでした：'+error.message);
+    return;
+  }
+
+  manualLaps.push(data);
+  renderRecords();
+  alert(`${distance}mの通過タイムを保存しました。`);
 }
 async function editRecord(id){
   const r=records.find(x=>String(x.id)===String(id));
