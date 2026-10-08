@@ -2075,26 +2075,21 @@ function normalizeJasfName(v){return String(v||'').normalize('NFKC').replace(/[\
 async function fetchJasfRankingPage(player,stroke,distance,course,year=2026,schoolClassCode='99',schoolGrade='99',swimmerName='',page=1){
   const codes=jasfEventCodes(stroke,distance);
   if(!codes)throw new Error(`${stroke}${distance}m はランキングAPIのコード対応がありません。`);
-  const params=new URLSearchParams({year:String(year),waterway_code:course==='短水路'?'2':'1',gender_code:String(jasfGenderCode(player)),distance_code:String(codes.distanceCode),swimming_style_code:String(codes.styleCode),school_class_code:String(schoolClassCode??99),school_grade:String(schoolGrade??99),swimmer_name:swimmerName,page:String(page)});
-  const url=`https://result.swim.or.jp/api/v1/rankings/results?${params.toString()}`;
-  let lastError=null;
-  for(let attempt=1;attempt<=3;attempt++){
-    try{
-      const controller=new AbortController();
-      const timer=setTimeout(()=>controller.abort(),15000);
-      const res=await fetch(url,{headers:{Accept:'application/json'},signal:controller.signal});
-      clearTimeout(timer);
-      const text=await res.text();let json=null;try{json=JSON.parse(text)}catch(e){}
-      if(!res.ok)throw new Error(`HTTP ${res.status}`);
-      if(!json)throw new Error('ランキングAPIの応答をJSONとして読み取れませんでした。');
-      return Array.isArray(json.data)?json.data:Array.isArray(json?.data?.data)?json.data.data:[];
-    }catch(e){
-      lastError=e;
-      if(attempt<3)await new Promise(r=>setTimeout(r,500*attempt));
-    }
-  }
-  throw lastError||new Error('ランキングAPI取得失敗');
+  const {data:{session:activeSession},error:sessionError}=await sb.auth.getSession();
+  if(sessionError||!activeSession?.access_token)throw new Error('ログインし直してください。');
+  const url=String(window.SUPABASE_URL||'').replace(/\/$/,'')+'/functions/v1/jasf-ranking';
+  const body={year:Number(year),waterway_code:course==='短水路'?2:1,gender_code:jasfGenderCode(player),distance_code:codes.distanceCode,swimming_style_code:codes.styleCode,school_class_code:String(schoolClassCode??99),school_grade:String(schoolGrade??99),swimmer_name:swimmerName,page:Number(page)};
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),22000);
+  try{
+    const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','apikey':window.SUPABASE_PUBLISHABLE_KEY,'Authorization':'Bearer '+activeSession.access_token},body:JSON.stringify(body),signal:controller.signal});
+    const json=await res.json();
+    if(!res.ok||!json.success)throw new Error([json.error,json.detail].filter(Boolean).join(' / ')||`HTTP ${res.status}`);
+    if(!Array.isArray(json.data))throw new Error('ランキング応答形式が不正です');
+    return json.data;
+  }finally{clearTimeout(timer);}
 }
+
 function jasfSchoolInfo(x){
   const sc=x?.swimmers?.school_class||x?.school_class||{};
   let grade=x?.swimmers?.school_grade??x?.school_grade??null;
