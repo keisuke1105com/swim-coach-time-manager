@@ -2503,39 +2503,61 @@ if(bestRace && Array.isArray(bestRace.laps) && bestRace.laps.length){
       Number(latestRace.time_seconds) -
       Number(bestRace.time_seconds);
 
-    let analysisText='';
+    
+let analysisText='';
 
-    if(comparisons.length){
+if(comparisons.length){
+  const sorted=[...comparisons].sort((a,b)=>b.diff-a.diff);
+  const worst=sorted[0];
+  const improved=[...comparisons]
+    .filter(c=>c.diff < -0.005)
+    .sort((a,b)=>a.diff-b.diff);
+  const best=improved[0];
 
-      const worst=[...comparisons]
-        .sort((a,b)=>b.diff-a.diff)[0];
+  // ① レース全体の評価
+  if(totalDiff < -0.005){
+    analysisText=
+      `🏆 成長：最新レースはBESTを${Math.abs(totalDiff).toFixed(2)}秒更新しています。`;
+  }else if(Math.abs(totalDiff)<=0.005){
+    analysisText='🏊 最新レースはBESTとほぼ同タイムです。';
+  }else{
+    analysisText=
+      `🎯 課題：BESTとの差は${totalDiff.toFixed(2)}秒です。`;
+  }
 
-      const best=[...comparisons]
-        .sort((a,b)=>a.diff-b.diff)[0];
+  // ② 改善が必要な区間
+  if(worst && worst.diff > 0.005){
+    analysisText+=
+      `\n🔴 改善ポイント：${worst.distance}m区間はBESTより${worst.diff.toFixed(2)}秒遅く、この区間の改善が重要です。`;
+  }
 
-      if(totalDiff < -0.005){
-        analysisText=
-          `最新レースはBESTを${Math.abs(totalDiff).toFixed(2)}秒更新しています。`;
-      }
-      else if(Math.abs(totalDiff)<=0.005){
-        analysisText=
-          `最新レースはBESTとほぼ同タイムです。`;
-      }
-      else{
-        analysisText=
-          `最新レースはBESTまであと${totalDiff.toFixed(2)}秒です。`;
-      }
+  // ③ 成長した区間
+  if(best){
+    analysisText+=
+      `\n🟢 成長ポイント：${best.distance}m区間はBESTより${Math.abs(best.diff).toFixed(2)}秒速く泳げています。`;
+  }
 
-      if(worst && worst.diff>0.005){
-        analysisText+=
-          ` 特に${worst.distance}m区間でBESTより${worst.diff.toFixed(2)}秒遅く、この区間が改善ポイントです。`;
-      }
+  // ④ 前半・後半の傾向（100m・200mなど）
+  if(comparisons.length>=2){
+    const first=comparisons[0];
+    const last=comparisons[comparisons.length-1];
 
-      if(best && best.diff<-0.005){
-        analysisText+=
-          ` 一方、${best.distance}m区間はBESTより${Math.abs(best.diff).toFixed(2)}秒速く泳げています。`;
-      }
+    if(first.diff>0.005 && last.diff< -0.005){
+      analysisText+=
+        '\n💡 指導ポイント：前半の入りを改善しつつ、後半の良い泳ぎを維持しましょう。';
+    }else if(first.diff< -0.005 && last.diff>0.005){
+      analysisText+=
+        '\n💡 指導ポイント：前半は改善しています。後半のペース維持を意識しましょう。';
+    }else if(comparisons.every(c=>c.diff<=0.005)){
+      analysisText+=
+        '\n💡 指導ポイント：各区間ともBESTと同等以上です。現在のレース展開を継続しましょう。';
+    }else{
+      analysisText+=
+        '\n💡 指導ポイント：区間ごとの差を確認し、タイム差の大きい区間から改善を目指しましょう。';
     }
+  }
+}
+
 
     const comparisonRows=comparisons.map(c=>{
       const good=c.diff<0;
