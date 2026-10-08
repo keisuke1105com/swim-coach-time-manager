@@ -2353,16 +2353,17 @@ async function updatePlayerSameGradeRankings(playerId,{skipCached=false,silent=f
       results.push({r,x,q,cached:data}); processed++;
       await jasfSleep(1200);
     }catch(e){
+      // 通信エラー時は取得済みの正常な順位を上書きしない。
       const data={found:false,error:true,errorMessage:String(e?.message||e),updatedAt:new Date().toISOString()};
-      setNationalRankCache(playerId,r.stroke,r.distance,r.course,data,year);
-      results.push({r,error:data.errorMessage,cached:data}); processed++;
+      if(!cached?.found)setNationalRankCache(playerId,r.stroke,r.distance,r.course,data,year);
+      results.push({r,error:data.errorMessage,cached:cached?.found?cached:data}); processed++;
       await jasfSleep(1200);
     }
     await new Promise(res=>setTimeout(res,350));
   }
   const found=results.filter(v=>v.x||v.cached?.found).length;
   if(box&&!silent){
-    const rows=results.map(v=>{const r=v.r,c=v.cached||{};if(v.error)return `<div class="row"><div><b>${r.stroke} ${r.distance}m</b><br><span class="muted">${r.course}</span></div><span class="small" style="color:#a61b1b;overflow-wrap:anywhere">${escapeRankingError(v.error)}</span></div>`;if(!c.found)return `<div class="row"><div><b>${r.stroke} ${r.distance}m</b><br><span class="muted">${r.course}</span></div><span class="muted">同学年で該当なし</span></div>`;return `<div class="row"><div><b>${r.stroke} ${r.distance}m・${r.course}</b><br><span class="muted">競技者コード ${c.swimmerCode||'-'} ／ アプリBEST ${fmt(r.time_seconds)}</span></div><div style="text-align:right"><b style="font-size:20px">全国 ${c.gradeRank||c.rank}位</b><br><span class="muted">${c.prefRank?`🗻 ${c.prefName||'都道府県内'} ${c.prefRank}位 ／ `:(c.prefStatus==='too_deep'?'🗻 県順位 取得待ち ／ ':c.prefStatus==='pref_unknown'?'🗻 県情報なし ／ ':c.prefStatus==='error'?'🗻 県順位 通信エラー・再取得可 ／ ':'🗻 県順位 再取得可 ／ ')}公式 ${c.officialTime||'-'}</span></div></div>`;}).join('');
+    const rows=results.map(v=>{const r=v.r,c=v.cached||{};if(v.error&&!c.found)return `<div class="row"><div><b>${r.stroke} ${r.distance}m</b><br><span class="muted">${r.course}</span></div><span class="small" style="color:#a61b1b;overflow-wrap:anywhere">${escapeRankingError(v.error)}</span></div>`;if(!c.found)return `<div class="row"><div><b>${r.stroke} ${r.distance}m</b><br><span class="muted">${r.course}</span></div><span class="muted">同学年で該当なし</span></div>`;return `<div class="row"><div><b>${r.stroke} ${r.distance}m・${r.course}</b><br><span class="muted">競技者コード ${c.swimmerCode||'-'} ／ アプリBEST ${fmt(r.time_seconds)}</span></div><div style="text-align:right"><b style="font-size:20px">全国 ${c.gradeRank||c.rank}位</b><br><span class="muted">${c.prefRank?`🗻 ${c.prefName||'都道府県内'} ${c.prefRank}位 ／ `:(c.prefStatus==='too_deep'?'🗻 県順位 取得待ち ／ ':c.prefStatus==='pref_unknown'?'🗻 県情報なし ／ ':c.prefStatus==='error'?'🗻 県順位 通信エラー・再取得可 ／ ':'🗻 県順位 再取得可 ／ ')}公式 ${c.officialTime||'-'}</span></div></div>`;}).join('');
     const failures=results.filter(v=>v.error).length;
     box.innerHTML=`<div class="result ${failures?'':'good'}"><b>${failures?'⚠️ ランキング照合が終了しました（一部通信エラー）':'✅ 同学年ランキングを更新しました'}</b><br><span class="small">${year}年度 ／ ${found}/${results.length}種目で同学年順位を確認${failures?` ／ 通信エラー ${failures}種目`:''}</span>${failures?'<p class="small">各種目のエラー詳細を下に表示しています。通信先の制限（CORS等）の場合は、サーバー側の対応が必要です。</p>':''}</div><div class="result" style="margin-top:10px">${rows}</div>`;
   }
@@ -2454,7 +2455,7 @@ function sameGradeRankingSummaryHtml(year=2026,limit=30){
   });
   rows.sort((a,b)=>a.rank-b.rank || Number(a.r.time_seconds)-Number(b.r.time_seconds));
   const top=rows.slice(0,limit);
-  if(!top.length)return '<p class="muted">まだ同学年ランキングを取得していません。上の「全選手の同学年ランキングを一括更新」を押すと、取得済みの公式記録・ベスト記録から反映します。</p>';
+  if(!top.length)return '<p class="muted">まだ同学年ランキングを取得していません。選手ページから必要な選手のランキングを更新してください。</p>';
   return top.map((x,i)=>{
     const pref=x.c.prefRank?` ／ 🗻 ${x.c.prefName||'都道府県内'} ${x.c.prefRank}位`:'';
     return `<div class="row"><div><b>${i+1}. ${x.p.name}</b><br><span class="muted">${x.r.stroke} ${x.r.distance}m・${x.r.course} ／ BEST ${fmt(x.r.time_seconds)}</span></div><div style="text-align:right"><b style="font-size:19px">🇯🇵 ${x.rank}位</b><br><span class="muted">${pref?pref.replace(' ／ ',''):''}</span></div></div>`;
@@ -3455,13 +3456,6 @@ ${racesHtml}
 
 ${lapAnalysisHtml}
     </div>
-    <div class="card">
-      <h2>🏆 全選手・同学年ランキング一括更新</h2>
-      <p class="muted">競技者IDが登録されている全選手について、2026年度の同学年「全国順位＋都道府県内順位」をまとめて更新します。選手数・種目数によって数分かかる場合があります。</p>
-      <button id="allPlayersRankingUpdateBtn" style="width:100%" onclick="updateAllPlayersSameGradeRankings()">🏆 全選手の同学年ランキングを一括更新</button>
-      <div id="allPlayersRankingUpdateBox" style="margin-top:12px"></div>
-    </div>
-
     <div class="card">
       <h2>🏆 JOに近い選手・種目ランキング（上位30名）</h2>
       <p class="muted">
