@@ -2918,15 +2918,44 @@ ${lapAnalysisHtml}
       ${joRankingHtml}
     </div>
 
-    <div class="card">
-      <h2>🏆 大会突破者リスト</h2>
-      <h3 id="tokyo-qualifiers" style="scroll-margin-top:110px">🗼 東京SC招待</h3>
-      <p class="muted">基準日 2026/10/30 の満年齢で判定。突破した種目をすべて表示します。</p>
-      ${qualifierHtml(tokyoQual,'tokyo')}
-      <h3 id="yume-qualifiers" style="margin-top:24px;scroll-margin-top:110px">🌈 いきいき茨城 ゆめカップ 2027（予定）</h3>
-      <p class="muted">2027年度の学年区分で判定。標準記録は2026年度と同じものを使用（予定）しています。短水路・長水路は同じ標準記録です。2026/04/01以降の記録を対象に、突破した種目をすべて表示します。</p>
-      ${qualifierHtml(yumeQual,'yume')}
-    </div>
+    
+<div class="card">
+  <h2>🏆 大会突破者リスト</h2>
+
+  <div class="field">
+    <label>表示する大会を選択</label>
+    <select id="qualifierMeetSelect"
+      onchange="
+        document.getElementById('qualifierTokyo').style.display =
+          this.value==='tokyo' ? 'block' : 'none';
+        document.getElementById('qualifierYume').style.display =
+          this.value==='yume' ? 'block' : 'none';
+      ">
+      <option value="tokyo">🗼 東京SC招待</option>
+      <option value="yume">🌈 ゆめカップ2027</option>
+    </select>
+  </div>
+
+  <div id="qualifierTokyo">
+    <h3 id="tokyo-qualifiers">🗼 東京SC招待</h3>
+    <p class="muted">
+      基準日 2026/10/30 の満年齢で判定。
+      突破した種目をすべて表示します。
+    </p>
+    ${qualifierHtml(tokyoQual,'tokyo')}
+  </div>
+
+  <div id="qualifierYume" style="display:none">
+    <h3 id="yume-qualifiers">🌈 いきいき茨城 ゆめカップ2027（予定）</h3>
+    <p class="muted">
+      2027年度の学年区分で判定。
+      標準記録は2026年度と同じものを使用（予定）しています。
+      短水路・長水路は同じ標準記録です。
+    </p>
+    ${qualifierHtml(yumeQual,'yume')}
+  </div>
+</div>
+
 
     <div class="card">
       <h2>🏅 入力件数ランキング</h2>
