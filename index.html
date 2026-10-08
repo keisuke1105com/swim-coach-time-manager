@@ -1284,6 +1284,80 @@ let trendOptions=trendKeys.map(key=>{
           </select>
         </div>
 
+        <div id="trendChart"></div>
+      `
+      : '<p class="muted">まだグラフにできる記録がありません。</p>'
+  }
+</div>
+<div class="card">
+  <h3>🏊 ラップ分析</h3>
+  <div id="playerLapAnalysis"></div>
+</div>
+    <div class="card">
+
+      <h3>📈 成長履歴</h3>
+
+      ${
+        historyHtml ||
+        '<p class="muted">まだBEST更新の記録がありません。</p>'
+      }
+      ${history.length>growthHistory.length?`<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:700;color:#087fd1">全記録を見る（${history.length}件）</summary><div style="margin-top:8px">${allHistoryHtml}</div></details>`:''}
+
+    </div>
+  `;
+  
+  setTimeout(() => {
+  renderTrendChart(id);
+  renderPlayerLapAnalysis(id);
+}, 0);
+}
+ 
+  function swimFiscalYear(dateValue){
+  const m=String(dateValue||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m)return null;
+  const y=Number(m[1]), month=Number(m[2]);
+  return month>=4?y:y-1;
+}
+function renderPlayerLapAnalysis(playerId) {
+  const target = document.getElementById('playerLapAnalysis');
+  if (!target) return;
+
+  const playerRecords = records.filter(
+    r => String(r.swimmer_id) === String(playerId)
+  );
+
+  const available = playerRecords.filter(r => {
+    const official = Array.isArray(r.laps) ? r.laps : [];
+    const manual = (typeof manualLaps !== 'undefined' ? manualLaps : [])
+      .filter(m => String(m.record_id) === String(r.id));
+    return official.length > 0 || manual.length > 0;
+  });
+
+  if (!available.length) {
+    target.innerHTML = '<p class="muted">比較できるラップがまだありません。</p>';
+    return;
+  }
+
+  const groups = {};
+
+  available.forEach(r => {
+    const key = `${r.stroke}|${r.distance}|${r.course}`;
+    (groups[key] ||= []).push(r);
+  });
+
+  const options = Object.keys(groups).map(key =>
+    `<option value="${key}">${key.replaceAll('|', '・')}</option>`
+  ).join('');
+
+  target.innerHTML = `
+    <select id="playerLapEvent" onchange="showPlayerLapComparison('${playerId}')">
+      ${options}
+    </select>
+    <div id="playerLapComparison" style="margin-top:12px"></div>
+  `;
+
+  showPlayerLapComparison(playerId);
+}
 
 function showPlayerLapComparison(playerId) {
   const target = document.getElementById('playerLapComparison');
@@ -1469,95 +1543,6 @@ const signed = n => {
     (history || '<p class="muted">ラップデータがありません。</p>');
 }
 
-function renderPlayerLapAnalysis(playerId) {
-  const target = document.getElementById('playerLapAnalysis');
-  if (!target) return;
-
-  const playerRecords = records.filter(
-    r => String(r.swimmer_id) === String(playerId)
-  );
-
-  const available = playerRecords.filter(r => {
-    const official = Array.isArray(r.laps) ? r.laps : [];
-    const manual = (typeof manualLaps !== 'undefined' ? manualLaps : [])
-      .filter(m => String(m.record_id) === String(r.id));
-    return official.length > 0 || manual.length > 0;
-  });
-
-  if (!available.length) {
-    target.innerHTML = '<p class="muted">比較できるラップがまだありません。</p>';
-    return;
-  }
-
-  const groups = {};
-
-  available.forEach(r => {
-    const key = `${r.stroke}|${r.distance}|${r.course}`;
-    (groups[key] ||= []).push(r);
-  });
-
-  const options = Object.keys(groups).map(key =>
-    `<option value="${key}">${key.replaceAll('|', '・')}</option>`
-  ).join('');
-
-  target.innerHTML = `
-    <select id="playerLapEvent" onchange="showPlayerLapComparison('${playerId}')">
-      ${options}
-    </select>
-    <div id="playerLapComparison" style="margin-top:12px"></div>
-  `;
-
-  showPlayerLapComparison(playerId);
-}
-
-function showPlayerLapComparison(playerId) {
-  const target = document.getElementById('playerLapComparison');
-  const key = document.getElementById('playerLapEvent')?.value;
-  if (!target || !key) return;
-
-  const [stroke, distance, course] = key.split('|');
-
-  const selected = records
-    .filter(r =>
-      String(r.swimmer_id) === String(playerId) &&
-      r.stroke === stroke &&
-      String(r.distance) === distance &&
-      r.course === course
-    )
-    .sort((a,b) => String(b.record_date).localeCompare(String(a.record_date)));
-
-  target.innerHTML = selected.map(r => {
-    let laps = Array.isArray(r.laps) ? [...r.laps] : [];
-
-    const manual = (typeof manualLaps !== 'undefined' ? manualLaps : [])
-      .filter(m => String(m.record_id) === String(r.id))
-      .map(m => ({
-        distance: Number(m.distance),
-        cumulative_time: fmt(Number(m.cumulative_seconds)),
-        lap_source: 'manual'
-      }));
-
-    laps = [...laps, ...manual]
-      .sort((a,b) => Number(a.distance) - Number(b.distance));
-
-    if (!laps.length) return '';
-
-    return `
-      <div style="border-bottom:1px solid #ddd;padding:10px 0">
-        <b>${r.record_date || ''}　${fmt(r.time_seconds)}</b>
-        ${laps.map(l => `
-          <div style="display:flex;align-items:center;gap:16px;margin-top:5px">
-  <span style="width:55px;flex-shrink:0">${l.distance}m</span>
-  <b>${l.cumulative_time || '-'}</b>
-  <span style="color:#718096;font-size:12px">
-    ラップ ${l.split_time || '-'}
-  </span>
-</div>
-        `).join('')}
-      </div>
-    `;
-  }).join('') || '<p class="muted">ラップデータがありません。</p>';
-}
 function renderTrendChart(playerId){
   const select=$('#trendSelect');
   const chart=$('#trendChart');
