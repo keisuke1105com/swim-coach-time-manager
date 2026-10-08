@@ -2558,7 +2558,54 @@ if(comparisons.length){
   }
 }
 
+// ⑤ コーチ向け練習アドバイス
+if(comparisons.length){
 
+  const slower=[...comparisons]
+    .filter(c=>c.diff>0.005)
+    .sort((a,b)=>b.diff-a.diff);
+
+  const faster=[...comparisons]
+    .filter(c=>c.diff < -0.005)
+    .sort((a,b)=>a.diff-b.diff);
+
+  analysisText+='\n\n🏊 練習へのアドバイス';
+
+  if(slower.length){
+    const target=slower[0];
+
+    analysisText+=
+      `\n🎯 ${target.distance}m区間はBESTより`+
+      `${target.diff.toFixed(2)}秒遅くなっています。`+
+      `この区間の泳速維持やターン後の動作を確認しましょう。`;
+  }
+
+  if(faster.length){
+    const strong=faster[0];
+
+    analysisText+=
+      `\n💪 ${strong.distance}m区間はBESTより`+
+      `${Math.abs(strong.diff).toFixed(2)}秒速く泳げています。`+
+      `この区間の良い感覚を再現できるようにしましょう。`;
+  }
+
+  if(comparisons.length>=2){
+    const first=comparisons[0];
+    const last=comparisons[comparisons.length-1];
+
+    if(last.diff>0.005 && first.diff<=0.005){
+      analysisText+=
+        '\n🔄 後半の区間でBESTとの差が広がっています。'+
+        'レース後半の泳速維持を意識した練習を検討しましょう。';
+    }
+
+    if(first.diff>0.005 && last.diff<=0.005){
+      analysisText+=
+        '\n🚀 前半の区間に改善の余地があります。'+
+        'スタート・浮き上がり・序盤のレース展開を確認しましょう。';
+    }
+  }
+}
     const comparisonRows=comparisons.map(c=>{
       const good=c.diff<0;
       const equal=Math.abs(c.diff)<=0.005;
