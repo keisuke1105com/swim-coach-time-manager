@@ -1284,40 +1284,185 @@ let trendOptions=trendKeys.map(key=>{
           </select>
         </div>
 
-        <div id="trendChart"></div>
-      `
-      : '<p class="muted">まだグラフにできる記録がありません。</p>'
+
+function showPlayerLapComparison(playerId) {
+  const target = document.getElementById('playerLapComparison');
+  const key = document.getElementById('playerLapEvent')?.value;
+  if (!target || !key) return;
+
+  const [stroke, distance, course] = key.split('|');
+
+  const selected = records
+    .filter(r =>
+      String(r.swimmer_id) === String(playerId) &&
+      r.stroke === stroke &&
+      String(r.distance) === distance &&
+      r.course === course
+    )
+    .sort((a, b) =>
+      String(b.record_date || '').localeCompare(String(a.record_date || ''))
+    );
+
+  function getLaps(r) {
+    let official = Array.isArray(r.laps) ? r.laps : [];
+    const manual = (typeof manualLaps !== 'undefined' ? manualLaps : [])
+      .filter(m => String(m.record_id) === String(r.id))
+      .map(m => ({
+        distance: Number(m.distance),
+        cumulative_time: fmt(Number(m.cumulative_seconds))
+      }));
+
+    const byDistance = new Map();
+    [...manual, ...official].forEach(l => {
+      const d = Number(l.distance);
+      if (Number.isFinite(d)) byDistance.set(d, l);
+    });
+
+    let previous = 0;
+    return [...byDistance.values()]
+      .sort((a, b) => Number(a.distance) - Number(b.distance))
+      .map(l => {
+        const cumulative = sec(l.cumulative_time);
+        const split = l.split_time
+          ? sec(l.split_time)
+          : cumulative - previous;
+        if (Number.isFinite(cumulative)) previous = cumulative;
+        return {
+          distance: Number(l.distance),
+          cumulative_time: l.cumulative_time,
+          split,
+          split_time: Number.isFinite(split) ? fmt(split) : '-'
+        };
+      });
   }
-</div>
-<div class="card">
-  <h3>🏊 ラップ分析</h3>
-  <div id="playerLapAnalysis"></div>
-</div>
-    <div class="card">
 
-      <h3>📈 成長履歴</h3>
+  const valid = selected.filter(r =>
+    Number.isFinite(Number(r.time_seconds))
+  );
 
-      ${
-        historyHtml ||
-        '<p class="muted">まだBEST更新の記録がありません。</p>'
+  const latest = valid.find(r => getLaps(r).length > 0);
+  const best = [...valid]
+    .filter(r => getLaps(r).length > 0)
+    .sort((a, b) => Number(a.time_seconds) - Number(b.time_seconds))[0];
+
+  let summary = '';
+
+  if (latest && best) {
+    const latestLaps = getLaps(latest);
+    const bestLaps = getLaps(best);
+    const bestByDistance = new Map(
+      bestLaps.map(l => [l.distance, l])
+    );
+
+    const comparisons = latestLaps
+      .filter(l => bestByDistance.has(l.distance))
+      .map(l => ({
+        distance: l.distance,
+        diff: l.split - bestByDistance.get(l.distance).split
+      }))
+      .filter(c => Number.isFinite(c.diff));
+
+    const totalDiff =
+      Number(latest.time_seconds) - Number(best.time_seconds);
+
+    const signed = n =>
+      `${n > 0.005 ? '+' : n < -0.005 ? '-' : '±'}${Math.abs(n).toFixed(2)}秒`;
+
+    const rows = comparisons.map(c => {
+      const faster = c.diff < -0.005;
+      const slower = c.diff > 0.005;
+      return `
+        <div style="display:flex;justify-content:space-between;
+                    align-items:center;gap:8px;padding:6px 0">
+          <span>${faster ? '🟢' : slower ? '🔴' : '⚪'}
+            ${c.distance}m区間</span>
+          <b style="color:${faster ? '#16803b' : slower ? '#b42318' : '#526575'}">
+            ${signed(c.diff)}
+          </b>
+        </div>`;
+    }).join('');
+
+    let advice = '';
+
+    if (String(latest.id) === String(best.id)) {
+      advice = '最新レースが自己ベストです。現在のペース配分を確認し、次の目標につなげましょう。';
+    } else if (!comparisons.length) {
+      advice = '比較できる共通のラップ区間がありません。';
+    } else {
+      const worst = [...comparisons].sort((a,b) => b.diff - a.diff)[0];
+      const improved = comparisons.filter(c => c.diff < -0.005);
+      const slower = comparisons.filter(c => c.diff > 0.005);
+
+      if (totalDiff < -0.005) {
+        advice = `自己ベストを${Math.abs(totalDiff).toFixed(2)}秒更新しています。`;
+      } else if (Math.abs(totalDiff) <= 0.005) {
+        advice = '自己ベストとほぼ同じタイムです。';
+      } else {
+        advice = `自己ベストまで${totalDiff.toFixed(2)}秒です。`;
       }
-      ${history.length>growthHistory.length?`<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:700;color:#087fd1">全記録を見る（${history.length}件）</summary><div style="margin-top:8px">${allHistoryHtml}</div></details>`:''}
 
-    </div>
-  `;
-  
-  setTimeout(() => {
-  renderTrendChart(id);
-  renderPlayerLapAnalysis(id);
-}, 0);
+      if (slower.length) {
+        advice += ` ${worst.distance}m区間の差が最も大きく、BESTより${worst.diff.toFixed(2)}秒遅くなっています。この区間の泳速維持やターン前後の動きを確認しましょう。`;
+      }
+
+      if (improved.length) {
+        advice += ` ${improved.map(c => c.distance + 'm').join('・')}区間はBESTより速く泳げています。この良い泳ぎを継続しましょう。`;
+      }
+
+      if (!slower.length && !improved.length) {
+        advice += ' 各区間ともBESTに近いペースで泳げています。';
+      }
+    }
+
+    summary = `
+      <div style="background:#eef7ff;border-radius:12px;
+                  padding:12px;margin-bottom:14px">
+        <b>🔍 最新レース vs BEST</b>
+        <div class="muted small" style="margin:6px 0 10px">
+          最新 ${latest.record_date || '-'} ／ BEST ${best.record_date || '-'}
+        </div>
+        <div style="display:flex;justify-content:space-between;
+                    gap:8px;padding-bottom:8px;font-weight:700">
+          <span>TOTAL</span>
+          <span>${signed(totalDiff)}</span>
+        </div>
+        ${rows || '<p class="muted small">共通のラップ区間がありません。</p>'}
+        <div style="background:white;border-radius:10px;
+                    padding:12px;margin-top:10px;line-height:1.7">
+          <b>🧠 レース分析・練習アドバイス</b>
+          <div style="margin-top:6px;font-size:14px">${advice}</div>
+        </div>
+      </div>`;
+  } else {
+    summary = '<p class="muted small">比較できるラップ付き記録が不足しています。</p>';
+  }
+
+  const history = selected.map(r => {
+    const laps = getLaps(r);
+    if (!laps.length) return '';
+
+    return `
+      <div style="border-bottom:1px solid #ddd;padding:10px 0">
+        <b>${r.record_date || ''}　${fmt(r.time_seconds)}</b>
+        ${laps.map(l => `
+          <div style="display:flex;align-items:center;gap:12px;
+                      margin-top:5px;flex-wrap:wrap">
+            <span style="width:55px;flex-shrink:0">${l.distance}m</span>
+            <b>${l.cumulative_time || '-'}</b>
+            <span style="color:#718096;font-size:12px">
+              ラップ ${l.split_time}
+            </span>
+          </div>
+        `).join('')}
+      </div>`;
+  }).join('');
+
+  target.innerHTML =
+    summary +
+    '<h4 style="margin:16px 0 6px">📋 ラップ履歴</h4>' +
+    (history || '<p class="muted">ラップデータがありません。</p>');
 }
- 
-  function swimFiscalYear(dateValue){
-  const m=String(dateValue||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if(!m)return null;
-  const y=Number(m[1]), month=Number(m[2]);
-  return month>=4?y:y-1;
-}
+
 function renderPlayerLapAnalysis(playerId) {
   const target = document.getElementById('playerLapAnalysis');
   if (!target) return;
