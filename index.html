@@ -2956,20 +2956,6 @@ ${lapAnalysisHtml}
   </div>
 </div>
 
-
-    <div class="card">
-      <h2>🏅 入力件数ランキング</h2>
-      ${
-        ranking.map((x,i)=>`
-          <div class="row">
-            <b>${i+1}. ${playerById(x[0])?.name||'選手'}</b>
-            <span>${x[1]}件</span>
-          </div>
-        `).join('') ||
-        '<p class="muted">記録を入力すると表示されます。</p>'
-      }
-    </div>
-
     <div class="card">
       <h3>☁️ クラウド共有</h3>
       <p>
