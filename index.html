@@ -1494,6 +1494,44 @@ const signed = n => {
       }
     }
 
+    // 前半・後半ペース分析：中間地点の累計タイムがある場合だけ表示
+    let paceHtml = '';
+    const raceDistance = Number(distance);
+    const halfway = raceDistance / 2;
+    const midpointLap = latestLaps.find(l => l.distance === halfway);
+    const bestMidpointLap = bestLaps.find(l => l.distance === halfway);
+    if (raceDistance >= 100 && midpointLap && bestMidpointLap) {
+      const first = sec(midpointLap.cumulative_time);
+      const total = Number(latest.time_seconds);
+      const bestFirst = sec(bestMidpointLap.cumulative_time);
+      const bestTotal = Number(best.time_seconds);
+      const second = total - first;
+      const bestSecond = bestTotal - bestFirst;
+      if ([first, second, bestFirst, bestSecond].every(v => Number.isFinite(v) && v > 0)) {
+        const slowdown = (second / first - 1) * 100;
+        const bestSlowdown = (bestSecond / bestFirst - 1) * 100;
+        const paceLabel = slowdown > 0.05 ? '後半が前半より遅い' :
+          slowdown < -0.05 ? '後半が前半より速い' : '前後半ほぼ均等';
+        const signedPercent = n => (n > 0.05 ? '+' : n < -0.05 ? '-' : '±') +
+          Math.abs(n).toFixed(1) + '%';
+        paceHtml = `
+          <div style="background:white;border-radius:10px;padding:12px;margin-top:10px;line-height:1.7">
+            <b>📊 前半・後半のペース分析</b>
+            <div style="display:flex;justify-content:space-between;gap:8px;margin-top:8px">
+              <span>前半 ${halfway}m</span><b>${fmt(first)}（BEST比 ${signed(first-bestFirst)}）</b>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:8px">
+              <span>後半 ${halfway}m</span><b>${fmt(second)}（BEST比 ${signed(second-bestSecond)}）</b>
+            </div>
+            <div style="margin-top:8px;padding-top:8px;border-top:1px solid #e7edf2">
+              <b>後半のペース変化 ${signedPercent(slowdown)}</b>
+              <div class="muted small">${paceLabel} ／ BEST時 ${signedPercent(bestSlowdown)}</div>
+              <div class="muted small">※後半タイム ÷ 前半タイム − 1。プラスは後半の方が遅いことを示します。</div>
+            </div>
+          </div>`;
+      }
+    }
+
     summary = `
       <div style="background:#eef7ff;border-radius:12px;
                   padding:12px;margin-bottom:14px">
@@ -1507,6 +1545,7 @@ const signed = n => {
           <span>${signed(totalDiff)}</span>
         </div>
         ${rows || '<p class="muted small">共通のラップ区間がありません。</p>'}
+        ${paceHtml}
         <div style="background:white;border-radius:10px;
                     padding:12px;margin-top:10px;line-height:1.7">
           <b>🧠 レース分析・練習アドバイス</b>
