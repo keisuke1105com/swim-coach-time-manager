@@ -1365,8 +1365,10 @@ function showPlayerLapComparison(playerId) {
     const totalDiff =
       Number(latest.time_seconds) - Number(best.time_seconds);
 
-    const signed = n =>
-      `${n > 0.005 ? '+' : n < -0.005 ? '-' : '±'}${Math.abs(n).toFixed(2)}秒`;
+    
+const signed = n =>
+  `${n > 0.005 ? '+' : n < -0.005 ? '-' : '±'}${Math.abs(n).toFixed(2)}秒`;
+
 
     const rows = comparisons.map(c => {
       const faster = c.diff < -0.005;
