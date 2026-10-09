@@ -3637,16 +3637,29 @@ function publicLapSegments(r){
   return arr;
 }
 function publicJoStandard(swimmer,r){
-  // 生年月日は公開APIで取得しない。登録済み年齢区分を基準に計算。
-  let division=String(swimmer.age_group||'').trim();
-  if(division==='17-18歳'||division==='17～18歳')division='CS';
-  if(Number(r.distance)===50&&['背泳ぎ','平泳ぎ','バタフライ'].includes(r.stroke)&&['13歳','14歳','15〜16歳','15～16歳','CS'].includes(division))division='CS';
-  const row=STANDARDS.find(x=>x.event===r.stroke&&Number(x.distance)===Number(r.distance)&&x.division===division);
-  if(!row)return null;
-  const gender=String(swimmer.gender||'');
+  // コーチ用と同じSTANDARDSを参照し、公開APIの表記揺れを吸収する。
+  // 生年月日を公開側で推測しない（大会当日の年齢による厳密判定はサーバー側で行う）。
+  const raw=String(swimmer.age_group??'').trim().replace(/\s/g,'').replace(/～|〜|－|ー/g,'-');
+  let division=raw;
+  const age=raw.match(/^(\d{1,2})(?:歳)?$/);
+  if(age){
+    const n=Number(age[1]);
+    division=n<=9?'9歳以下':n>=17?'CS':n>=15?'15〜16歳':`${n}歳`;
+  }else if(/^15-16歳?$/.test(raw))division='15〜16歳';
+  else if(/^17-18歳?$/.test(raw))division='CS';
+  else if(/^CS$/i.test(raw))division='CS';
+  if(Number(r.distance)===50&&['背泳ぎ','平泳ぎ','バタフライ'].includes(r.stroke)
+      &&['13歳','14歳','15〜16歳','CS'].includes(division))division='CS';
+  const genderRaw=String(swimmer.gender??'').trim();
+  const gender=genderRaw==='女'||genderRaw==='女性'?'女子':genderRaw==='男'||genderRaw==='男性'?'男子':genderRaw;
   if(!['男子','女子'].includes(gender))return null;
-  const value=gender==='男子'?(r.course==='長水路'?row.maleLC:row.maleSC):(r.course==='長水路'?row.femaleLC:row.femaleSC);
-  return Number.isFinite(Number(value))&&Number(value)>0?Number(value):null;
+  const row=STANDARDS.find(x=>String(x.event).trim()===String(r.stroke).trim()
+      &&Number.parseInt(x.distance,10)===Number(r.distance)
+      &&String(x.division).trim().replace(/～/g,'〜')===division);
+  if(!row)return null;
+  const value=gender==='男子'?(r.course==='長水路'?row.maleLC:row.maleSC)
+      :(r.course==='長水路'?row.femaleLC:row.femaleSC);
+  return value!=null&&value!==''&&Number.isFinite(Number(value))&&Number(value)>0?Number(value):null;
 }
 let publicShareSwimmer={};
 function updatePublicShareAnalysis(){
