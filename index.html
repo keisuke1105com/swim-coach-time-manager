@@ -3620,7 +3620,7 @@ function shareChartSvg(rows){
   const coords=data.map((r,i)=>[x(i),y(vals[i])]);
   const path=coords.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
   const grid=[0,1,2,3,4].map(i=>{const v=ymin+(ymax-ymin)*i/4,yy=y(v);return `<line x1="${left}" x2="${w-right}" y1="${yy}" y2="${yy}" stroke="#e3eaf0"/><text x="${left-7}" y="${yy+4}" text-anchor="end" font-size="12" fill="#536a78">${shareFmt(v)}</text>`}).join('');
-  const labels=[0,Math.floor((data.length-1)/2),data.length-1].filter((v,i,a)=>a.indexOf(v)===i).map(i=>`<text x="${x(i)}" y="${h-18}" text-anchor="middle" font-size="12" fill="#536a78">${shareEscape(shareDate(data[i].record_date))}</text>`).join('');
+  const labels=[0,Math.floor((data.length-1)/2),data.length-1].filter((v,i,a)=>a.indexOf(v)===i).map(i=>{const anchor=i===0?"start":i===data.length-1?"end":"middle";return `<text x="${x(i)}" y="${h-18}" text-anchor="${anchor}" font-size="12" fill="#536a78">${shareEscape(shareDate(data[i].record_date))}</text>`}).join('');
   const circles=coords.map((p,i)=>`<circle cx="${p[0]}" cy="${p[1]}" r="${data.length>80?2:4}" fill="#087fd1"><title>${shareEscape(shareDate(data[i].record_date))} ${shareEscape(data[i].meet_name||'大会名未登録')} ${shareFmt(vals[i])}</title></circle>`).join('');
   return `<div style="overflow-x:auto"><svg role="img" aria-label="記録のタイム推移。縦軸はタイム、横軸は記録日です。" viewBox="0 0 ${w} ${h}" style="width:100%;min-width:310px;background:#fff;border-radius:12px">${grid}<path d="${path}" fill="none" stroke="#087fd1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>${circles}${labels}</svg></div><p class="small muted">全${data.length}記録を日付順に表示。上に行くほど速いタイムです。点を押すと大会名を確認できます。</p>`;
 }
