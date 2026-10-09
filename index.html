@@ -2394,7 +2394,7 @@ function loadRankingBulkProgress(){try{return JSON.parse(localStorage.getItem(AL
 function saveRankingBulkProgress(v){try{localStorage.setItem(ALL_RANKING_PROGRESS_KEY,JSON.stringify(v));}catch(e){}}
 
 // ランキング一括更新の進捗と取得済み順位をSupabaseにも保存し、Mac/iPhoneで共有する。
-// SQLで作成済みの ranking_update_progress テーブルを使用する。
+// 管理者限定の swimmer_ranking_share_cache テーブルを使用する。
 function rankingCacheSnapshot(year=2026){
   const cache={};
   PLAYERS.forEach(p=>rankingBestRecordsForPlayer(p).forEach(r=>{
@@ -2414,7 +2414,7 @@ async function loadSharedRankingBulkProgress(){
   const local=loadRankingBulkProgress();
   if(!sb)return local;
   try{
-    const {data,error}=await sb.from('ranking_update_progress').select('progress').eq('job_key','same_grade_2026').maybeSingle();
+    const {data,error}=await sb.from('swimmer_ranking_share_cache').select('progress').eq('job_key','same_grade_2026').maybeSingle();
     if(error)throw error;
     const cloud=data?.progress||null;
     if(cloud){
@@ -2432,7 +2432,7 @@ async function saveSharedRankingBulkProgress(v){
   saveRankingBulkProgress(v);
   if(!sb)return v;
   try{
-    const {error}=await sb.from('ranking_update_progress').upsert({job_key:'same_grade_2026',progress:v,updated_at:new Date().toISOString()},{onConflict:'job_key'});
+    const {error}=await sb.from('swimmer_ranking_share_cache').upsert({job_key:'same_grade_2026',progress:v,updated_at:new Date().toISOString()},{onConflict:'job_key'});
     if(error)throw error;
   }catch(e){console.warn('ランキング進捗クラウド保存は端末保存のみ継続:',e?.message||e);}
   return v;
