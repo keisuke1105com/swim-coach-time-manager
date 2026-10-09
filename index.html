@@ -7,10 +7,10 @@
 @media(min-width:650px){.eventgrid{grid-template-columns:repeat(5,1fr)}}
 </style></head><body>
 <header><div class="wrap" style="padding:0"><div class="topline"><div><h1>🏊 水泳コーチ・タイム管理 ☁️</h1><small>選手・記録をクラウド共有</small></div><button id="logoutBtn" class="secondary hidden" onclick="logout()">ログアウト</button></div></div></header>
-<main class="wrap"><div id="status"></div><section id="auth"></section><div id="app" class="hidden"><section id="home"></section><section id="players" class="hidden"></section><section id="input" class="hidden"></section><section id="records" class="hidden"></section><section id="analysis" class="hidden"></section></div></main>
+<main class="wrap"><div id="status"></div><section id="auth"></section><section id="publicProfile" class="hidden"></section><div id="app" class="hidden"><section id="home"></section><section id="players" class="hidden"></section><section id="input" class="hidden"></section><section id="records" class="hidden"></section><section id="analysis" class="hidden"></section></div></main>
 <nav id="tabs" class="tabs hidden"><button data-tab="home">🏠<br>ホーム</button><button data-tab="players">👥<br>選手</button><button data-tab="input">⏱️<br>入力</button><button data-tab="records">📋<br>記録</button><button data-tab="analysis">📊<br>分析</button></nav>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="config.js"></script><script src="data.js"></script><script src="tokyo_sc.js"></script><script>
-let sb=null,session=null,PLAYERS=[],records=[];let selectedPlayerId='',selectedStroke='自由形',selectedDistance=50,selectedCourse='長水路';
+let sb=null,session=null,PLAYERS=[],records=[];let shareAdmin=false;let selectedPlayerId='',selectedStroke='自由形',selectedDistance=50,selectedCourse='長水路';
 const VIEW_STATE_KEY='swimCloudViewState';
 function saveViewState(tab,playerId=''){try{localStorage.setItem(VIEW_STATE_KEY,JSON.stringify({tab,playerId,ts:Date.now()}))}catch(e){}}
 function getViewState(){try{return JSON.parse(localStorage.getItem(VIEW_STATE_KEY)||'{}')}catch(e){return {}}}
@@ -941,9 +941,9 @@ function yumeCupInfo(playerId,stroke,distance){
 function yumeCupStandard(playerId,stroke,distance){return yumeCupInfo(playerId,stroke,distance).standard;}
 
 function best(playerId,stroke,distance,course){let a=records.filter(r=>r.swimmer_id===playerId&&r.stroke===stroke&&Number(r.distance)===Number(distance)&&r.course===course).map(r=>+r.time_seconds);return a.length?Math.min(...a):null}
-async function init(){if(!configured()){renderSetupNeeded();return}sb=window.supabase.createClient(window.SUPABASE_URL,window.SUPABASE_PUBLISHABLE_KEY);let {data}=await sb.auth.getSession();session=data.session;sb.auth.onAuthStateChange((_e,s)=>{session=s;routeAuth()});routeAuth()}
+async function init(){if(new URLSearchParams(location.search).has('share')){await renderPublicSwimmerProfile();return}if(!configured()){renderSetupNeeded();return}sb=window.supabase.createClient(window.SUPABASE_URL,window.SUPABASE_PUBLISHABLE_KEY);let {data}=await sb.auth.getSession();session=data.session;sb.auth.onAuthStateChange((_e,s)=>{session=s;routeAuth()});routeAuth()}
 function renderSetupNeeded(){setStatus('config.js に Supabase Publishable key を設定してください。','error');$('#auth').innerHTML=`<div class="card auth"><h2>☁️ セットアップ待ち</h2><p>config.js の PASTE_YOUR_PUBLISHABLE_KEY_HERE を置き換えてください。</p></div>`}
-async function routeAuth(){if(!session){$('#app').classList.add('hidden');$('#tabs').classList.add('hidden');$('#logoutBtn').classList.add('hidden');renderAuth();return}$('#auth').innerHTML='';$('#app').classList.remove('hidden');$('#tabs').classList.remove('hidden');$('#logoutBtn').classList.remove('hidden');await loadCloud();restoreViewState()}
+async function routeAuth(){if(!session){$('#app').classList.add('hidden');$('#tabs').classList.add('hidden');$('#logoutBtn').classList.add('hidden');renderAuth();return}$('#auth').innerHTML='';$('#app').classList.remove('hidden');$('#tabs').classList.remove('hidden');$('#logoutBtn').classList.remove('hidden');await loadCloud();try{const {data,error}=await sb.rpc('is_swim_share_admin');shareAdmin=!error&&data===true}catch(e){shareAdmin=false}restoreViewState()}
 function renderAuth(){setStatus('');$('#auth').innerHTML=`<div class="card auth"><h2>🔐 コーチログイン</h2><div class="field"><label>メールアドレス</label><input id="email" type="email"></div><div class="field"><label>パスワード</label><input id="password" type="password"></div><div class="actions"><button onclick="login()">ログイン</button><button class="secondary" onclick="signup()">初回登録</button></div><p class="muted small">初回のみアカウント登録してください。複数コーチでも同じクラウドデータを共有できます。</p></div>`}
 async function login(){let email=$('#email').value.trim(),password=$('#password').value;let {error}=await sb.auth.signInWithPassword({email,password});if(error)setStatus(error.message,'error')}
 async function signup(){let email=$('#email').value.trim(),password=$('#password').value;if(password.length<6){setStatus('パスワードは6文字以上にしてください。','error');return}let {error}=await sb.auth.signUp({email,password});setStatus(error?error.message:'登録しました。メール確認が必要な場合はメールを確認してください。',error?'error':'notice')}
@@ -1191,6 +1191,7 @@ let trendOptions=trendKeys.map(key=>{
       </button>
 
       <h2>🏊 ${p.name}</h2>
+      ${shareAdmin?`<button class="secondary" style="width:100%;margin:8px 0 12px" onclick="openShareManager('${p.id}')">🔗 QRコード公開管理</button><div id="shareManagerPanel"></div>`:''}
 
       <p class="muted">
         ${p.age_group||'-'} ・
@@ -3597,9 +3598,62 @@ async function migrateLocalV3(){
   renderAnalysis();
   renderHome();
 }
+
+// 選手・保護者向け公開ページ：ログイン処理より先に実行し、非公開テーブルはブラウザから読まない。
+function shareEscape(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function shareFmt(v){const n=Number(v);if(!Number.isFinite(n)||n<=0)return '-';const m=Math.floor(n/60);return (m?m+':':'')+(n-m*60).toFixed(2).padStart(m?5:0,'0')}
+async function renderPublicSwimmerProfile(){
+  $('#auth').classList.add('hidden');$('#app').classList.add('hidden');$('#tabs').classList.add('hidden');$('#logoutBtn').classList.add('hidden');
+  const panel=$('#publicProfile');panel.classList.remove('hidden');panel.innerHTML='<div class="card">🏊 公開記録を確認しています…</div>';
+  const token=new URLSearchParams(location.search).get('share')||'';
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(token)){
+    panel.innerHTML='<div class="card"><h2>公開記録が見つかりません</h2><p>URLをご確認ください。</p></div>';return;
+  }
+  if(!configured()){panel.innerHTML='<div class="card error">公開ページの設定が見つかりません。</div>';return}
+  try{
+    const base=String(window.SUPABASE_URL).replace(/\/$/,'');
+    const res=await fetch(`${base}/functions/v1/swimmer-public-profile?token=${encodeURIComponent(token)}`,{method:'GET',cache:'no-store'});
+    if(!res.ok){panel.innerHTML='<div class="card"><h2>公開記録が見つかりません</h2><p>公開停止中、またはURLが無効です。</p></div>';return}
+    const data=await res.json(),swimmer=data.swimmer||{},rows=Array.isArray(data.records)?data.records:[];
+    panel.innerHTML=`<div class="card"><h2>🏊 ${shareEscape(swimmer.name)}</h2><p class="muted">${shareEscape(swimmer.age_group||'')} ${swimmer.team?'・'+shareEscape(swimmer.team):''}</p><h3>自己ベスト記録</h3>${rows.length?rows.map(r=>`<div class="row"><div><b>${shareEscape(r.stroke)} ${shareEscape(r.distance)}m</b><br><span class="muted">${shareEscape(r.course)}</span>${r.is_jo_qualified?'<br><span class="badge">JO突破</span>':''}</div><b>${shareFmt(r.time_seconds)}</b></div>`).join(''):'<p class="muted">表示できるベスト記録はありません。</p>'}<p class="small muted">このページは公開許可された記録のみ表示します。URLを知っている方は閲覧できます。</p></div>`;
+  }catch(e){panel.innerHTML='<div class="card error">記録を取得できませんでした。時間をおいてお試しください。</div>'}
+}
+async function openShareManager(playerId){
+  const panel=$('#shareManagerPanel');if(!panel||!shareAdmin||!session)return;
+  panel.innerHTML='<div class="notice">公開設定を確認しています…</div>';
+  const {data,error}=await sb.from('swimmer_public_shares').select('id,swimmer_id,share_token,is_enabled,consent_confirmed_at').eq('swimmer_id',playerId).maybeSingle();
+  if(error){panel.innerHTML=`<div class="error">公開設定を読み込めません：${shareEscape(error.message)}</div>`;return}
+  const enabled=!!data?.is_enabled,consented=!!data?.consent_confirmed_at;
+  const url=data?.share_token?new URL(location.pathname+'?share='+data.share_token,location.href).href:'';
+  panel.innerHTML=`<div class="result" style="margin-bottom:14px"><h3>🔗 QRコード公開管理</h3><p class="small">保護者の同意を確認してから公開してください。公開URLは転送可能です。</p><label style="display:block;margin:12px 0"><input type="checkbox" id="shareConsent" style="width:auto" ${consented?'checked':''}> 保護者の同意を確認済み</label><div class="actions"><button onclick="saveShareSettings('${playerId}',true)" ${enabled?'disabled':''}>公開ON</button><button class="danger" onclick="saveShareSettings('${playerId}',false)" ${!enabled?'disabled':''}>公開OFF</button></div><p><b>現在の状態：</b>${enabled?'🟢 公開中':'🔒 非公開'}</p>${enabled&&url?`<div class="field"><label>選手専用URL</label><input id="shareLink" readonly value="${shareEscape(url)}"></div><button class="secondary" onclick="copyShareLink()">URLをコピー</button><div id="shareQr" style="background:white;padding:12px;margin-top:12px;display:inline-block"></div><p class="small muted">QRコードが表示されない場合もURLを共有できます。</p>`:''}</div>`;
+  if(enabled&&url)drawShareQr(url);
+}
+function copyShareLink(){const el=$('#shareLink');if(!el)return;navigator.clipboard?.writeText(el.value).then(()=>alert('URLをコピーしました')).catch(()=>{el.select();alert('URLを選択しました。コピーしてください。')})}
+function drawShareQr(url){
+  const node=$('#shareQr');if(!node)return;
+  const draw=()=>{if(window.QRCode&&node.isConnected){node.innerHTML='';new QRCode(node,{text:url,width:192,height:192,correctLevel:QRCode.CorrectLevel.M})}};
+  if(window.QRCode){draw();return}
+  const script=document.createElement('script');script.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';script.onload=draw;script.onerror=()=>{if(node.isConnected)node.textContent='QRコードを表示できません。URLをご利用ください。'};document.head.appendChild(script);
+}
+async function saveShareSettings(playerId,enable){
+  if(!shareAdmin||!session)return;
+  const consent=$('#shareConsent')?.checked;
+  if(enable&&!consent){alert('公開するには保護者の同意確認が必要です。');return}
+  if(enable&&!confirm('保護者の同意を確認しましたか？選手名と自己ベストがURLを知る人に公開されます。'))return;
+  if(!enable&&!confirm('この選手の公開を停止しますか？'))return;
+  const {data:existing,error:readError}=await sb.from('swimmer_public_shares').select('id,consent_confirmed_at').eq('swimmer_id',playerId).maybeSingle();
+  if(readError){alert(readError.message);return}
+  const payload={is_enabled:!!enable,consent_confirmed_at:enable?new Date().toISOString():(consent?(existing?.consent_confirmed_at||new Date().toISOString()):null)};
+  let result;
+  if(existing){result=await sb.from('swimmer_public_shares').update(payload).eq('id',existing.id)}
+  else{result=await sb.from('swimmer_public_shares').insert({...payload,swimmer_id:playerId})}
+  if(result.error){alert('保存に失敗しました：'+result.error.message);return}
+  alert(enable?'公開をONにしました。':'公開をOFFにしました。');await openShareManager(playerId);
+}
+
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261005-1220';
+const APP_BUILD_VERSION='20261009-qr01';
 let __versionCheckBusy=false;
 async function checkForAppUpdate(){
   if(__versionCheckBusy||!navigator.onLine)return;
