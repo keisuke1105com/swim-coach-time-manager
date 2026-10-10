@@ -2368,6 +2368,12 @@ async function updatePlayerSameGradeRankings(playerId,{skipCached=false,silent=f
     const failures=results.filter(v=>v.error).length;
     box.innerHTML=`<div class="result ${failures?'':'good'}"><b>${failures?'⚠️ ランキング照合が終了しました（一部通信エラー）':'✅ 同学年ランキングを更新しました'}</b><br><span class="small">${year}年度 ／ ${found}/${results.length}種目で同学年順位を確認${failures?` ／ 通信エラー ${failures}種目`:''}</span>${failures?'<p class="small">各種目のエラー詳細を下に表示しています。通信先の制限（CORS等）の場合は、サーバー側の対応が必要です。</p>':''}</div><div class="result" style="margin-top:10px">${rows}</div>`;
   }
+  // 個別更新でもクラウドへ順位を保存する（管理者のみ）。
+  // 共有先へはこのテーブルを直接公開せず、同意済みプロフィールAPI経由で本人分だけ返す。
+  if(shareAdmin){
+    try{await saveSharedRankingBulkProgress(loadRankingBulkProgress()||{phase:'individual',completed:false});}
+    catch(e){console.warn('個別ランキングのクラウド保存に失敗:',e);}
+  }
   return {ok:true,found,total:bests.length,processed,skipped};
 }
 async function testPlayerJasfRanking(playerId){
@@ -3733,7 +3739,7 @@ async function openShareManager(playerId){
   if(error){panel.innerHTML=`<div class="error">公開設定を読み込めません：${shareEscape(error.message)}</div>`;return}
   const enabled=!!data?.is_enabled,consented=!!data?.consent_confirmed_at;
   const url=data?.share_token?new URL(location.pathname+'?share='+data.share_token,location.href).href:'';
-  panel.innerHTML=`<div class="result" style="margin-bottom:14px"><h3>🔗 QRコード公開管理</h3><p class="small">保護者の同意を確認してから公開してください。公開URLは転送可能です。</p><label style="display:block;margin:12px 0"><input type="checkbox" id="shareConsent" style="width:auto" ${consented?'checked':''}> 保護者の同意を確認済み</label><div class="actions"><button onclick="saveShareSettings('${playerId}',true)" ${enabled?'disabled':''}>公開ON</button><button class="danger" onclick="saveShareSettings('${playerId}',false)" ${!enabled?'disabled':''}>公開OFF</button></div><p><b>現在の状態：</b>${enabled?'🟢 公開中':'🔒 非公開'}</p>${enabled&&url?`<div class="field"><label>選手専用URL</label><input id="shareLink" readonly value="${shareEscape(url)}"></div><button class="secondary" onclick="copyShareLink()">URLをコピー</button><div id="shareQr" style="background:white;padding:12px;margin-top:12px;display:inline-block"></div><p class="small muted">QRコードが表示されない場合もURLを共有できます。</p>`:''}</div>`;
+  panel.innerHTML=`<div class="result" style="margin-bottom:14px"><h3>🔗 QRコード公開管理</h3><p class="small muted">ランキングは管理者の更新時にクラウドへ保存します。公開ページへの表示には公開APIのランキング対応が必要です。</p><p class="small">保護者の同意を確認してから公開してください。公開URLは転送可能です。</p><label style="display:block;margin:12px 0"><input type="checkbox" id="shareConsent" style="width:auto" ${consented?'checked':''}> 保護者の同意を確認済み</label><div class="actions"><button onclick="saveShareSettings('${playerId}',true)" ${enabled?'disabled':''}>公開ON</button><button class="danger" onclick="saveShareSettings('${playerId}',false)" ${!enabled?'disabled':''}>公開OFF</button></div><p><b>現在の状態：</b>${enabled?'🟢 公開中':'🔒 非公開'}</p>${enabled&&url?`<div class="field"><label>選手専用URL</label><input id="shareLink" readonly value="${shareEscape(url)}"></div><button class="secondary" onclick="copyShareLink()">URLをコピー</button><div id="shareQr" style="background:white;padding:12px;margin-top:12px;display:inline-block"></div><p class="small muted">QRコードが表示されない場合もURLを共有できます。</p>`:''}</div>`;
   if(enabled&&url)drawShareQr(url);
 }
 function copyShareLink(){const el=$('#shareLink');if(!el)return;navigator.clipboard?.writeText(el.value).then(()=>alert('URLをコピーしました')).catch(()=>{el.select();alert('URLを選択しました。コピーしてください。')})}
