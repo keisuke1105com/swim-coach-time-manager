@@ -992,7 +992,26 @@ manualLaps=m;
     records=[];
   }
 }
-function renderHome(){let today=new Date().toISOString().slice(0,10),td=records.filter(r=>r.record_date===today).length,b=records.filter(r=>r.is_personal_best).length,j=records.filter(r=>r.is_jo_qualified).length;$('#home').innerHTML=`<div class="grid"><div class="card"><div class="label">今日の入力</div><div class="stat">${td}</div></div><div class="card"><div class="label">ベスト更新</div><div class="stat">${b}</div></div><div class="card"><div class="label">JO突破記録</div><div class="stat">${j}</div></div><div class="card"><div class="label">登録選手</div><div class="stat">${PLAYERS.length}</div></div></div><div class="card"><h3>🚀 すぐ入力</h3><button style="width:100%" onclick="go('input')">タイムを入力する</button></div><div class="card"><h3>最近の記録</h3>${records.slice(-5).reverse().map(r=>{let p=playerById(r.swimmer_id);return `<div class="row"><div><b>${p?.name||'選手'}</b><br><span class="muted">${r.stroke} ${r.distance}m・${r.course}</span></div><b>${fmt(r.time_seconds)}</b></div>`}).join('')||'<p class="muted">まだ記録がありません。</p>'}</div>`}
+
+// 管理者向け手動バックアップ（復元は未実装）
+async function downloadSwimBackup(){
+  if(!session || !shareAdmin){alert('バックアップは公開管理者のみ利用できます。');return;}
+  if(!confirm('氏名・生年月日を含むバックアップを保存します。\n他人と共有しないでください。\n\n開始しますか？'))return;
+  const btn=document.getElementById('backupDownloadBtn');
+  if(btn){btn.disabled=true;btn.textContent='作成中…';}
+  try{
+    const tables=['swimmers','swim_records','swim_manual_laps'],data={};
+    for(const table of tables)data[table]=await fetchAllRows(table);
+    const backup={format:'swim-time-manager-backup',format_version:1,exported_at:new Date().toISOString(),counts:Object.fromEntries(tables.map(t=>[t,data[t].length])),data};
+    const now=new Date(),stamp=`${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+    const url=URL.createObjectURL(new Blob([JSON.stringify(backup,null,2)],{type:'application/json;charset=utf-8'}));
+    const a=document.createElement('a');a.href=url;a.download=`swim_backup_${stamp}.json`;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),30000);
+    alert(`バックアップを作成しました。\n選手：${data.swimmers.length}名（非表示含む）\n記録：${data.swim_records.length}件\n手動ラップ：${data.swim_manual_laps.length}件\n\n保存先を確認してください。\n※復元機能はまだありません。`);
+  }catch(e){alert('バックアップ作成に失敗しました。\n'+String(e?.message||e));}
+  finally{if(btn){btn.disabled=false;btn.textContent='📥 バックアップを保存';}}
+}
+function renderHome(){let today=new Date().toISOString().slice(0,10),td=records.filter(r=>r.record_date===today).length,b=records.filter(r=>r.is_personal_best).length,j=records.filter(r=>r.is_jo_qualified).length;$('#home').innerHTML=`<div class="grid"><div class="card"><div class="label">今日の入力</div><div class="stat">${td}</div></div><div class="card"><div class="label">ベスト更新</div><div class="stat">${b}</div></div><div class="card"><div class="label">JO突破記録</div><div class="stat">${j}</div></div><div class="card"><div class="label">登録選手</div><div class="stat">${PLAYERS.length}</div></div></div><div class="card"><h3>🚀 すぐ入力</h3><button style="width:100%" onclick="go('input')">タイムを入力する</button></div>${shareAdmin?`<div class="card"><h3>🔒 管理者用バックアップ</h3><p class="muted small">選手（非表示含む）・大会記録・手動ラップをJSONファイルに保存します。個人情報を含むため安全に保管してください。</p><button id="backupDownloadBtn" class="secondary" style="width:100%" onclick="downloadSwimBackup()">📥 バックアップを保存</button><p class="muted small">※手動保存です。復元・自動保存は未対応です。</p></div>`:''}<div class="card"><h3>最近の記録</h3>${records.slice(-5).reverse().map(r=>{let p=playerById(r.swimmer_id);return `<div class="row"><div><b>${p?.name||'選手'}</b><br><span class="muted">${r.stroke} ${r.distance}m・${r.course}</span></div><b>${fmt(r.time_seconds)}</b></div>`}).join('')||'<p class="muted">まだ記録がありません。</p>'}</div>`}
 function renderPlayers(){ $('#players').innerHTML=`<div class="card"><div class="topline"><h2>👥 選手一覧</h2><button onclick="showAddPlayer()">＋ 選手追加</button></div><button class="secondary" style="width:100%;margin:0 0 8px" onclick="cleanupAllExactDuplicates()">🧹 完全一致した重複記録を整理</button><div class="muted small" style="margin:-2px 0 10px">選手・日付・種目・距離・水路・タイムがすべて同じ記録だけを整理します。公式 ＞ 速報 ＞ 手入力の順で1件を残します。</div><button class="secondary" style="width:100%;margin:0 0 12px" onclick="cleanupAllJasfDuplicates()">🇯🇵 重複公式記録を result_id で整理</button><div class="muted small" style="margin:-4px 0 12px">同じ選手・同じ result_id の日本水泳連盟公式記録だけを整理します。</div><input class="search" id="pq" placeholder="選手名で検索" oninput="filterPlayers()"><div id="playerForm"></div><div id="plist"></div></div>`;filterPlayers()}
 function showAddPlayer(p=null){$('#playerForm').innerHTML=`<div class="result"><h3>${p?'選手編集':'新しい選手'}</h3><div class="field"><label>氏名</label><input id="pn" value="${p?.name||''}"></div><div class="field"><label>区分</label><select id="pd">${['9歳以下','10歳','11歳','12歳','13歳','14歳','15〜16歳','CS'].map(x=>`<option ${p?.age_group===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>性別</label><select id="pg"><option ${p?.gender==='男子'?'selected':''}>男子</option><option ${p?.gender==='女子'?'selected':''}>女子</option></select></div><div class="field"><label>生年月日（任意）</label><input id="pb" type="date" value="${p?.birth_date||''}"></div><div class="field"><label>チーム・メモ（任意）</label><input id="pt" value="${p?.team||''}"></div><div class="field"><label>日本水泳連盟 競技者ID（複数可）</label><input id="pj" placeholder="例：58337328, 12345678" value="${p?jasfAthleteIds(p).join(', '):''}"><div class="muted small" style="margin-top:6px">複数ある場合はカンマ区切りで入力してください。すべてのIDから記録を同期します。</div></div><div class="actions"><button onclick="savePlayer('${p?.id||''}')">保存</button><button class="secondary" onclick="$('#playerForm').innerHTML=''">キャンセル</button></div></div>`}
 async function savePlayer(id=''){let payload={name:$('#pn').value.trim(),age_group:$('#pd').value,gender:$('#pg').value,birth_date:$('#pb').value||null,team:$('#pt').value.trim()||null,athlete_id:(parseAthleteIds($('#pj')?.value)[0]||null),athlete_ids:parseAthleteIds($('#pj')?.value),active:true};if(!payload.name){alert('氏名を入力してください');return}if(!id)payload.sort_order=(PLAYERS.reduce((m,p)=>Math.max(m,p.sort_order||0),0)+1);let q=id?sb.from('swimmers').update(payload).eq('id',id):sb.from('swimmers').insert(payload);let {error}=await q;if(error){alert(error.message);return}await loadCloud();renderPlayers();renderHome()}
@@ -3791,7 +3810,7 @@ async function saveShareSettings(playerId,enable){
 
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261010-qr07-share-home-icon';
+const APP_BUILD_VERSION='20261010-qr08-manual-backup';
 let __versionCheckBusy=false;
 async function checkForAppUpdate(){
   if(__versionCheckBusy||!navigator.onLine)return;
