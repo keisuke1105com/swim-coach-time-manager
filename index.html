@@ -180,6 +180,21 @@ header small{color:#C5E7F5}
 .players-heading .official-team{padding:10px 6px 8px}
 @media(min-width:650px){.hero-welcome{display:flex;align-items:center;gap:24px}.hero-welcome>div:first-child{margin-bottom:0}.hero-welcome .official-team{flex:0 0 320px}.players-heading{display:flex;gap:24px}.players-heading>div:first-child{margin-bottom:0;flex:1}.players-heading .official-team{flex:0 0 300px}}
 .stroke-mascot{display:block;width:80px;max-width:100%;height:auto;object-fit:contain;flex-shrink:0}.best-stroke-info{display:flex;align-items:center;gap:10px;min-width:0}.best-stroke-info>div{min-width:0}@media(max-width:430px){.stroke-mascot{width:58px}.best-stroke-info{gap:6px}}
+/* 記録画面：情報と操作の幅を確保し、ラップの重なりを防ぐ。 */
+#records .record-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:16px}
+#records .records-info{min-width:0;overflow-wrap:anywhere}
+#records .record-controls{text-align:right;min-width:0}
+#records .records-time{display:block;white-space:nowrap;font-variant-numeric:tabular-nums}
+#records .record-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:8px}
+#records .record-actions button{white-space:nowrap}
+#records .record-lap-row{flex-wrap:wrap;align-items:baseline;gap:4px 12px}
+#records .record-lap-row>span:first-child{flex-shrink:0}
+#records .record-lap-times{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:0 6px;margin-left:auto}
+#records .record-lap-times>span{white-space:nowrap}
+@media(max-width:649px){
+ #records .record-row{grid-template-columns:minmax(0,1fr);gap:12px}
+ #records .record-actions{justify-content:flex-start}
+}
 </style></head><body>
 <header><div class="wrap" style="padding:0"><div class="topline"><div><h1>🏊 水泳コーチ・タイム管理 ☁️</h1><small>選手・記録をクラウド共有</small></div><button id="logoutBtn" class="secondary hidden" onclick="logout()">ログアウト</button></div></div></header>
 <main class="wrap"><div id="status"></div><section id="auth"></section><section id="publicProfile" class="hidden"></section><div id="app" class="hidden"><section id="home"></section><section id="players" class="hidden"></section><section id="input" class="hidden"></section><section id="records" class="hidden"></section><section id="analysis" class="hidden"></section></div></main>
@@ -2083,11 +2098,10 @@ combinedLaps.forEach(l => {
                 </div>
 
                 ${combinedLaps.map(l=>`
-                  <div
+                  <div class="record-lap-row"
                     style="
                       display:flex;
                       justify-content:space-between;
-                      gap:12px;
                       padding:4px 0;
                       border-bottom:1px solid rgba(0,0,0,.06);
                     "
@@ -2103,9 +2117,8 @@ combinedLaps.forEach(l => {
 </b>
                     </span>
 
-                    <span style="text-align:right">
-                      通過
-                      <b>${l.cumulative_time||'-'}</b>
+                    <span class="record-lap-times">
+                      <span>通過 <b>${l.cumulative_time||'-'}</b></span>
                       <span class="muted">
                         ／ Split ${l.split_time||'-'}
                       </span>
@@ -2117,8 +2130,8 @@ combinedLaps.forEach(l => {
             : '';
 
           return `
-            <div class="row">
-              <div style="flex:1;min-width:0">
+            <div class="row record-row">
+              <div class="records-info">
 
                 <b>${p?.name||'選手'}</b>
 
@@ -2148,16 +2161,10 @@ combinedLaps.forEach(l => {
 
               </div>
 
-              <div
-                style="
-                  text-align:right;
-                  margin-left:12px;
-                  flex-shrink:0;
-                "
-              >
-                <b>${fmt(r.time_seconds)}</b>
+              <div class="record-controls">
+                <b class="records-time">${fmt(r.time_seconds)}</b>
 
-                <br>
+                <div class="record-actions">
 <button
   class="secondary"
   onclick="addManualLap('${r.id}')"
@@ -2167,7 +2174,7 @@ combinedLaps.forEach(l => {
                 <button
                   class="secondary"
                   onclick="editRecord('${r.id}')"
-                
+                >
                   編集
                 </button>
 
@@ -2177,6 +2184,7 @@ combinedLaps.forEach(l => {
                 >
                   削除
                 </button>
+                </div>
               </div>
             </div>
           `;
