@@ -4006,7 +4006,7 @@ async function renderPublicSwimmerProfile(){
     const bestHtml=groupedBests.map(g=>`<div class="public-best-group"><div class="public-best-heading">🏊 ${shareEscape(g.course)} ／ ${g.items.length}種目</div>${g.items.map(r=>`<div class="public-best-item"><div class="public-best-content">${publicMascotImage(r.stroke)}<div class="public-best-copy"><div class="public-best-event">${shareEscape(r.stroke)} ${shareEscape(r.distance)}m</div><div class="public-best-meta">${shareEscape(r.meet_name||'大会名未登録')}<br>${shareEscape(shareDate(r.record_date))}</div><div class="public-best-ranks">${publicRankLabels(r)}${r.is_jo_qualified?`<span class="public-best-rank public-best-jo">${publicMascotImage(r.stroke,'public-jo-mascot')}<span>🏅 JO突破（登録時の判定）</span></span>`:''}</div></div></div><div class="public-best-time">${shareFmt(r.time_seconds)}</div></div>`).join('')}</div>`).join('');
     const joRanking=Array.isArray(data.joRanking)?data.joRanking:[];
     const joRankingMeetDate=String(data.joRankingMeetDate||"");
-    const joRankingHtml=`<div class="card"><h3>🏆 JO突破率ランキング TOP30</h3><p class="small muted">${joRankingMeetDate?`${shareEscape(joRankingMeetDate)} 기준日のJO標準で判定`:"次回JOの標準記録で判定"} ／ 公開同意済みの選手を対象</p>${joRanking.length?joRanking.map((x,i)=>{
+    const joRankingHtml=`<div class="card"><h3>🏆 JO突破率ランキング TOP30</h3><p class="small muted">${joRankingMeetDate?`${shareEscape(joRankingMeetDate)} 基準日のJO標準で判定`:"次回JOの標準記録で判定"} ／ 公開同意済みの選手を対象</p>${joRanking.length?joRanking.map((x,i)=>{
       const time=Number(x.time),standard=Number(x.standard),rate=Number(x.rate),diff=Number(x.diff);
       if(!Number.isFinite(time)||!Number.isFinite(standard)||!Number.isFinite(rate))return "";
       const medal=i===0?"🥇":i===1?"🥈":i===2?"🥉":`${i+1}位`;
