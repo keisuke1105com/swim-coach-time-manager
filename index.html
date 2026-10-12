@@ -2064,7 +2064,8 @@ const addedLaps = manualLaps
   .map(m => ({
     distance: Number(m.distance),
     cumulative_time: fmt(Number(m.cumulative_seconds)),
-    lap_source: 'manual'
+    lap_source: 'manual',
+    manual_id: m.id
   }));
 
 const combinedLaps = [...officialLaps, ...addedLaps]
@@ -2152,6 +2153,7 @@ for (let end = 50; end <= raceMeters; end += 50) {
         : '<span style="color:#2980b9;font-size:11px">公式</span>'
   }
 </b>
+${l.lap_source === 'manual' ? `<button class="secondary" style="padding:3px 8px;font-size:11px;margin-left:6px;line-height:1.2" onclick="editManualLap('${l.manual_id}')">編集</button>` : ''}
                     </span>
 
                     <span class="record-lap-times">
@@ -2357,6 +2359,82 @@ for (let end = 50; end <= raceMeters; end += 50) {
   manualLaps.push(data);
   renderRecords();
   alert(`${distance}mの通過タイムを保存しました。`);
+}
+async function editManualLap(manualLapId){
+  const lap=manualLaps.find(m=>String(m.id)===String(manualLapId));
+  const r=lap&&records.find(x=>String(x.id)===String(lap.record_id));
+  if(!lap||!r){
+    alert('手入力ラップが見つかりません。');
+    return;
+  }
+
+  const timeText=prompt(
+    `${Number(lap.distance)}mの通過タイムを修正してください\n例：15.20 または 1:02.35`,
+    fmt(Number(lap.cumulative_seconds))
+  );
+  if(timeText===null)return;
+
+  const timeSeconds=sec(timeText.trim());
+  if(!Number.isFinite(timeSeconds)||timeSeconds<=0){
+    alert('正しいタイムを入力してください。');
+    return;
+  }
+
+  let official=[];
+  try{
+    official=Array.isArray(r.laps)?r.laps:JSON.parse(r.laps||'[]');
+  }catch(e){
+    official=[];
+  }
+
+  const checkpoints=[
+    {distance:0,time:0},
+    ...official.map(l=>({
+      distance:Number(l.distance),
+      time:sec(String(l.cumulative_time||''))
+    })),
+    ...manualLaps
+      .filter(m=>String(m.record_id)===String(r.id)&&String(m.id)!==String(lap.id))
+      .map(m=>({
+        distance:Number(m.distance),
+        time:Number(m.cumulative_seconds)
+      })),
+    {distance:Number(r.distance),time:Number(r.time_seconds)}
+  ].filter(x=>Number.isFinite(x.distance)&&Number.isFinite(x.time));
+
+  const before=checkpoints
+    .filter(x=>x.distance<Number(lap.distance))
+    .sort((a,b)=>b.distance-a.distance)[0];
+  const after=checkpoints
+    .filter(x=>x.distance>Number(lap.distance))
+    .sort((a,b)=>a.distance-b.distance)[0];
+
+  if(
+    !before||!after||
+    timeSeconds<=before.time||
+    timeSeconds>=after.time
+  ){
+    alert('前後の通過タイムと矛盾しています。入力値を確認してください。');
+    return;
+  }
+
+  const {data,error}=await sb
+    .from('swim_manual_laps')
+    .update({cumulative_seconds:timeSeconds})
+    .eq('id',lap.id)
+    .eq('record_id',r.id)
+    .select()
+    .single();
+
+  if(error){
+    alert('修正できませんでした：'+error.message);
+    return;
+  }
+
+  const index=manualLaps.findIndex(m=>String(m.id)===String(lap.id));
+  if(index>=0)manualLaps[index]=data;
+  renderRecords();
+  alert(`${Number(lap.distance)}mの通過タイムを修正しました。`);
 }
 async function editRecord(id){
   const r=records.find(x=>String(x.id)===String(id));
