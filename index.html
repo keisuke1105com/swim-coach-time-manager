@@ -2069,6 +2069,15 @@ const addedLaps = manualLaps
 
 const combinedLaps = [...officialLaps, ...addedLaps]
   .sort((a, b) => Number(a.distance) - Number(b.distance));
+// 50m種目で25m通過だけ登録されている場合、ゴールタイムを終点として後半25mを計算する
+if (Number(r.distance) === 50 && !combinedLaps.some(l => Number(l.distance) === 50)) {
+  combinedLaps.push({
+    distance: 50,
+    cumulative_time: fmt(Number(r.time_seconds)),
+    lap_source: 'finish'
+  });
+  combinedLaps.sort((a, b) => Number(a.distance) - Number(b.distance));
+}
           // 距離順の通過タイムから直前地点までの区間ラップを計算
 let previousDistance = 0;
 let previousTime = 0;
@@ -2138,7 +2147,9 @@ for (let end = 50; end <= raceMeters; end += 50) {
   ${
     l.lap_source === 'manual'
       ? '<span style="color:#e67e22;font-size:11px">✏️手入力</span>'
-      : '<span style="color:#2980b9;font-size:11px">公式</span>'
+      : l.lap_source === 'finish'
+        ? '<span style="color:#14753b;font-size:11px">ゴール</span>'
+        : '<span style="color:#2980b9;font-size:11px">公式</span>'
   }
 </b>
                     </span>
