@@ -836,7 +836,7 @@ console.log(
       border-radius:10px;
       line-height:1.8;
     ">
-      <b>🏊 ラップ取得結果</b><br>
+      <b>🏊 通過タイム・区間ラップ取得結果</b><br>
 🆕 新規取得・更新：<b>${lapUpdated}件</b><br>
 ✅ 取得済み：<b>${lapAlreadyExists}件</b><br>
 ⏭️ 対象外：<b>${lapNotTarget}件</b><br>
@@ -2069,19 +2069,45 @@ const addedLaps = manualLaps
 
 const combinedLaps = [...officialLaps, ...addedLaps]
   .sort((a, b) => Number(a.distance) - Number(b.distance));
-          // 距離順の通過タイムから区間Splitを計算
+          // 距離順の通過タイムから直前地点までの区間ラップを計算
+let previousDistance = 0;
 let previousTime = 0;
 
 combinedLaps.forEach(l => {
   const currentTime = sec(String(l.cumulative_time || ''));
+  const distance = Number(l.distance);
 
-  if (Number.isFinite(currentTime) && currentTime >= previousTime) {
+  if (Number.isFinite(currentTime) && currentTime >= previousTime && Number.isFinite(distance)) {
     l.split_time = fmt(currentTime - previousTime);
+    l.split_start = previousDistance;
+    previousDistance = distance;
     previousTime = currentTime;
   } else {
     l.split_time = '-';
+    l.split_start = previousDistance;
   }
 });
+
+// 累積通過タイムから50mごとの区間ラップも計算する
+const raceMeters = Number(r.distance);
+const cumulativeByDistance = new Map([[0, 0]]);
+combinedLaps.forEach(l => {
+  const distance = Number(l.distance);
+  const time = sec(String(l.cumulative_time || ''));
+  if (Number.isFinite(distance) && Number.isFinite(time)) cumulativeByDistance.set(distance, time);
+});
+if (Number.isFinite(raceMeters) && raceMeters > 0 && Number.isFinite(Number(r.time_seconds))) {
+  cumulativeByDistance.set(raceMeters, Number(r.time_seconds));
+}
+const fiftyMeterLaps = [];
+for (let end = 50; end <= raceMeters; end += 50) {
+  const start = end - 50;
+  const startTime = cumulativeByDistance.get(start);
+  const endTime = cumulativeByDistance.get(end);
+  if (Number.isFinite(startTime) && Number.isFinite(endTime) && endTime >= startTime) {
+    fiftyMeterLaps.push({ start, end, time: fmt(endTime - startTime) });
+  }
+}
           const lapHtml=combinedLaps.length
             ? `
               <div
@@ -2120,11 +2146,22 @@ combinedLaps.forEach(l => {
                     <span class="record-lap-times">
                       <span>通過 <b>${l.cumulative_time||'-'}</b></span>
                       <span class="muted">
-                        ／ Split ${l.split_time||'-'}
+                        ／ ${l.split_start}–${l.distance}mラップ ${l.split_time||'-'}
                       </span>
                     </span>
                   </div>
                 `).join('')}
+                ${fiftyMeterLaps.length ? `
+                  <div style="font-weight:700;margin:10px 0 4px">🏊 50mごとのラップ</div>
+                  ${fiftyMeterLaps.map(l=>`
+                    <div class="record-lap-row"
+                      style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(0,0,0,.06)"
+                    >
+                      <span><b>${l.start}–${l.end}m</b></span>
+                      <span><b>${l.time}</b></span>
+                    </div>
+                  `).join('')}
+                ` : ''}
               </div>
             `
             : '';
