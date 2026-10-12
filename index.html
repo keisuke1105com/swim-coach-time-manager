@@ -2369,7 +2369,7 @@ async function editManualLap(manualLapId){
   }
 
   const timeText=prompt(
-    `${Number(lap.distance)}mの通過タイムを修正してください\\n例：15.20 または 1:02.35`,
+    `${Number(lap.distance)}mの通過タイムを修正してください\n例：15.20 または 1:02.35`,
     fmt(Number(lap.cumulative_seconds))
   );
   if(timeText===null)return;
@@ -2380,9 +2380,16 @@ async function editManualLap(manualLapId){
     return;
   }
 
+  let official=[];
+  try{
+    official=Array.isArray(r.laps)?r.laps:JSON.parse(r.laps||'[]');
+  }catch(e){
+    official=[];
+  }
+
   const checkpoints=[
     {distance:0,time:0},
-    ...((Array.isArray(r.laps)?r.laps:JSON.parse(r.laps||'[]'))||[]).map(l=>({
+    ...official.map(l=>({
       distance:Number(l.distance),
       time:sec(String(l.cumulative_time||''))
     })),
