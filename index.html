@@ -188,6 +188,7 @@ header small{color:#C5E7F5}
 #records .record-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:8px}
 #records .record-actions button{white-space:nowrap}
 #records .record-lap-row{flex-wrap:wrap;align-items:baseline;gap:4px 12px}
+#records .lap-edit-button{display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:4px 8px;margin-left:6px;border:0;border-radius:8px;background:#e7f3fb;color:#0869a8;font-size:12px;line-height:1.2;white-space:nowrap;vertical-align:middle;}
 #records .record-lap-row>span:first-child{flex-shrink:0}
 #records .record-lap-times{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:0 6px;margin-left:auto}
 #records .record-lap-times>span{white-space:nowrap}
@@ -2153,7 +2154,7 @@ for (let end = 50; end <= raceMeters; end += 50) {
         : '<span style="color:#2980b9;font-size:11px">公式</span>'
   }
 </b>
-${l.lap_source === 'manual' ? `<button class="secondary" style="padding:3px 8px;font-size:11px;margin-left:6px;line-height:1.2" onclick="editManualLap('${l.manual_id}')">編集</button>` : ''}
+${l.lap_source === 'manual' ? `<button class="lap-edit-button" onclick="editManualLap('${l.manual_id}')">編集</button>` : ''}
                     </span>
 
                     <span class="record-lap-times">
