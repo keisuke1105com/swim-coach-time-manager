@@ -1578,8 +1578,16 @@ function showPlayerLapComparison(playerId) {
       String(b.record_date || '').localeCompare(String(a.record_date || ''))
     );
 
-  function getLaps(r) {
+  function getLapCheckpoints(r) {
     let official = Array.isArray(r.laps) ? r.laps : [];
+    if (typeof r.laps === 'string') {
+      try {
+        const parsed = JSON.parse(r.laps);
+        if (Array.isArray(parsed)) official = parsed;
+      } catch (e) {
+        official = [];
+      }
+    }
     const manual = (typeof manualLaps !== 'undefined' ? manualLaps : [])
       .filter(m => String(m.record_id) === String(r.id))
       .map(m => ({
@@ -1588,27 +1596,71 @@ function showPlayerLapComparison(playerId) {
       }));
 
     const byDistance = new Map();
-    [...manual, ...official].forEach(l => {
-      const d = Number(l.distance);
-      if (Number.isFinite(d)) byDistance.set(d, l);
+    [...official, ...manual].forEach(l => {
+      const distance = Number(l.distance);
+      if (Number.isFinite(distance)) byDistance.set(distance, l);
     });
+    if (!byDistance.size) return [];
 
-    let previous = 0;
-    return [...byDistance.values()]
-      .sort((a, b) => Number(a.distance) - Number(b.distance))
-      .map(l => {
-        const cumulative = sec(l.cumulative_time);
-        const split = l.split_time
-          ? sec(l.split_time)
-          : cumulative - previous;
-        if (Number.isFinite(cumulative)) previous = cumulative;
-        return {
-          distance: Number(l.distance),
-          cumulative_time: l.cumulative_time,
-          split,
-          split_time: Number.isFinite(split) ? fmt(split) : '-'
-        };
+    const raceDistance = Number(r.distance);
+    const finishTime = Number(r.time_seconds);
+    if (Number.isFinite(raceDistance) && Number.isFinite(finishTime)) {
+      byDistance.set(raceDistance, {
+        distance: raceDistance,
+        cumulative_time: fmt(finishTime)
       });
+    }
+
+    return [
+      { distance: 0, cumulative: 0 },
+      ...[...byDistance.values()]
+        .map(l => ({
+          distance: Number(l.distance),
+          cumulative: sec(String(l.cumulative_time ?? ''))
+        }))
+        .filter(l =>
+          Number.isFinite(l.distance) &&
+          l.distance > 0 &&
+          l.distance <= raceDistance &&
+          Number.isFinite(l.cumulative)
+        )
+    ].sort((a, b) => a.distance - b.distance);
+  }
+
+  function getLaps(r) {
+    const checkpoints = getLapCheckpoints(r);
+    return checkpoints.slice(1).map((point, index) => {
+      const previous = checkpoints[index];
+      const split = point.cumulative - previous.cumulative;
+      return {
+        start: previous.distance,
+        distance: point.distance,
+        cumulative_time: fmt(point.cumulative),
+        split,
+        split_time: Number.isFinite(split) ? fmt(split) : '-'
+      };
+    });
+  }
+
+  function getFixedLapIntervals(r, intervalMeters) {
+    const checkpoints = getLapCheckpoints(r);
+    if (!checkpoints.length) return [];
+    const times = new Map(checkpoints.map(point => [point.distance, point.cumulative]));
+    const distance = Number(r.distance);
+    const intervals = [];
+    for (let end = intervalMeters; end <= distance; end += intervalMeters) {
+      const start = end - intervalMeters;
+      const startTime = times.get(start);
+      const endTime = times.get(end);
+      intervals.push({
+        start,
+        end,
+        time: Number.isFinite(startTime) && Number.isFinite(endTime) && endTime >= startTime
+          ? endTime - startTime
+          : null
+      });
+    }
+    return intervals;
   }
 
   const valid = selected.filter(r =>
@@ -1625,15 +1677,16 @@ function showPlayerLapComparison(playerId) {
   if (latest && best) {
     const latestLaps = getLaps(latest);
     const bestLaps = getLaps(best);
-    const bestByDistance = new Map(
-      bestLaps.map(l => [l.distance, l])
+    const bestBySegment = new Map(
+      bestLaps.map(l => [String(l.start) + '|' + String(l.distance), l])
     );
 
     const comparisons = latestLaps
-      .filter(l => bestByDistance.has(l.distance))
+      .filter(l => bestBySegment.has(String(l.start) + '|' + String(l.distance)))
       .map(l => ({
+        start: l.start,
         distance: l.distance,
-        diff: l.split - bestByDistance.get(l.distance).split
+        diff: l.split - bestBySegment.get(String(l.start) + '|' + String(l.distance)).split
       }))
       .filter(c => Number.isFinite(c.diff));
 
@@ -1841,22 +1894,30 @@ const signed = n => {
   }
 
   const history = selected.map(r => {
-    const laps = getLaps(r);
-    if (!laps.length) return '';
+    if (!getLaps(r).length) return '';
+    const renderIntervals = intervalMeters =>
+      getFixedLapIntervals(r, intervalMeters).map(l => `
+        <div style="display:flex;justify-content:space-between;gap:5px;
+                    padding:3px 0;border-bottom:1px solid #edf1f3;font-size:13px">
+          <span>${l.start}–${l.end}m</span>
+          <b>${l.time == null ? '—' : fmt(l.time)}</b>
+        </div>
+      `).join('') || '<span class="muted small">データなし</span>';
 
     return `
       <div style="border-bottom:1px solid #ddd;padding:10px 0">
         <b>${r.record_date || ''}　${fmt(r.time_seconds)}</b>
-        ${laps.map(l => `
-          <div style="display:flex;align-items:center;gap:12px;
-                      margin-top:5px;flex-wrap:wrap">
-            <span style="width:55px;flex-shrink:0">${l.distance}m</span>
-            <b>${l.cumulative_time || '-'}</b>
-            <span style="color:#718096;font-size:12px">
-              ラップ ${l.split_time}
-            </span>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+                    gap:12px;margin-top:8px">
+          <div>
+            <b class="small">25mごとのラップ</b>
+            ${renderIntervals(25)}
           </div>
-        `).join('')}
+          <div>
+            <b class="small">50mごとのラップ</b>
+            ${renderIntervals(50)}
+          </div>
+        </div>
       </div>`;
   }).join('');
 
