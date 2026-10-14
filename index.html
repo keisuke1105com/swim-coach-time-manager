@@ -2600,12 +2600,20 @@ function jasfGradeFromBirthDate(player,year=2026){
   return null;
 }
 function jasfSameSwimmer(row,player,athleteIds=[]){
-  const name=normalizeJasfName(row?.swimmers?.swimmer_name||row?.swimmer_name);
-  const playerName=normalizeJasfName(player?.name);
-  if(name && playerName && name===playerName)return true;
   const code=String(row?.swimmers?.swimmer_code||row?.swimmer_code||'').replace(/\D/g,'');
   const ids=(athleteIds||[]).map(v=>String(v||'').replace(/\D/g,'')).filter(Boolean);
-  return !!code && ids.includes(code);
+  // 競技者IDが登録されている場合はIDを優先する。
+  // 同姓同名の別選手を氏名だけで誤照合し、別県の順位を表示することを防ぐ。
+  if(ids.length){
+    if(code)return ids.includes(code);
+    // API行にコードがない場合だけ、正規化した氏名を補助的に使う。
+    const name=normalizeJasfName(row?.swimmers?.swimmer_name||row?.swimmer_name);
+    const playerName=normalizeJasfName(player?.name);
+    return !!name && !!playerName && name===playerName;
+  }
+  const name=normalizeJasfName(row?.swimmers?.swimmer_name||row?.swimmer_name);
+  const playerName=normalizeJasfName(player?.name);
+  return !!name && !!playerName && name===playerName;
 }
 
 function jasfSleep(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
@@ -2744,7 +2752,7 @@ async function updatePlayerSameGradeRankings(playerId,{skipCached=false,silent=f
     if(skipCached && cached && !cached.error){results.push({r,cached,skipped:true});skipped++;continue;}
     try{
       const q=await fetchJasfRankingForPlayer(p,r.stroke,r.distance,r.course,year);const x=q.gradeMatched?.[0]||null;
-      const data=x?{found:true,rank:(q.gradeRank||x?.ranking||x?.ranking_in_overall||'-'),gradeRank:(q.gradeRank||x?.ranking||x?.ranking_in_overall||'-'),prefRank:q.prefRank||null,prefName:q.prefName||'',prefStatus:q.prefStatus||'pending',officialTime:x?.record?.record||x?.record||'-',swimmerCode:x?.swimmers?.swimmer_code||x?.swimmer_code||'-',updatedAt:new Date().toISOString()}:{found:false,status:q?.status||'not_listed',updatedAt:new Date().toISOString()};
+      const data=x?{found:true,rank:(q.gradeRank||x?.ranking||x?.ranking_in_overall||'-'),gradeRank:(q.gradeRank||x?.ranking||x?.ranking_in_overall||'-'),prefRank:q.prefRank??null,prefName:q.prefName||'',prefStatus:q.prefStatus||'pending',officialTime:x?.record?.record||x?.record||'-',swimmerCode:x?.swimmers?.swimmer_code||x?.swimmer_code||'-',updatedAt:new Date().toISOString()}:{found:false,status:q?.status||'not_listed',updatedAt:new Date().toISOString()};
       // 1種目終わるたびに保存。途中停止しても取得済み結果を失わない。
       setNationalRankCache(playerId,r.stroke,r.distance,r.course,data,year);
       results.push({r,x,q,cached:data}); processed++;
@@ -2909,9 +2917,9 @@ async function retryOneRankingEvent(item,year=2026){
       found:true,error:false,errorMessage:'',
       rank:(q.gradeRank||x?.ranking||x?.ranking_in_overall||previous.rank||'-'),
       gradeRank:(q.gradeRank||x?.ranking||x?.ranking_in_overall||previous.gradeRank||'-'),
-      prefRank:q.prefRank||previous.prefRank||null,
-      prefName:q.prefName||previous.prefName||'',
-      prefStatus:q.prefStatus||previous.prefStatus||'pending',
+      prefRank:q.prefRank??null,
+      prefName:q.prefName||'',
+      prefStatus:q.prefStatus||'pref_unknown',
       officialTime:x?.record?.record||x?.record||previous.officialTime||'-',
       swimmerCode:x?.swimmers?.swimmer_code||x?.swimmer_code||previous.swimmerCode||'-',
       updatedAt:new Date().toISOString()
@@ -3427,7 +3435,7 @@ if(bestRace && Array.isArray(bestRace.laps) && bestRace.laps.length){
     const comparisons=[];
 
     latestRace.laps.forEach((lap,index)=>{
-      const bestLap=bestRace.laps[index];
+      const bestLap=bestRace.laps.find(x=>Number(x.distance)===Number(lap.distance));
       if(!bestLap)return;
 
       const latestSplit=sec(lap.split_time);
@@ -3636,11 +3644,12 @@ if(comparisons.length){
                   let bestLapDiff='';
 
                   // ベストレースの同じ区間と比較
-                  if(bestRace && !isBest && bestRace.laps?.[index]){
+                  const matchingBestLap=bestRace?.laps?.find(
+                    bestLap=>Number(bestLap.distance)===Number(lap.distance)
+                  );
+                  if(bestRace && !isBest && matchingBestLap){
                     const thisSplit=sec(split);
-                    const bestSplit=sec(
-                      bestRace.laps[index].split_time
-                    );
+                    const bestSplit=sec(matchingBestLap.split_time);
 
                     if(
                       Number.isFinite(thisSplit) &&
@@ -3736,6 +3745,28 @@ if(comparisons.length){
                   }
                 }
 
+                // ラップのばらつきを数値で見える化（3区間以上で表示）
+                const validSplits=r.laps.map(l=>({
+                  distance:Number(l.distance),
+                  split:sec(l.split_time)
+                })).filter(l=>Number.isFinite(l.distance)&&Number.isFinite(l.split)&&l.split>0);
+                let splitRangeHtml='';
+                if(validSplits.length>=3){
+                  const fastest=[...validSplits].sort((a,b)=>a.split-b.split)[0];
+                  const slowest=[...validSplits].sort((a,b)=>b.split-a.split)[0];
+                  const spread=slowest.split-fastest.split;
+                  splitRangeHtml=`
+                    <div style="margin-top:8px;padding:8px 10px;background:#eef7ff;border-radius:8px">
+                      <b>📊 区間ペース分析</b>
+                      <div class="small" style="margin-top:4px">
+                        最速：${fastest.distance}m（${fmt(fastest.split)}） ／
+                        最遅：${slowest.distance}m（${fmt(slowest.split)}）
+                      </div>
+                      <div class="small">区間差：<b>${spread.toFixed(2)}秒</b></div>
+                    </div>
+                  `;
+                }
+
                 return `
                   <div style="
                     margin-top:10px;
@@ -3771,6 +3802,7 @@ if(comparisons.length){
                     </div>
 
                     ${halfHtml}
+                    ${splitRangeHtml}
                   </div>
                 `;
               }).join('');
