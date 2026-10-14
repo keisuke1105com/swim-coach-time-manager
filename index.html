@@ -1683,11 +1683,18 @@ function showPlayerLapComparison(playerId) {
 
     const comparisons = latestLaps
       .filter(l => bestBySegment.has(String(l.start) + '|' + String(l.distance)))
-      .map(l => ({
-        start: l.start,
-        distance: l.distance,
-        diff: l.split - bestBySegment.get(String(l.start) + '|' + String(l.distance)).split
-      }))
+      .map(l => {
+        const bestLap = bestBySegment.get(String(l.start) + '|' + String(l.distance));
+        return {
+          start: l.start,
+          distance: l.distance,
+          latestSplit: l.split,
+          bestSplit: bestLap.split,
+          diff: l.split - bestLap.split,
+          latestSpeed: l.distance > l.start && l.split > 0 ? (l.distance - l.start) / l.split : null,
+          bestSpeed: l.distance > l.start && bestLap.split > 0 ? (l.distance - l.start) / bestLap.split : null
+        };
+      })
       .filter(c => Number.isFinite(c.diff));
 
     const totalDiff =
@@ -1709,7 +1716,7 @@ const signed = n => {
         <div style="display:flex;justify-content:space-between;
                     align-items:center;gap:8px;padding:6px 0">
           <span>${faster ? '🟢' : slower ? '🔴' : '⚪'}
-            ${c.distance}m区間</span>
+            ${c.start}–${c.distance}m（${fmt(c.latestSplit)}秒 ／ ${c.latestSpeed ? c.latestSpeed.toFixed(2) : '-'}m/s）<small class="muted" style="display:block">BEST ${fmt(c.bestSplit)}秒 ／ ${c.bestSpeed ? c.bestSpeed.toFixed(2) : '-'}m/s</small></span>
           <b style="color:${faster ? '#16803b' : slower ? '#b42318' : '#526575'}">
             ${signed(c.diff)}
           </b>
@@ -2602,10 +2609,14 @@ function jasfGradeFromBirthDate(player,year=2026){
 function jasfSameSwimmer(row,player,athleteIds=[]){
   const name=normalizeJasfName(row?.swimmers?.swimmer_name||row?.swimmer_name);
   const playerName=normalizeJasfName(player?.name);
-  if(name && playerName && name===playerName)return true;
   const code=String(row?.swimmers?.swimmer_code||row?.swimmer_code||'').replace(/\D/g,'');
   const ids=(athleteIds||[]).map(v=>String(v||'').replace(/\D/g,'')).filter(Boolean);
-  return !!code && ids.includes(code);
+
+  // 公式選手コードが双方にある場合はコードを最優先する。
+  // 同姓同名の別選手を、県順位を含めて本人と誤認しないため。
+  if(code && ids.length) return ids.includes(code);
+  // 公式コードがAPI応答に含まれない場合に限り、正規化した氏名で補助照合する。
+  return !!name && !!playerName && name===playerName;
 }
 
 function jasfSleep(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
