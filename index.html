@@ -2600,12 +2600,20 @@ function jasfGradeFromBirthDate(player,year=2026){
   return null;
 }
 function jasfSameSwimmer(row,player,athleteIds=[]){
-  const name=normalizeJasfName(row?.swimmers?.swimmer_name||row?.swimmer_name);
-  const playerName=normalizeJasfName(player?.name);
-  if(name && playerName && name===playerName)return true;
   const code=String(row?.swimmers?.swimmer_code||row?.swimmer_code||'').replace(/\D/g,'');
   const ids=(athleteIds||[]).map(v=>String(v||'').replace(/\D/g,'')).filter(Boolean);
-  return !!code && ids.includes(code);
+  // 競技者IDが登録されている場合はIDを優先する。
+  // 同姓同名の別選手を氏名だけで誤照合し、別県の順位を表示することを防ぐ。
+  if(ids.length){
+    if(code)return ids.includes(code);
+    // API行にコードがない場合だけ、正規化した氏名を補助的に使う。
+    const name=normalizeJasfName(row?.swimmers?.swimmer_name||row?.swimmer_name);
+    const playerName=normalizeJasfName(player?.name);
+    return !!name && !!playerName && name===playerName;
+  }
+  const name=normalizeJasfName(row?.swimmers?.swimmer_name||row?.swimmer_name);
+  const playerName=normalizeJasfName(player?.name);
+  return !!name && !!playerName && name===playerName;
 }
 
 function jasfSleep(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
@@ -2744,7 +2752,7 @@ async function updatePlayerSameGradeRankings(playerId,{skipCached=false,silent=f
     if(skipCached && cached && !cached.error){results.push({r,cached,skipped:true});skipped++;continue;}
     try{
       const q=await fetchJasfRankingForPlayer(p,r.stroke,r.distance,r.course,year);const x=q.gradeMatched?.[0]||null;
-      const data=x?{found:true,rank:(q.gradeRank||x?.ranking||x?.ranking_in_overall||'-'),gradeRank:(q.gradeRank||x?.ranking||x?.ranking_in_overall||'-'),prefRank:q.prefRank||null,prefName:q.prefName||'',prefStatus:q.prefStatus||'pending',officialTime:x?.record?.record||x?.record||'-',swimmerCode:x?.swimmers?.swimmer_code||x?.swimmer_code||'-',updatedAt:new Date().toISOString()}:{found:false,status:q?.status||'not_listed',updatedAt:new Date().toISOString()};
+      const data=x?{found:true,rank:(q.gradeRank||x?.ranking||x?.ranking_in_overall||'-'),gradeRank:(q.gradeRank||x?.ranking||x?.ranking_in_overall||'-'),prefRank:q.prefRank??null,prefName:q.prefName||'',prefStatus:q.prefStatus||'pending',officialTime:x?.record?.record||x?.record||'-',swimmerCode:x?.swimmers?.swimmer_code||x?.swimmer_code||'-',updatedAt:new Date().toISOString()}:{found:false,status:q?.status||'not_listed',updatedAt:new Date().toISOString()};
       // 1種目終わるたびに保存。途中停止しても取得済み結果を失わない。
       setNationalRankCache(playerId,r.stroke,r.distance,r.course,data,year);
       results.push({r,x,q,cached:data}); processed++;
@@ -2909,9 +2917,9 @@ async function retryOneRankingEvent(item,year=2026){
       found:true,error:false,errorMessage:'',
       rank:(q.gradeRank||x?.ranking||x?.ranking_in_overall||previous.rank||'-'),
       gradeRank:(q.gradeRank||x?.ranking||x?.ranking_in_overall||previous.gradeRank||'-'),
-      prefRank:q.prefRank||previous.prefRank||null,
-      prefName:q.prefName||previous.prefName||'',
-      prefStatus:q.prefStatus||previous.prefStatus||'pending',
+      prefRank:q.prefRank??null,
+      prefName:q.prefName||'',
+      prefStatus:q.prefStatus||'pref_unknown',
       officialTime:x?.record?.record||x?.record||previous.officialTime||'-',
       swimmerCode:x?.swimmers?.swimmer_code||x?.swimmer_code||previous.swimmerCode||'-',
       updatedAt:new Date().toISOString()
