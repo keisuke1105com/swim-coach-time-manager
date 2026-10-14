@@ -4207,6 +4207,15 @@ async function renderPublicSwimmerProfile(){
     if(!res.ok){panel.innerHTML='<div class="card"><h2>公開記録が見つかりません</h2><p>公開停止中、またはURLが無効です。</p></div>';return}
     const data=await res.json(),swimmer=data.swimmer||{},rows=Array.isArray(data.records)?data.records:[];
     const publicRanks=(data.rankings&&typeof data.rankings==='object')?data.rankings:{};
+    // 種目ごとの保存データで都道府県名が食い違う場合、県順位だけを非表示にする。
+    // 全国順位は残し、誤った県名・県順位をQR公開ページに出さない。
+    const publicPrefNames=[...new Set(Object.values(publicRanks)
+      .map(v=>String(v?.prefName||'').trim())
+      .filter(Boolean))];
+    if(publicPrefNames.length>1){
+      Object.values(publicRanks).forEach(v=>{if(v&&typeof v==='object')v.prefRank=null;});
+      console.warn('公開ランキングの都道府県名が種目間で一致しないため、県順位を非表示にしました。');
+    }
     const publicRankLabels=r=>{const k=`${r.stroke}|${Number(r.distance)}|${r.course}`;const v=publicRanks[k];if(!v||!v.found)return '';const n=Number(v.gradeRank||v.rank),pref=Number(v.prefRank);const parts=[];if(Number.isInteger(n)&&n>0)parts.push(`🇯🇵 同学年 全国 ${n}位`);if(Number.isInteger(pref)&&pref>0)parts.push(`🗻 ${shareEscape(v.prefName||'都道府県内')} ${pref}位`);return parts.map(x=>`<span class="public-best-rank">${x}</span>`).join('');};
     const publicStrokeMascot={
       'バタフライ':'fitz-butterfly.jpg',
