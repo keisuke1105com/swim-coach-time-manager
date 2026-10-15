@@ -2656,9 +2656,10 @@ function jasfFindSameSwimmer(rows,player,athleteIds=[],allowUniqueNameFallback=f
   if(!allowUniqueNameFallback)return null;
   const name=normalizeJasfName(player?.name);
   const candidates=list.filter(row=>{
-    const code=String(row?.swimmers?.swimmer_code||row?.swimmer_code||'').replace(/\\D/g,'');
     const rowName=normalizeJasfName(row?.swimmers?.swimmer_name||row?.swimmer_name);
-    if(code||!name||rowName!==name)return false;
+    // 選手ページIDと順位APIの競技者コードは異なることがある。
+    // 氏名・学年の候補が1名なら、その公式順位行を本人として採用する。
+    if(!name||rowName!==name)return false;
     const info=jasfSchoolInfo(row);
     const playerGrade=jasfGradeFromBirthDate(player,year);
     if(playerGrade&&String(info.schoolClassCode)!=='99'&&String(info.schoolClassCode)!==String(playerGrade.schoolClassCode))return false;
