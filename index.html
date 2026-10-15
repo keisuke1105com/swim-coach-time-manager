@@ -2619,6 +2619,18 @@ function jasfSameSwimmer(row,player,athleteIds=[]){
 
 // 競技者コードを返さないAPI応答では、学年・性別・種目を絞った氏名検索結果が
 // 1件だけで、かつ公式名が完全一致するときに限って本人として扱う。
+// 同姓同名の公式選手が確認できた場合は、登録済みの競技者番号に都道府県を対応付ける。
+// ランキングAPIが競技者番号を返さない場合でも、別県の同姓同名を選ばないために使う。
+const JASF_ATHLETE_PREFECTURES={'58366356':'山梨'};
+function jasfNormalizedPrefecture(value){
+  return String(value||'').normalize('NFKC').replace(/[\s　]/g,'').replace(/[都道府県]$/,'');
+}
+function jasfExpectedPrefecture(athleteIds=[]){
+  return (athleteIds||[]).map(id=>JASF_ATHLETE_PREFECTURES[String(id||'').replace(/\D/g,'')]).find(Boolean)||'';
+}
+
+// 競技者コードを返さないAPI応答では、学年・性別・種目を絞った氏名検索結果を使う。
+// 同姓同名が複数なら、登録済みの競技者番号に対応する都道府県まで一致した1件だけを本人として扱う。
 function jasfFindSameSwimmer(rows,player,athleteIds=[],allowUniqueNameFallback=false,year=2026){
   const list=Array.isArray(rows)?rows:[];
   const ids=(athleteIds||[]).map(v=>String(v||'').replace(/\D/g,'')).filter(Boolean);
@@ -2640,6 +2652,11 @@ function jasfFindSameSwimmer(rows,player,athleteIds=[],allowUniqueNameFallback=f
     if(playerGrade&&String(info.schoolGrade)!=='99'&&String(info.schoolGrade)!==String(playerGrade.schoolGrade))return false;
     return true;
   });
+  const expectedPrefecture=jasfNormalizedPrefecture(jasfExpectedPrefecture(ids));
+  if(expectedPrefecture){
+    const prefMatches=candidates.filter(row=>jasfNormalizedPrefecture(jasfPrefInfo(row).name)===expectedPrefecture);
+    return prefMatches.length===1?prefMatches[0]:null;
+  }
   return candidates.length===1&&list.length===1?candidates[0]:null;
 }
 
