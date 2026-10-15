@@ -268,6 +268,10 @@ function playerById(id){return PLAYERS.find(x=>x.id===id)}
 const JASF_ATHLETE_IDS={
   '龍田小春':'58337328'
 };
+// 選手ページIDと順位APIの swimmer_code は別番号の場合がある。
+const JASF_PROFILE_TO_RANKING_CODES={
+  '58366356':['9455451'] // 大森結月: Results of Japan Swimming の順位APIで確認済み
+};
 function jasfAthleteIds(player){
   if(!player)return [];
   const ids=[];
@@ -279,6 +283,8 @@ function jasfAthleteIds(player){
   add(player.athlete_id||player.jasf_athlete_id);
   const key=String(player.name||'').replace(/[ 　]/g,'').trim();
   add(JASF_ATHLETE_IDS[key]);
+  // プロフィールIDはURL生成にも使うので先に保持し、順位照合用IDを追加する。
+  [...ids].forEach(id=>(JASF_PROFILE_TO_RANKING_CODES[id]||[]).forEach(add));
   return ids;
 }
 function jasfAthleteId(player){return jasfAthleteIds(player)[0]||'';}
