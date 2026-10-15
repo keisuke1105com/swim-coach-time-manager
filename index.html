@@ -2617,6 +2617,32 @@ function jasfSameSwimmer(row,player,athleteIds=[]){
   return !!name && !!playerName && name===playerName;
 }
 
+// 競技者コードを返さないAPI応答では、学年・性別・種目を絞った氏名検索結果が
+// 1件だけで、かつ公式名が完全一致するときに限って本人として扱う。
+function jasfFindSameSwimmer(rows,player,athleteIds=[],allowUniqueNameFallback=false,year=2026){
+  const list=Array.isArray(rows)?rows:[];
+  const ids=(athleteIds||[]).map(v=>String(v||'').replace(/\D/g,'')).filter(Boolean);
+  const byId=list.find(row=>{
+    const code=String(row?.swimmers?.swimmer_code||row?.swimmer_code||'').replace(/\D/g,'');
+    return !!code&&ids.includes(code);
+  });
+  if(byId)return byId;
+  if(!ids.length)return list.find(row=>jasfSameSwimmer(row,player,ids))||null;
+  if(!allowUniqueNameFallback)return null;
+  const name=normalizeJasfName(player?.name);
+  const candidates=list.filter(row=>{
+    const code=String(row?.swimmers?.swimmer_code||row?.swimmer_code||'').replace(/\D/g,'');
+    const rowName=normalizeJasfName(row?.swimmers?.swimmer_name||row?.swimmer_name);
+    if(code||!name||rowName!==name)return false;
+    const info=jasfSchoolInfo(row);
+    const playerGrade=jasfGradeFromBirthDate(player,year);
+    if(playerGrade&&String(info.schoolClassCode)!=='99'&&String(info.schoolClassCode)!==String(playerGrade.schoolClassCode))return false;
+    if(playerGrade&&String(info.schoolGrade)!=='99'&&String(info.schoolGrade)!==String(playerGrade.schoolGrade))return false;
+    return true;
+  });
+  return candidates.length===1&&list.length===1?candidates[0]:null;
+}
+
 function jasfSleep(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
 
 async function withJasfRetry(task,{retries=2,baseDelay=1800}={}){
@@ -2661,7 +2687,7 @@ async function fetchJasfRankingForPlayer(player,stroke,distance,course,year=2026
   }
 
   const named=await safeFetchJasfRankingPage(player,stroke,distance,course,year,schoolClassCode,schoolGrade,target,1);
-  let self=named.find(x=>jasfSameSwimmer(x,player,athleteIds))||null;
+  let self=jasfFindSameSwimmer(named,player,athleteIds,true,year);
 
   // 表記ゆれ対策として、見つからない場合だけ全体氏名検索を1回補助的に使う。
   if(!self){
