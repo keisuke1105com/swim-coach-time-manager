@@ -179,7 +179,7 @@ header small{color:#C5E7F5}
 .players-heading .muted{max-width:none}
 .players-heading .official-team{padding:10px 6px 8px}
 @media(min-width:650px){.hero-welcome{display:flex;align-items:center;gap:24px}.hero-welcome>div:first-child{margin-bottom:0}.hero-welcome .official-team{flex:0 0 320px}.players-heading{display:flex;gap:24px}.players-heading>div:first-child{margin-bottom:0;flex:1}.players-heading .official-team{flex:0 0 300px}}
-.stroke-mascot{display:block;width:80px;max-width:100%;height:auto;object-fit:contain;flex-shrink:0}.best-stroke-info{display:flex;align-items:center;gap:10px;min-width:0}.best-stroke-info>div{min-width:0}@media(max-width:430px){.stroke-mascot{width:58px}.best-stroke-info{gap:6px}}
+.stroke-mascot{display:block;width:80px;max-width:100%;height:auto;object-fit:contain;flex-shrink:0}.medley-mascots{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));width:80px;height:80px;flex:0 0 80px;gap:1px;align-items:center;justify-items:center}.medley-mascots img{display:block;width:100%;height:100%;object-fit:contain;min-width:0;min-height:0}@media(max-width:430px){.medley-mascots{width:58px;height:58px;flex-basis:58px}}.best-stroke-info{display:flex;align-items:center;gap:10px;min-width:0}.best-stroke-info>div{min-width:0}@media(max-width:430px){.stroke-mascot{width:58px}.best-stroke-info{gap:6px}}
 /* 記録画面：情報と操作の幅を確保し、ラップの重なりを防ぐ。 */
 #records .record-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:16px}
 #records .records-info{min-width:0;overflow-wrap:anywhere}
@@ -1318,6 +1318,7 @@ if(st!=null){
     return `
       <div class="row">
         <div class="best-stroke-info">
+          ${r.stroke==='個人メドレー' ? `<div class="medley-mascots" role="img" aria-label="公式キャラクター4泳法：左上バタフライ、右上背泳ぎ、左下平泳ぎ、右下自由形"><img src="assets/characters/fitz-butterfly.jpg" alt=""><img src="assets/characters/kurin-backstroke.jpg" alt=""><img src="assets/characters/relief-breaststroke.jpg" alt=""><img src="assets/characters/fitz-freestyle.jpg" alt=""></div>` : ''}
           ${{'バタフライ':'fitz-butterfly.jpg','背泳ぎ':'kurin-backstroke.jpg','平泳ぎ':'relief-breaststroke.jpg','自由形':'fitz-freestyle.jpg'}[r.stroke] ? `<img class="stroke-mascot" src="assets/characters/${{'バタフライ':'fitz-butterfly.jpg','背泳ぎ':'kurin-backstroke.jpg','平泳ぎ':'relief-breaststroke.jpg','自由形':'fitz-freestyle.jpg'}[r.stroke]}" alt="${r.stroke}を泳ぐ公式キャラクター">` : ''}
           <div><b>${r.stroke} ${r.distance}m</b><br>
           <span class="muted">${r.course}</span><br>
