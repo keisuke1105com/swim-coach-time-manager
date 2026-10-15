@@ -2825,9 +2825,16 @@ async function updatePlayerSameGradeRankings(playerId,{skipCached=false,silent=f
     try{
       const q=await fetchJasfRankingForPlayer(p,r.stroke,r.distance,r.course,year);const x=q.gradeMatched?.[0]||null;
       const data=x?{found:true,rank:(q.gradeRank||x?.ranking||x?.ranking_in_overall||'-'),gradeRank:(q.gradeRank||x?.ranking||x?.ranking_in_overall||'-'),prefRank:q.prefRank??null,prefName:q.prefName||'',prefStatus:q.prefStatus||'pending',officialTime:x?.record?.record||x?.record||'-',swimmerCode:x?.swimmers?.swimmer_code||x?.swimmer_code||'-',updatedAt:new Date().toISOString()}:{found:false,status:q?.status||'not_listed',updatedAt:new Date().toISOString()};
+      // 再照会で見つからない場合は、以前に確認できた順位を消さない。
+      // 検索不一致は公式ランキングへの未掲載を証明しないため、既存の成功結果を保持する。
+      const preserved=(!x&&cached?.found)?{
+        ...cached,
+        refreshStatus:q?.status||'not_confirmed',
+        refreshCheckedAt:new Date().toISOString()
+      }:data;
       // 1種目終わるたびに保存。途中停止しても取得済み結果を失わない。
-      setNationalRankCache(playerId,r.stroke,r.distance,r.course,data,year);
-      results.push({r,x,q,cached:data}); processed++;
+      setNationalRankCache(playerId,r.stroke,r.distance,r.course,preserved,year);
+      results.push({r,x,q,cached:preserved}); processed++;
       if(!eventKey)await jasfSleep(1200);
     }catch(e){
       // 通信エラー時は取得済みの正常な順位を上書きしない。
