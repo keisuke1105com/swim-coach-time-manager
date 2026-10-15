@@ -1228,6 +1228,13 @@ async function saveAthleteId(playerId){
 function nationalRankCacheKey(playerId,stroke,distance,course,year=2026){return `nationalRank|${year}|${playerId}|${stroke}|${Number(distance)}|${course}`;}
 function getNationalRankCache(playerId,stroke,distance,course,year=2026){try{return JSON.parse(localStorage.getItem(nationalRankCacheKey(playerId,stroke,distance,course,year))||'null');}catch(e){return null;}}
 function setNationalRankCache(playerId,stroke,distance,course,data,year=2026){try{localStorage.setItem(nationalRankCacheKey(playerId,stroke,distance,course,year),JSON.stringify(data));}catch(e){}}
+function rankingStatusText(nr){
+  if(!nr)return '🇯🇵 同学年順位 未取得（未照会）';
+  if(nr.found)return `🇯🇵 同学年 全国 ${nr.gradeRank||nr.rank}位${nr.prefRank?` ／ 🗻 ${nr.prefName||'都道府県内'} ${nr.prefRank}位`:nr.prefStatus==='too_deep'?' ／ 🗻 県順位 取得待ち':nr.prefStatus==='pref_unknown'?' ／ 🗻 県情報なし':' ／ 🗻 県順位 再取得可'}`;
+  if(nr.error)return '⚠️ 通信エラー（再取得できます）';
+  if(nr.status==='grade_unavailable')return '⚠️ 学年判定不可（要確認）';
+  return '🇯🇵 該当記録を確認できず（未掲載とは限りません）';
+}
 function rankBadgeId(playerId,stroke,distance,course){return 'nationalRank_'+String(playerId+'_'+stroke+'_'+distance+'_'+course).replace(/[^a-zA-Z0-9_-]/g,'_');}
 function showPlayerDetail(id,remember=true){
   let p=playerById(id);
@@ -1302,11 +1309,7 @@ if(st!=null){
 }
 
     const nr=getNationalRankCache(id,r.stroke,r.distance,r.course,2026);
-    const nrText=nr ? (
-      nr.found
-        ? `🇯🇵 同学年 全国 ${nr.gradeRank||nr.rank}位${nr.prefRank?` ／ 🗻 ${nr.prefName||'都道府県内'} ${nr.prefRank}位`:(nr.prefStatus==='too_deep'?' ／ 🗻 県順位 取得待ち':nr.prefStatus==='pref_unknown'?' ／ 🗻 県情報なし':' ／ 🗻 県順位 再取得可')}`
-        : (nr.error?'⚠️ 通信エラー・再取得可能':(nr.status==='grade_unavailable'?'⚠️ 学年判定不可':'🇯🇵 同学年ランキング掲載なし'))
-    ) : '🇯🇵 同学年順位 未取得';
+    const nrText=rankingStatusText(nr);
     return `
       <div class="row">
         <div class="best-stroke-info">
@@ -1315,6 +1318,7 @@ if(st!=null){
           <span class="muted">${r.course}</span><br>
           <span class="muted">${joText}</span><br>
           <span id="${rankBadgeId(id,r.stroke,r.distance,r.course)}" class="${nr&&nr.found?'badge':'muted'}">${nrText}</span>
+          <button type="button" class="small" style="margin-top:6px" onclick='refreshOneRanking(${JSON.stringify(id)},${JSON.stringify(r.stroke)},${Number(r.distance)},${JSON.stringify(r.course)})'>🔄 この種目の順位を取得</button>
           </div>
         </div>
         <div style="text-align:right">
@@ -2803,7 +2807,7 @@ async function fetchJasfRankingForPlayer(player,stroke,distance,course,year=2026
   };
 }
 function escapeRankingError(value){return String(value||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-async function updatePlayerSameGradeRankings(playerId,{skipCached=false,silent=false}={}){
+async function updatePlayerSameGradeRankings(playerId,{skipCached=false,silent=false,eventKey=null}={}){
   const p=playerById(playerId);
   const box=$('#playerJasfRankingBox');
   if(!p)return {ok:false,found:0,total:0,processed:0,skipped:0};
@@ -2811,7 +2815,7 @@ async function updatePlayerSameGradeRankings(playerId,{skipCached=false,silent=f
   if(!athleteIds.length){if(box&&!silent)box.innerHTML='<div class="notice">先に日本水泳連盟の競技者IDを登録してください。</div>';return {ok:false,found:0,total:0,processed:0,skipped:0};}
   const mine=records.filter(r=>String(r.swimmer_id)===String(playerId)&&Number.isFinite(Number(r.time_seconds))),bestMap=new Map();
   mine.forEach(r=>{const k=`${r.stroke}|${Number(r.distance)}|${r.course}`;const old=bestMap.get(k);if(!old||Number(r.time_seconds)<Number(old.time_seconds))bestMap.set(k,r);});
-  const bests=[...bestMap.values()].filter(r=>jasfEventCodes(r.stroke,r.distance));
+  const bests=[...bestMap.values()].filter(r=>jasfEventCodes(r.stroke,r.distance)&&(!eventKey||eventKey===`${r.stroke}|${Number(r.distance)}|${r.course}`));
   if(!bests.length){if(box&&!silent)box.innerHTML='<div class="notice">照合できるベスト記録がありません。</div>';return {ok:true,found:0,total:0,processed:0,skipped:0};}
   if(box&&!silent)box.innerHTML=`<div class="notice">🇯🇵 ${p.name} の同学年全国順位・都道府県内順位を ${bests.length}種目照合中…</div>`;
   const year=2026,results=[]; let processed=0,skipped=0;
@@ -2824,15 +2828,15 @@ async function updatePlayerSameGradeRankings(playerId,{skipCached=false,silent=f
       // 1種目終わるたびに保存。途中停止しても取得済み結果を失わない。
       setNationalRankCache(playerId,r.stroke,r.distance,r.course,data,year);
       results.push({r,x,q,cached:data}); processed++;
-      await jasfSleep(1200);
+      if(!eventKey)await jasfSleep(1200);
     }catch(e){
       // 通信エラー時は取得済みの正常な順位を上書きしない。
       const data={found:false,error:true,errorMessage:String(e?.message||e),updatedAt:new Date().toISOString()};
       if(!cached?.found)setNationalRankCache(playerId,r.stroke,r.distance,r.course,data,year);
       results.push({r,error:data.errorMessage,cached:cached?.found?cached:data}); processed++;
-      await jasfSleep(1200);
+      if(!eventKey)await jasfSleep(1200);
     }
-    await new Promise(res=>setTimeout(res,350));
+    if(!eventKey)await new Promise(res=>setTimeout(res,350));
   }
   const found=results.filter(v=>v.x||v.cached?.found).length;
   if(box&&!silent){
@@ -2848,6 +2852,24 @@ async function updatePlayerSameGradeRankings(playerId,{skipCached=false,silent=f
   }
   return {ok:true,found,total:bests.length,processed,skipped};
 }
+const rankingRefreshInProgress=new Set();
+async function refreshOneRanking(playerId,stroke,distance,course){
+  const eventKey=`${stroke}|${Number(distance)}|${course}`;
+  const lock=`${playerId}|${eventKey}`;
+  if(rankingRefreshInProgress.has(lock))return;
+  const badge=document.getElementById(rankBadgeId(playerId,stroke,distance,course));
+  rankingRefreshInProgress.add(lock);
+  if(badge){badge.textContent='⏳ この種目の順位を取得中…';badge.className='muted';}
+  try{
+    await updatePlayerSameGradeRankings(playerId,{eventKey,silent:true});
+  }catch(e){
+    console.warn('種目別順位取得に失敗:',e);
+  }finally{
+    rankingRefreshInProgress.delete(lock);
+    const latest=getNationalRankCache(playerId,stroke,distance,course,2026);
+    if(badge){badge.textContent=rankingStatusText(latest);badge.className=latest?.found?'badge':'muted';}
+  }
+}
 async function testPlayerJasfRanking(playerId){
   const result=await updatePlayerSameGradeRankings(playerId,{skipCached:false,silent:false});
   // ページ全体を再描画すると更新結果の表示が消えるため、ランキング表示だけ更新する。
@@ -2860,9 +2882,7 @@ async function testPlayerJasfRanking(playerId){
     const nr=getNationalRankCache(playerId,stroke,distance,course,2026);
     if(!nr)return;
     el.className=nr.found?'badge':'muted';
-    el.textContent=nr.found
-      ? `🇯🇵 同学年 全国 ${nr.gradeRank||nr.rank}位${nr.prefRank?` ／ 🗻 ${nr.prefName||'都道府県内'} ${nr.prefRank}位`:''}`
-      : nr.error?'⚠️ 通信エラー・下の詳細を確認':nr.status==='grade_unavailable'?'⚠️ 学年判定不可':'🇯🇵 同学年ランキング掲載なし';
+    el.textContent=rankingStatusText(nr);
   });
   return result;
 }
