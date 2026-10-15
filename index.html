@@ -2621,21 +2621,28 @@ function jasfSameSwimmer(row,player,athleteIds=[]){
 // 1件だけで、かつ公式名が完全一致するときに限って本人として扱う。
 // 同姓同名の公式選手が確認できた場合は、登録済みの競技者番号に都道府県を対応付ける。
 // ランキングAPIが競技者番号を返さない場合でも、別県の同姓同名を選ばないために使う。
-const JASF_ATHLETE_PREFECTURES={'58366356':'山梨'};
-function jasfNormalizedPrefecture(value){
-  return String(value||'').normalize('NFKC').replace(/[\s　]/g,'').replace(/[都道府県]$/,'');
+const JASF_ATHLETE_IDENTITIES={
+  // 同姓同名の選手がいるため、JASFで確認した競技者番号と所属・都道府県を照合に使う。
+  '58366356':{prefecture:'山梨',teamTokens:['フィッツ','竜王']}
+};
+function jasfNormalizedText(value){
+  return String(value||'').normalize('NFKC').replace(/[\\s　・.．,，、()（）［］【】【：:・]/g,'');
 }
-function jasfExpectedPrefecture(athleteIds=[]){
-  return (athleteIds||[]).map(id=>JASF_ATHLETE_PREFECTURES[String(id||'').replace(/\D/g,'')]).find(Boolean)||'';
+function jasfExpectedIdentity(athleteIds=[]){
+  return (athleteIds||[]).map(id=>JASF_ATHLETE_IDENTITIES[String(id||'').replace(/\\D/g,'')]).find(Boolean)||null;
+}
+function jasfRowSearchText(row){
+  // APIの所属欄は応答ごとに階層が異なるため、行内の文字列をまとめて照合する。
+  try{return jasfNormalizedText(JSON.stringify(row));}catch(e){return '';}
 }
 
 // 競技者コードを返さないAPI応答では、学年・性別・種目を絞った氏名検索結果を使う。
-// 同姓同名が複数なら、登録済みの競技者番号に対応する都道府県まで一致した1件だけを本人として扱う。
+// 同姓同名が複数なら、登録済みの競技者番号に対応する所属・都道府県まで一致した1件だけを本人として扱う。
 function jasfFindSameSwimmer(rows,player,athleteIds=[],allowUniqueNameFallback=false,year=2026){
   const list=Array.isArray(rows)?rows:[];
-  const ids=(athleteIds||[]).map(v=>String(v||'').replace(/\D/g,'')).filter(Boolean);
+  const ids=(athleteIds||[]).map(v=>String(v||'').replace(/\\D/g,'')).filter(Boolean);
   const byId=list.find(row=>{
-    const code=String(row?.swimmers?.swimmer_code||row?.swimmer_code||'').replace(/\D/g,'');
+    const code=String(row?.swimmers?.swimmer_code||row?.swimmer_code||'').replace(/\\D/g,'');
     return !!code&&ids.includes(code);
   });
   if(byId)return byId;
@@ -2643,7 +2650,7 @@ function jasfFindSameSwimmer(rows,player,athleteIds=[],allowUniqueNameFallback=f
   if(!allowUniqueNameFallback)return null;
   const name=normalizeJasfName(player?.name);
   const candidates=list.filter(row=>{
-    const code=String(row?.swimmers?.swimmer_code||row?.swimmer_code||'').replace(/\D/g,'');
+    const code=String(row?.swimmers?.swimmer_code||row?.swimmer_code||'').replace(/\\D/g,'');
     const rowName=normalizeJasfName(row?.swimmers?.swimmer_name||row?.swimmer_name);
     if(code||!name||rowName!==name)return false;
     const info=jasfSchoolInfo(row);
@@ -2652,12 +2659,22 @@ function jasfFindSameSwimmer(rows,player,athleteIds=[],allowUniqueNameFallback=f
     if(playerGrade&&String(info.schoolGrade)!=='99'&&String(info.schoolGrade)!==String(playerGrade.schoolGrade))return false;
     return true;
   });
-  const expectedPrefecture=jasfNormalizedPrefecture(jasfExpectedPrefecture(ids));
-  if(expectedPrefecture){
-    const prefMatches=candidates.filter(row=>jasfNormalizedPrefecture(jasfPrefInfo(row).name)===expectedPrefecture);
-    return prefMatches.length===1?prefMatches[0]:null;
-  }
-  return candidates.length===1&&list.length===1?candidates[0]:null;
+  if(candidates.length===1)return candidates[0];
+
+  const identity=jasfExpectedIdentity(ids);
+  if(!identity)return null;
+  const prefecture=jasfNormalizedText(identity.prefecture);
+  const tokens=(identity.teamTokens||[]).map(jasfNormalizedText).filter(Boolean);
+  const matches=candidates.map(row=>{
+    const text=jasfRowSearchText(row);
+    return {row,prefecture:!!prefecture&&text.includes(prefecture),team:tokens.length>0&&tokens.every(token=>text.includes(token))};
+  });
+  const both=matches.filter(x=>x.prefecture&&x.team);
+  if(both.length===1)return both[0].row;
+  const team=matches.filter(x=>x.team);
+  if(team.length===1)return team[0].row;
+  const pref=matches.filter(x=>x.prefecture);
+  return pref.length===1?pref[0].row:null;
 }
 
 function jasfSleep(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
