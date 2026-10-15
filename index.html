@@ -1235,7 +1235,12 @@ function rankingStatusText(nr){
   if(nr.status==='grade_unavailable')return '⚠️ 学年判定不可（要確認）';
   return '🇯🇵 該当記録を確認できず（未掲載とは限りません）';
 }
-function rankBadgeId(playerId,stroke,distance,course){return 'nationalRank_'+String(playerId+'_'+stroke+'_'+distance+'_'+course).replace(/[^a-zA-Z0-9_-]/g,'_');}
+function rankBadgeId(playerId,stroke,distance,course){
+  // 日本語を "_" に置換すると別種目・長短水路が同じDOM IDになってしまう。
+  // 各文字のコードポイントを16進数化して、種目・水路ごとに一意なIDを作る。
+  const key=JSON.stringify([String(playerId),String(stroke),Number(distance),String(course)]);
+  return 'nationalRank_'+Array.from(key,ch=>ch.codePointAt(0).toString(16)).join('_');
+}
 function showPlayerDetail(id,remember=true){
   let p=playerById(id);
   if(remember)saveViewState('players',id);
