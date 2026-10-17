@@ -48,7 +48,19 @@ async function lookup(responses, subject = player) {
   const byId = {...row, swimmers:{...row.swimmers, swimmer_code:ids[1]}};
   result = await lookup([[row, byId]]);
   assert.equal(result.gradeMatched[0].swimmers.swimmer_code, ids[1], 'all registered IDs retain priority');
+  // Exercise the real profile-to-ranking mapping with both registrations present.
+  const mappingSource = html.slice(html.indexOf('const JASF_PROFILE_TO_RANKING_CODES='), html.indexOf('function jasfAthleteId(player)'));
+  vm.runInContext('const JASF_ATHLETE_IDS={};\n' + mappingSource, context);
+  const registered = {name:'飯野 舞美', athlete_ids:['57355971','58640127']};
+  const mappedIds = vm.runInContext(`jasfAthleteIds(${encoded(registered)})`, context);
+  assert.ok(mappedIds.includes('9546708') && mappedIds.includes('9118656'));
+  const schoolRow = {...row, ranking:167, swimmers:{...row.swimmers, swimmer_code:'9546708'}};
+  const clubRow = {...row, ranking:215, record:{record:'1:02.65'}, swimmers:{...row.swimmers, swimmer_code:'9118656'}};
+  assert.equal(context.jasfFindSameSwimmer([schoolRow,clubRow],registered,mappedIds,true,2026),schoolRow,
+    'official best-first rows resolve by verified code even with two registrations');
+  assert.equal(context.jasfFindSameSwimmer([clubRow],registered,mappedIds,true,2026),clubRow,
+    'club-only events remain identifiable');
   // Check syntax of every inline script, without executing app startup.
   for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))new vm.Script(match[1]);
-  console.log('PASS: 7 ranking scenarios and all inline script syntax checks');
+  console.log('PASS: 10 ranking checks and all inline script syntax checks');
 })().catch(error=>{console.error(error);process.exitCode=1;});
