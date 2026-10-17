@@ -4480,7 +4480,7 @@ const meEsc=v=>String(v??'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':
 function meDays(v){const d=new Date(String(v)+'T00:00:00'),t=new Date();if(!Number.isFinite(d.getTime()))return null;return Math.round((Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())-Date.UTC(t.getFullYear(),t.getMonth(),t.getDate()))/86400000)}
 function meDate(v){return new Date(v+'T00:00:00').toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'short'})}
 function meCountdown(v){const d=meDays(v);return d==null?'日程未登録':d===0?'本日開催！':d>0?'あと'+d+'日':'終了'}
-async function loadMeets(){const [a,b]=await Promise.all([sb.from('swim_meets').select('*').order('meet_date'),sb.from('swim_meet_entries').select('*')]);if(a.error)throw a.error;if(b.error)throw b.error;meetList=a.data||[];meetEntries=b.data||[]}
+async function loadMeets(){const [a,b]=await Promise.all([sb.from('swim_meets').select('*').order('meet_date'),sb.from('swim_meet_swimmers').select('*')]);if(a.error)throw a.error;if(b.error)throw b.error;meetList=a.data||[];meetEntries=b.data||[]}
 async function refreshMeets(){try{await loadMeets();renderMeets()}catch(e){alert('大会情報を取得できませんでした：'+e.message)}}
 function handleMeetButton(ev){
  const button=ev.target.closest('button[data-meet-action]');
@@ -4491,11 +4491,11 @@ function handleMeetButton(ev){
  else if(action==='edit-entry')editMeetEntry(button.dataset.entryId);
 }
 function renderMeets(){
- const card=m=>{const entries=meetEntries.filter(e=>e.meet_id===m.id),ids=[...new Set(entries.map(e=>e.swimmer_id))];
- return '<article class="card me-card"><div class="me-head"><div><small>'+meEsc(meDate(m.meet_date))+'</small><h3>'+meEsc(m.name)+'</h3><p>📍 '+meEsc(m.venue||'会場未登録')+'</p></div><b class="me-count">'+meCountdown(m.meet_date)+'</b></div><div class="me-actions"><button class="secondary" data-meet-action="edit-meet" data-meet-id="'+meEsc(m.id)+'">大会を編集</button><button data-meet-action="add-entry" data-meet-id="'+meEsc(m.id)+'">＋ 出場種目を追加</button></div><b>👥 出場選手（'+ids.length+'名）</b><div>'+ids.map(id=>'<span class="me-chip">'+meEsc(playerById(id)?.name||'選手')+'</span>').join('')+'</div><div class="me-scroll"><table class="me-table"><thead><tr><th>選手</th><th>種目</th><th>エントリータイム</th><th></th></tr></thead><tbody>'+(entries.length?entries.map(e=>'<tr><td>'+meEsc(playerById(e.swimmer_id)?.name||'選手')+'</td><td>'+meEsc(e.stroke)+' '+e.distance+'m<br>'+meEsc(e.course)+'</td><td>'+meEsc(e.entry_seconds==null?'未入力':fmt(e.entry_seconds))+'</td><td><button class="secondary small" data-meet-action="edit-entry" data-entry-id="'+meEsc(e.id)+'">編集</button></td></tr>').join(''):'<tr><td colspan="4">出場種目は未登録です</td></tr>')+'</tbody></table></div></article>'};
+ const card=m=>{const ids=[...new Set(meetEntries.filter(e=>e.meet_id===m.id).map(e=>e.swimmer_id))];
+ return '<article class="card me-card"><div class="me-head"><div><small>'+meEsc(meDate(m.meet_date))+'</small><h3>'+meEsc(m.name)+'</h3><p>📍 '+meEsc(m.venue||'会場未登録')+'</p></div><b class="me-count">'+meCountdown(m.meet_date)+'</b></div><div class="me-actions"><button class="secondary" data-meet-action="edit-meet" data-meet-id="'+meEsc(m.id)+'">大会を編集</button><button data-meet-action="add-entry" data-meet-id="'+meEsc(m.id)+'">👥 出場選手を選択</button></div><b>👥 出場選手（'+ids.length+'名）</b><div class="me-swimmers">'+(ids.length?ids.map(id=>'<span class="me-chip">'+meEsc(playerById(id)?.name||'選手')+'</span>').join(''):'<p class="muted">出場選手は未登録です。</p>')+'</div></article>'};
  const future=meetList.filter(m=>meDays(m.meet_date)>=0),past=meetList.filter(m=>meDays(m.meet_date)<0).reverse();
  $('#meets').onclick=handleMeetButton;
- $('#meets').innerHTML='<div class="me-head"><h2>📅 大会スケジュール</h2><button onclick="editMeet()">＋ 大会を追加</button></div><p class="muted">大会予定・出場選手・出場種目をコーチ間で共有します。</p>'+(future.map(card).join('')||'<div class="card">今後の大会は未登録です。</div>')+'<details class="card"><summary>過去の大会（'+past.length+'件）</summary>'+past.map(card).join('')+'</details>';
+ $('#meets').innerHTML='<div class="me-head"><h2>📅 大会スケジュール</h2><button onclick="editMeet()">＋ 大会を追加</button></div><p class="muted">大会日程と出場選手だけをコーチ間で共有します。種目やタイムの入力は不要です。</p>'+(future.map(card).join('')||'<div class="card">今後の大会は未登録です。</div>')+'<details class="card"><summary>過去の大会（'+past.length+'件）</summary>'+past.map(card).join('')+'</details>';
 }
 function validMeetDate(value){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(value)))return false;
@@ -4525,40 +4525,33 @@ async function editMeet(id){
  if(error)return alert(error.message);await refreshMeets();
 }
 function editMeetEntry(id,meetId){
- const existing=meetEntries.find(x=>x.id===id),mid=meetId||existing?.meet_id;
+ const mid=meetId||meetEntries.find(e=>e.id===id)?.meet_id;
  if(!mid||!meetList.some(m=>m.id===mid)){alert('大会が見つかりません。画面を更新してください。');return}
  if(!PLAYERS.length){alert('先に選手を登録してください。');return}
+ const selected=new Set(meetEntries.filter(e=>e.meet_id===mid).map(e=>e.swimmer_id));
  const overlay=document.createElement('div');
  overlay.style.cssText='position:fixed;inset:0;z-index:10060;background:rgba(8,30,51,.7);display:flex;align-items:center;justify-content:center;padding:14px';
- const selected=(v,w)=>v===w?' selected':'';
- overlay.innerHTML='<form id="meEntryForm" style="background:#fff;border-radius:18px;padding:22px;width:min(100%,440px);max-height:90vh;overflow:auto;box-shadow:0 10px 40px #0003"><h3 style="margin:0 0 16px">🏊 出場種目'+(existing?'を編集':'を追加')+'</h3>'
- +'<label>出場選手<select name="swimmer" required style="width:100%;padding:12px;margin:7px 0 14px;font-size:16px">'+PLAYERS.map(p=>'<option value="'+meEsc(p.id)+'"'+selected(p.id,existing?.swimmer_id)+'>'+meEsc(p.name)+'</option>').join('')+'</select></label>'
- +'<label>種目<select name="stroke" required style="width:100%;padding:12px;margin:7px 0 14px;font-size:16px">'+['自由形','背泳ぎ','平泳ぎ','バタフライ','個人メドレー'].map(v=>'<option'+selected(v,existing?.stroke)+'>'+v+'</option>').join('')+'</select></label>'
- +'<label>距離（m）<input name="distance" type="number" inputmode="numeric" min="1" step="1" required value="'+(existing?.distance||50)+'" style="width:100%;padding:12px;margin:7px 0 14px;font-size:16px"></label>'
- +'<label>水路<select name="course" style="width:100%;padding:12px;margin:7px 0 14px;font-size:16px"><option'+selected('短水路',existing?.course)+'>短水路</option><option'+selected('長水路',existing?.course)+'>長水路</option></select></label>'
- +'<label>エントリータイム（任意）<input name="time" type="text" inputmode="decimal" placeholder="例 1:05.30" value="'+meEsc(existing?.entry_seconds==null?'':fmt(existing.entry_seconds))+'" style="width:100%;padding:12px;margin:7px 0 8px;font-size:16px"></label><p class="muted" style="font-size:13px">例：29.50 または 1:05.30。未定なら空欄で保存できます。</p>'
- +'<div id="meEntryError" role="alert" style="color:#b42318;margin:8px 0"></div><div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="secondary" id="meEntryCancel">キャンセル</button><button type="submit" id="meEntrySave">保存</button></div></form>';
+ overlay.innerHTML='<form id="meSwimmerForm" style="background:#fff;border-radius:18px;padding:22px;width:min(100%,440px);max-height:90vh;overflow:auto;box-shadow:0 10px 40px #0003"><h3 style="margin:0 0 12px">👥 出場選手を選択</h3><p class="muted" style="font-size:13px">出場する選手にチェックを入れてください。複数選択できます。</p><div style="max-height:48vh;overflow:auto">'+PLAYERS.map(p=>'<label style="display:flex;align-items:center;gap:12px;padding:11px 5px;border-bottom:1px solid #e2eaf0"><input type="checkbox" name="swimmer" value="'+meEsc(p.id)+'"'+(selected.has(p.id)?' checked':'')+' style="width:22px;height:22px;flex-shrink:0">'+meEsc(p.name)+'</label>').join('')+'</div><p class="muted" style="font-size:13px">チェックを外して保存すると、この大会の出場予定から外れます。</p><div id="meSwimmerError" role="alert" style="color:#b42318;margin:8px 0"></div><div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="secondary" id="meSwimmerCancel">キャンセル</button><button type="submit" id="meSwimmerSave">保存</button></div></form>';
  document.body.appendChild(overlay);
- const form=overlay.querySelector('#meEntryForm');
- overlay.querySelector('#meEntryCancel').onclick=()=>overlay.remove();
+ const form=overlay.querySelector('#meSwimmerForm');
+ overlay.querySelector('#meSwimmerCancel').onclick=()=>overlay.remove();
  form.onsubmit=async ev=>{
   ev.preventDefault();
-  const fd=new FormData(form),dist=Number(fd.get('distance')),raw=String(fd.get('time')||'').trim(),seconds=raw?sec(raw):null;
-  const error=overlay.querySelector('#meEntryError');
-  if(!Number.isInteger(dist)||dist<=0){error.textContent='距離を確認してください';return}
-  if(seconds!=null&&(!Number.isFinite(seconds)||seconds<=0)){error.textContent='タイムを確認してください';return}
-  const save=overlay.querySelector('#meEntrySave');save.disabled=true;error.textContent='';
-  const data={meet_id:mid,swimmer_id:String(fd.get('swimmer')),stroke:String(fd.get('stroke')),distance:dist,course:String(fd.get('course')),entry_seconds:seconds==null?null:Math.round(seconds*100)/100};
+  const wanted=new Set([...form.querySelectorAll('input[name="swimmer"]:checked')].map(el=>el.value));
+  const added=[...wanted].filter(id=>!selected.has(id));
+  const removed=[...selected].filter(id=>!wanted.has(id));
+  const save=overlay.querySelector('#meSwimmerSave'),error=overlay.querySelector('#meSwimmerError');
+  save.disabled=true;error.textContent='';
   try{
-   const {error:dbError}=existing?await sb.from('swim_meet_entries').update(data).eq('id',existing.id):await sb.from('swim_meet_entries').insert(data);
-   if(dbError)throw dbError;
+   if(added.length){const r=await sb.from('swim_meet_swimmers').insert(added.map(swimmer_id=>({meet_id:mid,swimmer_id})));if(r.error)throw r.error}
+   if(removed.length){const r=await sb.from('swim_meet_swimmers').delete().eq('meet_id',mid).in('swimmer_id',removed);if(r.error)throw r.error}
    overlay.remove();await refreshMeets();
-  }catch(e){error.textContent='保存できませんでした：'+String(e?.message||e);save.disabled=false}
+  }catch(e){error.textContent='保存できませんでした：'+String(e?.message||e);save.disabled=false;await loadMeets()}
  };
 }
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261017-meet-button-fix-v1';
+const APP_BUILD_VERSION='20261017-meet-swimmer-only-v1';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));
