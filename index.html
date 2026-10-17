@@ -12,7 +12,7 @@
 .public-best-item{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:15px 14px;border-top:1px solid #e9eff4}
 .public-best-event{font-size:16px;font-weight:800;color:#163047}
 .public-best-meta{font-size:12px;color:#647988;line-height:1.65;margin-top:5px;overflow-wrap:anywhere}
-.public-best-time{font-size:26px;font-weight:850;color:#087fd1;white-space:nowrap;font-variant-numeric:tabular-nums}
+.public-best-time{font-size:26px;font-weight:850;color:#087fd1;white-space:nowrap;font-variant-numeric:tabular-nums;flex:0 0 auto;text-align:right}.public-goal-line{font-size:13px;font-weight:700;line-height:1.6;white-space:normal;color:#087055;margin-top:8px;max-width:180px;margin-left:auto}.public-goal-line span{display:block}.public-medley-mascots{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:2px;width:66px;height:66px;flex:0 0 66px}.public-medley-mascots img{display:block;width:100%;height:100%;object-fit:contain;min-width:0;min-height:0}@media(max-width:430px){.public-medley-mascots{width:54px;height:54px;flex-basis:54px}.public-goal-line{font-size:12px;max-width:132px}}
 .public-best-ranks{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
 .public-best-rank{display:inline-block;border-radius:999px;padding:5px 9px;background:#e8f8ef;color:#14753b;font-size:12px;font-weight:800}
 .public-best-jo{background:#fff3d9;color:#885b00}
@@ -4391,6 +4391,11 @@ async function renderPublicSwimmerProfile(){
       '自由形':'fitz-freestyle.jpg'
     };
     const publicMascotImage=(stroke,className='public-stroke-mascot')=>{
+      if(stroke==='個人メドレー'&&className==='public-stroke-mascot'){
+        return '<div class="public-medley-mascots" aria-label="個人メドレーの公式キャラクター4人">'+
+          ['fitz-butterfly.jpg','kurin-backstroke.jpg','relief-breaststroke.jpg','fitz-freestyle.jpg']
+          .map(file=>'<img src="assets/characters/'+file+'" alt="" loading="lazy">').join('')+'</div>';
+      }
       const file=publicStrokeMascot[stroke];
       return file?`<img class="${className}" src="assets/characters/${file}" alt="${shareEscape(stroke)}を泳ぐ公式キャラクター" loading="lazy">`:'';
     };
@@ -4407,9 +4412,9 @@ async function renderPublicSwimmerProfile(){
       const target=Number(goal?.target_seconds),best=Number(r.time_seconds);
       if(!goal||!Number.isFinite(target)||target<=0||!Number.isFinite(best))return '';
       const diff=Math.abs(best-target).toFixed(2);
-      return '<div class="public-goal-line">🎯 目標 '+shareFmt(target)+'　<span>'+(best<=target?'🏅 目標達成！ '+diff+'秒クリア':'あと '+diff+'秒！')+'</span></div>';
+      return '<div class="public-goal-line">🎯 目標 '+shareFmt(target)+'<span>'+(best<=target?'🏅 目標達成！ '+diff+'秒クリア':'あと'+diff+'秒！')+'</span></div>';
     };
-    const bestHtml=groupedBests.map(g=>`<div class="public-best-group"><div class="public-best-heading">🏊 ${shareEscape(g.course)} ／ ${g.items.length}種目</div>${g.items.map(r=>`<div class="public-best-item"><div class="public-best-content">${publicMascotImage(r.stroke)}<div class="public-best-copy"><div class="public-best-event">${shareEscape(r.stroke)} ${shareEscape(r.distance)}m</div><div class="public-best-meta">${shareEscape(r.meet_name||'大会名未登録')}<br>${shareEscape(shareDate(r.record_date))}</div><div class="public-best-ranks">${publicRankLabels(r)}${r.is_jo_qualified?`<span class="public-best-rank public-best-jo">${publicMascotImage(r.stroke,'public-jo-mascot')}<span>🏅 JO突破（登録時の判定）</span></span>`:''}</div></div></div><div class="public-best-time">${shareFmt(r.time_seconds)}${publicGoalHtml(r)}</div></div>`).join('')}</div>`).join('');
+    const bestHtml=groupedBests.map(g=>`<div class="public-best-group"><div class="public-best-heading">🏊 ${shareEscape(g.course)} ／ ${g.items.length}種目</div>${g.items.map(r=>`<div class="public-best-item"><div class="public-best-content">${publicMascotImage(r.stroke)}<div class="public-best-copy"><div class="public-best-event">${shareEscape(r.stroke)} ${shareEscape(r.distance)}m</div><div class="public-best-meta">${shareEscape(r.meet_name||'大会名未登録')}<br>${shareEscape(shareDate(r.record_date))}</div><div class="public-best-ranks">${publicRankLabels(r)}${r.is_jo_qualified?`<span class="public-best-rank public-best-jo">${publicMascotImage(r.stroke,'public-jo-mascot')}<span>🏅 JO突破（登録時の判定）</span></span>`:''}</div></div></div><div class="public-best-time"><div>${shareFmt(r.time_seconds)}</div>${publicGoalHtml(r)}</div></div>`).join('')}</div>`).join('');
     const joRanking=Array.isArray(data.joRanking)?data.joRanking:[];
     const joRankingMeetDate=String(data.joRankingMeetDate||"");
     const joRankingHtml=`<div class="card"><h3>🏆 JO突破率ランキング TOP30</h3><p class="small muted">${joRankingMeetDate?`${shareEscape(joRankingMeetDate)} 基準日のJO標準で判定`:"次回JOの標準記録で判定"} ／ 公開同意済みの選手を対象</p>${joRanking.length?joRanking.map((x,i)=>{
@@ -4464,7 +4469,7 @@ async function saveShareSettings(playerId,enable){
 
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261017-qr-goal-display-v1';
+const APP_BUILD_VERSION='20261017-qr-goals-medley-fix-v2';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));
