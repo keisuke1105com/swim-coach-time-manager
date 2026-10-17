@@ -1241,6 +1241,30 @@ function rankBadgeId(playerId,stroke,distance,course){
   const key=JSON.stringify([String(playerId),String(stroke),Number(distance),String(course)]);
   return 'nationalRank_'+Array.from(key,ch=>ch.codePointAt(0).toString(16)).join('_');
 }
+const GOAL_STORAGE_KEY='swimCloudGoalTimesV1';
+function goalTimeKey(id,stroke,distance,course){return JSON.stringify([String(id),String(stroke),Number(distance),String(course)]);}
+function readGoalTimes(){try{const v=JSON.parse(localStorage.getItem(GOAL_STORAGE_KEY)||'{}');return v&&typeof v==='object'&&!Array.isArray(v)?v:{}}catch(e){return {}}}
+function goalTimeFor(id,stroke,distance,course){const v=readGoalTimes()[goalTimeKey(id,stroke,distance,course)];const n=Number(v);return v!=null&&Number.isFinite(n)&&n>0?n:null;}
+function editGoalTime(id,stroke,distance,course){
+  const previous=goalTimeFor(id,stroke,distance,course);
+  const value=prompt(stroke+' '+distance+'m・'+course+' の目標タイムを入力（例：29.50 または 1:05.30）。空欄で削除できます。',previous==null?'':fmt(previous));
+  if(value===null)return;
+  const goals=readGoalTimes(),key=goalTimeKey(id,stroke,distance,course);
+  if(!value.trim())delete goals[key];
+  else{const n=sec(value);if(!Number.isFinite(n)||n<=0){alert('正しい目標タイムを入力してください。');return;}goals[key]=n;}
+  try{localStorage.setItem(GOAL_STORAGE_KEY,JSON.stringify(goals));}
+  catch(e){alert('目標を保存できませんでした。');return;}
+  showPlayerDetail(id);
+}
+function goalProgressMarkup(id,stroke,distance,course,current){
+  const goal=goalTimeFor(id,stroke,distance,course);
+  const args=[id,stroke,Number(distance),course].map(x=>JSON.stringify(x)).join(',');
+  const button='<button type="button" class="small secondary" style="margin-top:6px" onclick=\'editGoalTime('+args+')\'>🎯 '+(goal==null?'目標を設定':'目標を変更')+'</button>';
+  if(goal==null)return button;
+  const achieved=current<=goal;
+  const diff=Math.abs(current-goal).toFixed(2);
+  return '<div class="muted" style="margin-top:6px">🎯 目標 '+fmt(goal)+' ／ '+(achieved?'🏅 目標達成！ '+diff+'秒クリア':'あと '+diff+'秒')+'</div>'+button;
+}
 function showPlayerDetail(id,remember=true){
   let p=playerById(id);
   if(remember)saveViewState('players',id);
@@ -1324,6 +1348,7 @@ if(st!=null){
           <span class="muted">${r.course}</span><br>
           <span class="muted">${joText}</span><br>
           <span id="${rankBadgeId(id,r.stroke,r.distance,r.course)}" class="${nr&&nr.found?'badge':'muted'}">${nrText}</span>
+          ${goalProgressMarkup(id,r.stroke,r.distance,r.course,s)}
           <button type="button" class="small" style="margin-top:6px" onclick='refreshOneRanking(${JSON.stringify(id)},${JSON.stringify(r.stroke)},${Number(r.distance)},${JSON.stringify(r.course)})'>🔄 この種目の順位を取得</button>
           </div>
         </div>
