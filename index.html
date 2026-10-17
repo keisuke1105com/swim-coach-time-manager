@@ -1170,6 +1170,7 @@ async function loadCloud(){
 PLAYERS=p;
 records=r;
 manualLaps=m;
+    await loadSharedGoals();
     setStatus('');
   }catch(e){
     setStatus('クラウドDBにアクセスできません。RLSポリシーを確認してください。 '+String(e?.message||e||''),'error');
@@ -1241,29 +1242,40 @@ function rankBadgeId(playerId,stroke,distance,course){
   const key=JSON.stringify([String(playerId),String(stroke),Number(distance),String(course)]);
   return 'nationalRank_'+Array.from(key,ch=>ch.codePointAt(0).toString(16)).join('_');
 }
-const GOAL_STORAGE_KEY='swimCloudGoalTimesV1';
+let sharedGoals=[];
 function goalTimeKey(id,stroke,distance,course){return JSON.stringify([String(id),String(stroke),Number(distance),String(course)]);}
-function readGoalTimes(){try{const v=JSON.parse(localStorage.getItem(GOAL_STORAGE_KEY)||'{}');return v&&typeof v==='object'&&!Array.isArray(v)?v:{}}catch(e){return {}}}
-function goalTimeFor(id,stroke,distance,course){const v=readGoalTimes()[goalTimeKey(id,stroke,distance,course)];const n=Number(v);return v!=null&&Number.isFinite(n)&&n>0?n:null;}
-function editGoalTime(id,stroke,distance,course){
-  const previous=goalTimeFor(id,stroke,distance,course);
-  const value=prompt(stroke+' '+distance+'m・'+course+' の目標タイムを入力（例：29.50 または 1:05.30）。空欄で削除できます。',previous==null?'':fmt(previous));
-  if(value===null)return;
-  const goals=readGoalTimes(),key=goalTimeKey(id,stroke,distance,course);
-  if(!value.trim())delete goals[key];
-  else{const n=sec(value);if(!Number.isFinite(n)||n<=0){alert('正しい目標タイムを入力してください。');return;}goals[key]=n;}
-  try{localStorage.setItem(GOAL_STORAGE_KEY,JSON.stringify(goals));}
-  catch(e){alert('目標を保存できませんでした。');return;}
-  showPlayerDetail(id);
+function goalTimeFor(id,stroke,distance,course){
+ const goal=sharedGoals.find(g=>goalTimeKey(g.swimmer_id,g.stroke,g.distance,g.course)===goalTimeKey(id,stroke,distance,course));
+ const n=Number(goal?.target_seconds);return goal&&Number.isFinite(n)&&n>0?n:null;
+}
+async function loadSharedGoals(){
+ const {data,error}=await sb.from('swimmer_goals').select('swimmer_id,stroke,distance,course,target_seconds');
+ if(error)throw error;
+ sharedGoals=data||[];
+}
+async function editGoalTime(id,stroke,distance,course){
+ const previous=goalTimeFor(id,stroke,distance,course);
+ const value=prompt(stroke+' '+distance+'m・'+course+' の目標タイムを入力（例：29.50 または 1:05.30）。空欄で削除できます。',previous==null?'':fmt(previous));
+ if(value===null)return;
+ let error;
+ if(!value.trim()){
+   ({error}=await sb.from('swimmer_goals').delete().eq('swimmer_id',id).eq('stroke',stroke).eq('distance',distance).eq('course',course));
+ }else{
+   const n=sec(value);
+   if(!Number.isFinite(n)||n<=0){alert('正しい目標タイムを入力してください。');return;}
+   ({error}=await sb.from('swimmer_goals').upsert({swimmer_id:id,stroke,distance:Number(distance),course,target_seconds:Math.round(n*100)/100,updated_by:session.user.id,updated_at:new Date().toISOString()},{onConflict:'swimmer_id,stroke,distance,course'}));
+ }
+ if(error){alert('目標を保存できませんでした：'+error.message);return;}
+ try{await loadSharedGoals();showPlayerDetail(id);}catch(e){alert('目標は保存されましたが、再取得できませんでした。画面を再読み込みしてください。');}
 }
 function goalProgressMarkup(id,stroke,distance,course,current){
-  const goal=goalTimeFor(id,stroke,distance,course);
-  const args=[id,stroke,Number(distance),course].map(x=>JSON.stringify(x)).join(',');
-  const button='<button type="button" class="small secondary" style="margin-top:6px" onclick=\'editGoalTime('+args+')\'>🎯 '+(goal==null?'目標を設定':'目標を変更')+'</button>';
-  if(goal==null)return button;
-  const achieved=current<=goal;
-  const diff=Math.abs(current-goal).toFixed(2);
-  return '<div class="muted" style="margin-top:6px">🎯 目標 '+fmt(goal)+' ／ '+(achieved?'🏅 目標達成！ '+diff+'秒クリア':'あと '+diff+'秒')+'</div>'+button;
+ const goal=goalTimeFor(id,stroke,distance,course);
+ const args=[id,stroke,Number(distance),course].map(x=>JSON.stringify(x)).join(',');
+ const button='<button type="button" class="small secondary" style="margin-top:6px" onclick=\'editGoalTime('+args+')\'>🎯 '+(goal==null?'目標を設定':'目標を変更')+'</button>';
+ if(goal==null)return button;
+ const achieved=current<=goal;
+ const diff=Math.abs(current-goal).toFixed(2);
+ return '<div class="muted" style="margin-top:6px">🎯 目標 '+fmt(goal)+' ／ '+(achieved?'🏅 目標達成！ '+diff+'秒クリア':'あと '+diff+'秒')+'</div>'+button;
 }
 function showPlayerDetail(id,remember=true){
   let p=playerById(id);
@@ -4443,7 +4455,7 @@ async function saveShareSettings(playerId,enable){
 
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261017-swimmer-goal-times-v1';
+const APP_BUILD_VERSION='20261017-shared-swimmer-goals-v2';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));
