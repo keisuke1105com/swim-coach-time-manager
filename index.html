@@ -2993,33 +2993,41 @@ function applyRankingCacheSnapshot(cache){
   });
 }
 async function loadSharedRankingBulkProgress(){
-  const local=loadRankingBulkProgress();
-  if(!sb)return local;
-  try{
-    const {data,error}=await sb.from('swimmer_ranking_share_cache').select('progress').eq('job_key','same_grade_2026').maybeSingle();
-    if(error)throw error;
-    const cloud=data?.progress||null;
-    if(cloud){
-      applyRankingCacheSnapshot(cloud.rankingCache);
-      saveRankingBulkProgress(cloud);
-      return cloud;
-    }
-  }catch(e){console.warn('ランキング進捗クラウド読込は端末保存へフォールバック:',e?.message||e);}
-  if(local?.rankingCache)applyRankingCacheSnapshot(local.rankingCache);
-  return local;
+ const local=loadRankingBulkProgress();
+ if(!sb)return local;
+ try{
+  const {data,error}=await sb.from('swimmer_ranking_share_cache').select('progress').eq('job_key','same_grade_2026').maybeSingle();
+  if(error)throw error;
+  const cloud=data?.progress||null;
+  if(cloud){
+   // Keep locally confirmed ranks when another device uploaded a partial snapshot.
+   const localCache=rankingCacheSnapshot(2026);
+   applyRankingCacheSnapshot(cloud.rankingCache);
+   for(const [key,value] of Object.entries(localCache)){
+    if(value?.found && !cloud.rankingCache?.[key]?.found){try{localStorage.setItem(key,JSON.stringify(value))}catch(e){}}
+   }
+   saveRankingBulkProgress({...cloud,rankingCache:rankingCacheSnapshot(2026)});
+   return cloud;
+  }
+ }catch(e){console.warn('ランキング進捗クラウド読込は端末保存へフォールバック:',e?.message||e);}
+ if(local?.rankingCache)applyRankingCacheSnapshot(local.rankingCache);
+ return local;
 }
 async function saveSharedRankingBulkProgress(v){
-  // 各種目の取得結果も進捗JSONへ含めることで、端末が変わっても順位表示を一致させる。
-  v={...v,rankingCache:rankingCacheSnapshot(2026),updatedAt:new Date().toISOString()};
-  saveRankingBulkProgress(v);
-  if(!sb)return v;
-  try{
-    const {error}=await sb.from('swimmer_ranking_share_cache').upsert({job_key:'same_grade_2026',progress:v,updated_at:new Date().toISOString()},{onConflict:'job_key'});
-    if(error)throw error;
-  }catch(e){console.warn('ランキング進捗クラウド保存は端末保存のみ継続:',e?.message||e);}
-  return v;
+ const cache=rankingCacheSnapshot(2026);
+ v={...v,rankingCache:cache,updatedAt:new Date().toISOString()};
+ saveRankingBulkProgress(v);
+ if(!sb)return v;
+ try{
+  // Atomic JSON merge under a DB row lock prevents PC/iPhone last-write-wins data loss.
+  const {data,error}=await sb.rpc('merge_swimmer_ranking_cache',{
+   p_job_key:'same_grade_2026',p_ranking_cache:cache,p_progress:{phase:v.phase||'individual',completed:!!v.completed}
+  });
+  if(error)throw error;
+  if(data?.rankingCache)applyRankingCacheSnapshot(data.rankingCache);
+ }catch(e){console.warn('ランキング進捗クラウド保存は端末保存のみ継続:',e?.message||e);}
+ return v;
 }
-
 function clearRankingBulkProgress(){try{localStorage.removeItem(ALL_RANKING_PROGRESS_KEY);}catch(e){}}
 
 function sameGradeRankingSummaryHtml(year=2026,limit=30){
@@ -4551,7 +4559,7 @@ function editMeetEntry(id,meetId){
 }
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261017-meet-swimmer-only-v1';
+const APP_BUILD_VERSION='20261017-ranking-sync-merge-v1';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));
