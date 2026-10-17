@@ -170,7 +170,7 @@ header small{color:#C5E7F5}
 .hero-welcome>div:first-child{margin-bottom:18px}
 .team-hero h2{font-size:28px;line-height:1.4}
 .team-hero p{max-width:none}
-.official-team{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;background:#FFFFFF;border-radius:16px;padding:12px 6px 9px;border:1px solid #D9EDF7}
+.official-team{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;background:#FFFFFF;border-radius:16px;padding:12px 6px 9px;border:1px solid #D9EDF7}
 .official-team figure{margin:0;min-width:0;text-align:center}
 .official-team img{display:block;width:100%;height:auto;object-fit:contain;filter:none;transform:none}
 .official-team figcaption{margin-top:6px;color:#12324A;font-size:11px;font-weight:700;white-space:nowrap}
@@ -1201,7 +1201,7 @@ async function downloadSwimBackup(){
 function growthEscape(v){return String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
 function growthDashboardHtml(){
   const now=new Date(),today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-  const dayMs=86400000,cut90=new Date(today.getTime()-90*dayMs),cut60=new Date(today.getTime()-60*dayMs);
+  const dayMs=86400000,cut90=new Date(today.getTime()-90*dayMs);
   const toDate=v=>{if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(v||'')))return null;const d=new Date(v+'T00:00:00');return Number.isFinite(d.getTime())?d:null;};
   const byPlayer=new Map(PLAYERS.map(p=>[String(p.id),{player:p,latest:null,improvements:[],count:0}]));
   const byEvent=new Map();
@@ -1222,15 +1222,11 @@ function growthDashboardHtml(){
   const rows=[...byPlayer.values()];
   const recent=rows.flatMap(x=>x.improvements.map(i=>({...i,player:x.player}))).sort((a,b)=>b.date-a.date||b.improvement-a.improvement);
   const growers=rows.filter(x=>x.improvements.length).sort((a,b)=>b.improvements.length-a.improvements.length||b.improvements.reduce((n,i)=>n+i.improvement,0)-a.improvements.reduce((n,i)=>n+i.improvement,0));
-  const inactive=rows.filter(x=>x.count&&x.latest<cut60).sort((a,b)=>a.latest-b.latest);
-  const noRecords=rows.filter(x=>!x.count);
   const playerButton=p=>'<button class="small secondary" onclick="showPlayerDetail('+JSON.stringify(String(p.id)).replace(/"/g,'&quot;')+')">詳細</button>';
   const card=(content)=>'<div class="growth-entry">'+content+'</div>';
   const recentHtml=recent.slice(0,6).map(x=>card('<div><b>'+growthEscape(x.player.name)+'</b><div class="muted small">'+growthEscape(x.record.stroke)+' '+Number(x.record.distance)+'m・'+growthEscape(x.record.course)+'　'+growthEscape(x.record.record_date)+'</div><div class="small">自己ベスト '+fmt(x.record.time_seconds)+' ／ <b>'+x.improvement.toFixed(2)+'秒更新</b></div></div>'+playerButton(x.player))).join('')||'<p class="muted">直近90日間のベスト更新はありません。</p>';
   const growersHtml=growers.slice(0,6).map(x=>card('<div><b>'+growthEscape(x.player.name)+'</b><div class="muted small">直近90日で '+x.improvements.length+'種目・回のベスト更新</div></div>'+playerButton(x.player))).join('')||'<p class="muted">直近90日間のベスト更新はありません。</p>';
-  const inactiveHtml=inactive.slice(0,8).map(x=>card('<div><b>'+growthEscape(x.player.name)+'</b><div class="muted small">最終記録 '+growthEscape(x.latest.toLocaleDateString('ja-JP'))+'（'+Math.floor((today-x.latest)/dayMs)+'日前）</div></div>'+playerButton(x.player))).join('')||'<p class="muted">60日以上記録がない選手はいません。</p>';
-  const missingHtml=noRecords.slice(0,6).map(x=>card('<div><b>'+growthEscape(x.player.name)+'</b><div class="muted small">大会記録なし</div></div>'+playerButton(x.player))).join('');
-  return '<section class="card growth-dashboard"><div class="section-heading"><div><span class="section-kicker">COACH GROWTH DESK</span><h3>📈 選手の成長一覧</h3></div></div><p class="muted small">既存の大会記録から自動集計。過去90日間のベスト更新と、60日以上記録のない選手を表示します。初記録はベスト更新数に含みません。</p><div class="growth-summary"><div>最近のベスト更新<b>'+recent.length+'件</b></div><div>更新した選手<b>'+growers.length+'名</b></div><div>60日以上記録なし<b>'+inactive.length+'名</b></div></div><details open><summary>🎉 最近の自己ベスト更新</summary>'+recentHtml+'</details><details><summary>📈 成長している選手</summary>'+growersHtml+'</details><details><summary>📅 しばらく大会記録がない選手</summary>'+inactiveHtml+'</details>'+(noRecords.length?'<details><summary>📝 大会記録が未登録の選手（'+noRecords.length+'名）</summary>'+missingHtml+'</details>':'')+'</section>';
+  return '<section class="card growth-dashboard"><div class="section-heading"><div><span class="section-kicker">COACH GROWTH DESK</span><h3>📈 選手の成長一覧</h3></div></div><p class="muted small">既存の大会記録から自動集計。過去90日間のベスト更新を表示します。初記録はベスト更新数に含みません。</p><div class="growth-summary"><div>最近のベスト更新<b>'+recent.length+'件</b></div><div>更新した選手<b>'+growers.length+'名</b></div></div><details open><summary>🎉 最近の自己ベスト更新</summary>'+recentHtml+'</details><details><summary>📈 成長している選手</summary>'+growersHtml+'</details>+'</section>';
 }
 function renderHome(){let today=new Date().toISOString().slice(0,10),td=records.filter(r=>r.record_date===today).length,b=records.filter(r=>r.is_personal_best).length,j=records.filter(r=>r.is_jo_qualified).length;$('#home').innerHTML=`
 <section class="team-hero" aria-labelledby="teamWelcome"><div class="hero-kicker">SWIM TEAM · COACH DESK</div><div class="hero-welcome"><div><h2 id="teamWelcome">Team フィッツ竜王</h2><p>選手の成長を、一つずつ記録しよう。</p></div><div class="official-team" aria-label="チームの公式キャラクター"><figure><img src="assets/characters/fitz-butterfly.jpg" width="987" height="533" alt="フィッツ君" loading="eager"></figure><figure><img src="assets/characters/relief-butterfly.jpg" width="975" height="528" alt="リリーフ君" loading="eager"></figure><figure><img src="assets/characters/kurin-butterfly.jpg" width="979" height="514" alt="クリンちゃん" loading="eager"></figure></div></div><button class="hero-input" onclick="go('input')"><span>＋ タイムを入力する</span><span aria-hidden="true">→</span></button></section>
