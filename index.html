@@ -4400,7 +4400,16 @@ async function renderPublicSwimmerProfile(){
     const events=keys.map(k=>{const r=publicShareRecords.find(x=>shareEventKey(x)===k);return `<option value="${shareEscape(k)}">${shareEscape(r.stroke)} ${shareEscape(r.distance)}m・${shareEscape(r.course)}</option>`}).join('');
     const courseGroups=['長水路','短水路'];
     const groupedBests=courseGroups.concat([...new Set(bests.map(r=>r.course))].filter(c=>!courseGroups.includes(c))).map(course=>({course,items:bests.filter(r=>r.course===course).sort((a,b)=>String(a.stroke).localeCompare(String(b.stroke),'ja')||Number(a.distance)-Number(b.distance))})).filter(g=>g.items.length);
-    const bestHtml=groupedBests.map(g=>`<div class="public-best-group"><div class="public-best-heading">🏊 ${shareEscape(g.course)} ／ ${g.items.length}種目</div>${g.items.map(r=>`<div class="public-best-item"><div class="public-best-content">${publicMascotImage(r.stroke)}<div class="public-best-copy"><div class="public-best-event">${shareEscape(r.stroke)} ${shareEscape(r.distance)}m</div><div class="public-best-meta">${shareEscape(r.meet_name||'大会名未登録')}<br>${shareEscape(shareDate(r.record_date))}</div><div class="public-best-ranks">${publicRankLabels(r)}${r.is_jo_qualified?`<span class="public-best-rank public-best-jo">${publicMascotImage(r.stroke,'public-jo-mascot')}<span>🏅 JO突破（登録時の判定）</span></span>`:''}</div></div></div><div class="public-best-time">${shareFmt(r.time_seconds)}</div></div>`).join('')}</div>`).join('');
+    // QR公開ページはサーバーが公開同意済みの本人の目標だけを返す。編集は不可。
+    const publicGoals=Array.isArray(data.goals)?data.goals:[];
+    const publicGoalHtml=r=>{
+      const goal=publicGoals.find(g=>String(g.stroke)===String(r.stroke)&&Number(g.distance)===Number(r.distance)&&String(g.course)===String(r.course));
+      const target=Number(goal?.target_seconds),best=Number(r.time_seconds);
+      if(!goal||!Number.isFinite(target)||target<=0||!Number.isFinite(best))return '';
+      const diff=Math.abs(best-target).toFixed(2);
+      return '<div class="public-goal-line">🎯 目標 '+shareFmt(target)+'　<span>'+(best<=target?'🏅 目標達成！ '+diff+'秒クリア':'あと '+diff+'秒！')+'</span></div>';
+    };
+    const bestHtml=groupedBests.map(g=>`<div class="public-best-group"><div class="public-best-heading">🏊 ${shareEscape(g.course)} ／ ${g.items.length}種目</div>${g.items.map(r=>`<div class="public-best-item"><div class="public-best-content">${publicMascotImage(r.stroke)}<div class="public-best-copy"><div class="public-best-event">${shareEscape(r.stroke)} ${shareEscape(r.distance)}m</div><div class="public-best-meta">${shareEscape(r.meet_name||'大会名未登録')}<br>${shareEscape(shareDate(r.record_date))}</div><div class="public-best-ranks">${publicRankLabels(r)}${r.is_jo_qualified?`<span class="public-best-rank public-best-jo">${publicMascotImage(r.stroke,'public-jo-mascot')}<span>🏅 JO突破（登録時の判定）</span></span>`:''}</div></div></div><div class="public-best-time">${shareFmt(r.time_seconds)}${publicGoalHtml(r)}</div></div>`).join('')}</div>`).join('');
     const joRanking=Array.isArray(data.joRanking)?data.joRanking:[];
     const joRankingMeetDate=String(data.joRankingMeetDate||"");
     const joRankingHtml=`<div class="card"><h3>🏆 JO突破率ランキング TOP30</h3><p class="small muted">${joRankingMeetDate?`${shareEscape(joRankingMeetDate)} 基準日のJO標準で判定`:"次回JOの標準記録で判定"} ／ 公開同意済みの選手を対象</p>${joRanking.length?joRanking.map((x,i)=>{
@@ -4455,7 +4464,7 @@ async function saveShareSettings(playerId,enable){
 
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261017-shared-swimmer-goals-v2';
+const APP_BUILD_VERSION='20261017-qr-goal-display-v1';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));
