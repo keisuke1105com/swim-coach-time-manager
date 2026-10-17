@@ -4443,7 +4443,7 @@ async function saveShareSettings(playerId,enable){
 
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261017-medley-pwa-refresh-v1';
+const APP_BUILD_VERSION='20261017-swimmer-goal-times-v1';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));
