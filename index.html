@@ -2807,16 +2807,18 @@ async function fetchJasfRankingForPlayer(player,stroke,distance,course,year=2026
   const named=await safeFetchJasfRankingPage(player,stroke,distance,course,year,schoolClassCode,schoolGrade,target,1);
   let self=jasfFindSameSwimmer(named,player,athleteIds,true,year);
 
-  // 表記ゆれ対策として、見つからない場合だけ全体氏名検索を1回補助的に使う。
+  // 見つからない場合だけ全体氏名検索を1回補助的に使う。
+  // 再検索でも初回と同じ本人照合を使う。選手ページIDと競技者コードが
+  // 異なる登録では、ID一致だけに戻すと公式行があっても見失ってしまう。
   if(!self){
     const overall=await safeFetchJasfRankingPage(player,stroke,distance,course,year,'99','99',target,1);
-    base=overall.find(x=>jasfSameSwimmer(x,player,athleteIds))||null;
+    base=jasfFindSameSwimmer(overall,player,athleteIds,true,year);
     if(base){
       const apiSchool=jasfSchoolInfo(base);
       const sc=String(apiSchool.schoolClassCode)!=='99'?apiSchool.schoolClassCode:schoolClassCode;
       const sg=String(apiSchool.schoolGrade)!=='99'?apiSchool.schoolGrade:schoolGrade;
       const retry=await safeFetchJasfRankingPage(player,stroke,distance,course,year,sc,sg,target,1);
-      self=retry.find(x=>jasfSameSwimmer(x,player,athleteIds))||null;
+      self=jasfFindSameSwimmer(retry,player,athleteIds,true,year);
       if(self){schoolClassCode=sc;schoolGrade=sg;schoolClassName=apiSchool.schoolClassName||schoolClassName;}
     }
   }
