@@ -4488,6 +4488,12 @@ function renderMeets(){
  const future=meetList.filter(m=>meDays(m.meet_date)>=0),past=meetList.filter(m=>meDays(m.meet_date)<0).reverse();
  $('#meets').innerHTML='<div class="me-head"><h2>📅 大会スケジュール</h2><button onclick="editMeet()">＋ 大会を追加</button></div><p class="muted">大会予定・出場選手・出場種目をコーチ間で共有します。</p>'+(future.map(card).join('')||'<div class="card">今後の大会は未登録です。</div>')+'<details class="card"><summary>過去の大会（'+past.length+'件）</summary>'+past.map(card).join('')+'</details>';
 }
+function validMeetDate(value){
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(String(value)))return false;
+ const [y,m,d]=value.split('-').map(Number);
+ const v=new Date(y,m-1,d);
+ return v.getFullYear()===y&&v.getMonth()===m-1&&v.getDate()===d;
+}
 function pickMeetDate(initial){
  return new Promise(resolve=>{
   const overlay=document.createElement('div');
@@ -4503,7 +4509,7 @@ function pickMeetDate(initial){
 }
 async function editMeet(id){
  const m=meetList.find(x=>x.id===id),name=prompt('大会名',m?.name||'');if(name===null)return;if(!name.trim())return alert('大会名は必須です');
- const date=await pickMeetDate(m?.meet_date||'');if(date===null)return;if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(new Date(date+'T00:00:00').getTime())||new Date(date+'T00:00:00').toISOString().slice(0,10)!==date)return alert('日付を確認してください');
+ const date=await pickMeetDate(m?.meet_date||'');if(date===null)return;if(!validMeetDate(date))return alert('日付を確認してください');
  const venue=prompt('会場名',m?.venue||'');if(venue===null)return;
  const data={name:name.trim(),meet_date:date,venue:venue.trim(),updated_at:new Date().toISOString()};
  const {error}=m?await sb.from('swim_meets').update(data).eq('id',id):await sb.from('swim_meets').insert({...data,created_by:session.user.id});
@@ -4525,7 +4531,7 @@ async function editMeetEntry(id,meetId){
 
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261017-meet-date-picker-v1';
+const APP_BUILD_VERSION='20261017-meet-date-jst-v2';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));
