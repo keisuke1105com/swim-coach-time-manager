@@ -1063,12 +1063,14 @@ function standard(playerId,stroke,distance,course,targetDate=null){
 }
 
 const TOKYO_SC_MEET_DATE='2026-10-30';
+// 次年度分析専用の仮基準日。正式要項公開後に見直す。
+const TOKYO_SC_NEXT_MEET_DATE='2027-10-30';
 
-function tokyoScInfo(playerId,stroke,distance){
+function tokyoScInfo(playerId,stroke,distance,meetDate=TOKYO_SC_MEET_DATE){
   const p=playerById(playerId);
-  const age=p?.birth_date ? ageOnDate(p.birth_date,TOKYO_SC_MEET_DATE) : null;
+  const age=p?.birth_date ? ageOnDate(p.birth_date,meetDate) : null;
   if(!p || !Array.isArray(window.TOKYO_SC_STANDARDS)){
-    return {date:TOKYO_SC_MEET_DATE,age,ageKey:null,standard:null};
+    return {date:meetDate,age,ageKey:null,standard:null};
   }
 
   const g=String(p.gender||'').trim();
@@ -1079,7 +1081,7 @@ function tokyoScInfo(playerId,stroke,distance){
   let ageKey=null;
   if(age!==null){
     ageKey=age<=8?'8歳以下':age>=19?'19歳以上':`${age}歳`;
-  }else{
+  }else if(meetDate===TOKYO_SC_MEET_DATE){
     const ageRaw=String(p.age_group||'').trim();
     const ageMatch=ageRaw.match(/\d+/);
     if(ageMatch){
@@ -1088,7 +1090,7 @@ function tokyoScInfo(playerId,stroke,distance){
     }
   }
 
-  if(!ageKey)return {date:TOKYO_SC_MEET_DATE,age,ageKey:null,standard:null};
+  if(!ageKey)return {date:meetDate,age,ageKey:null,standard:null};
 
   const event=String(stroke||'').trim();
   const dist=Number(distance);
@@ -1099,7 +1101,7 @@ function tokyoScInfo(playerId,stroke,distance){
     Number(r.distance)===dist
   );
 
-  return {date:TOKYO_SC_MEET_DATE,age,ageKey,standard:x?Number(x.standard):null};
+  return {date:meetDate,age,ageKey,standard:x?Number(x.standard):null};
 }
 
 function tokyoScStandard(playerId,stroke,distance){
@@ -3455,7 +3457,7 @@ let joRanking=Object.values(
       const p=playerById(r.swimmer_id); if(!p)return;
       const time=Number(r.time_seconds); if(!Number.isFinite(time)||time<=0)return;
       if(kind==='yume' && r.record_date && r.record_date<YUME_CUP_VALID_FROM)return;
-      const info=kind==='tokyo'?tokyoScInfo(r.swimmer_id,r.stroke,r.distance):yumeCupInfo(r.swimmer_id,r.stroke,r.distance);
+      const info=kind==='tokyo'?tokyoScInfo(r.swimmer_id,r.stroke,r.distance,TOKYO_SC_NEXT_MEET_DATE):yumeCupInfo(r.swimmer_id,r.stroke,r.distance);
       const st=info.standard; if(st==null||time>st)return;
       // ゆめカップは長短同一標準なので、水路をまたいで同一種目の最速記録だけを表示。
       const key=kind==='yume'?`${r.swimmer_id}|${r.stroke}|${r.distance}`:`${r.swimmer_id}|${r.stroke}|${r.distance}|${r.course}`;
@@ -4051,7 +4053,7 @@ ${racesHtml}
       </div>
 
       <div class="card" role="button" tabindex="0" onclick="document.getElementById('tokyo-qualifiers')?.scrollIntoView({behavior:'smooth',block:'start'})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('tokyo-qualifiers')?.scrollIntoView({behavior:'smooth',block:'start'})}" style="cursor:pointer">
-        <div class="label">🗼 東京SC招待 突破者数</div>
+        <div class="label">🗼 東京SC招待2027（予定） 突破予定者数</div>
         <div class="stat">${tokyoQualifiedPlayers}<span class="small">名</span></div>
         <div class="muted small">延べ ${tokyoQual.length}種目</div>
       </div>
@@ -4136,17 +4138,19 @@ ${lapAnalysisHtml}
         document.getElementById('qualifierYamanashi').style.display =
           this.value==='yamanashi' ? 'block' : 'none';
       ">
-      <option value="tokyo">🗼 東京SC招待</option>
+      <option value="tokyo">🗼 東京SC招待2027（予定）</option>
       <option value="yume">🌈 ゆめカップ2027</option>
       <option value="yamanashi">🏊 山梨県強化指定</option>
     </select>
   </div>
 
   <div id="qualifierTokyo">
-    <h3 id="tokyo-qualifiers">🗼 東京SC招待</h3>
+    <h3 id="tokyo-qualifiers">🗼 東京SC招待2027（予定）突破予定者</h3>
     <p class="muted">
-      基準日 2026/10/30 の満年齢で判定。
-      突破した種目をすべて表示します。
+      仮の基準日 2027/10/30 の満年齢と、登録済みの自己ベストで判定。
+      標準記録は2026年度のものを暫定使用し、基準を満たす種目をすべて表示します。
+      正式な出場確定者の一覧ではありません。2027年度の正式要項公開後に見直します。
+      生年月日未登録の選手は次年度の年齢を判定できないため対象外です。
     </p>
     ${qualifierHtml(tokyoQual,'tokyo')}
   </div>
