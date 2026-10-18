@@ -4310,6 +4310,22 @@ function publicLapSegments(r){
   }
   return arr;
 }
+function publicFiftyMeterLaps(r){
+  const points=new Map([[0,0]]);
+  publicLapSegments(r).forEach(l=>points.set(l.distance,l.cumulative));
+  const distance=Number(r.distance),total=Number(r.time_seconds);
+  if(Number.isFinite(total)&&total>0)points.set(distance,total);
+  const result=[];
+  for(let end=50;end<=distance;end+=50){
+    const start=end-50,a=points.get(start),b=points.get(end);
+    if(Number.isFinite(a)&&Number.isFinite(b)&&b>a)result.push({start,end,split:b-a});
+  }
+  return result;
+}
+function publicFiftyMeterLapHtml(r){
+  const laps=publicFiftyMeterLaps(r);
+  return laps.length?`<div style="margin-top:14px;padding-top:10px;border-top:2px solid #bfdbfe"><b>🏊 50mごとのラップ</b>${laps.map(l=>`<div class="row"><span>${l.start}〜${l.end}m</span><b>${shareFmt(l.split)}</b></div>`).join('')}</div>`:'';
+}
 function publicJoStandard(swimmer,r){
   // コーチ用と同じSTANDARDSを参照し、公開APIの表記揺れを吸収する。
   // 生年月日を公開側で推測しない（大会当日の年齢による厳密判定はサーバー側で行う）。
@@ -4364,7 +4380,7 @@ function updatePublicShareAnalysis(){
    }).join('');
    joHtml=`<div style="background:#f0fdf4;border:1px solid #bbebcb;border-radius:12px;padding:14px;margin:14px 0"><h3>🎯 JO突破への目標ラップ</h3><p class="small muted">${shareEscape(best.stroke)} ${shareEscape(best.distance)}m・${shareEscape(best.course)} ／ 登録済み年齢区分基準</p><div class="row"><span>現在BEST</span><b>${shareFmt(best.time_seconds)}</b></div><div class="row"><span>JO標準</span><b>${shareFmt(standard)}</b></div><div class="row"><span>必要な短縮</span><b>${diff.toFixed(2)}秒</b></div><div class="field"><label for="publicJoPlanSelect">目標の立て方</label><select id="publicJoPlanSelect" onchange="document.querySelectorAll('.public-jo-plan').forEach((e,i)=>e.style.display=i===Number(this.value)?'block':'none')">${plans.map((p,i)=>`<option value="${i}">${p.name}</option>`).join('')}</select></div>${tables}<p class="small muted">BESTの実測ラップから逆算した参考目標です。実現可能性を保証するものではありません。コーチと相談して調整してください。</p></div>`;
  }
- const lapHtml=lapRecords.length?`<details><summary style="cursor:pointer;font-weight:700">📋 ラップ履歴（${lapRecords.length}件） ▼ 開く</summary>${lapRecords.map(r=>`<div class="result"><b>${shareEscape(shareDate(r.record_date))}　${shareFmt(r.time_seconds)}</b><p class="small muted">${shareEscape(r.meet_name||'大会名未登録')}</p>${publicLapSegments(r).map(l=>`<div class="row"><span>${l.distance}m</span><span>${shareFmt(l.cumulative)} ／ ラップ ${shareFmt(l.split)}</span></div>`).join('')}</div>`).join('')}</details>`:'<p class="muted small">公開できるラップ履歴がありません。</p>';
+ const lapHtml=lapRecords.length?`<details><summary style="cursor:pointer;font-weight:700">📋 ラップ履歴（${lapRecords.length}件） ▼ 開く</summary>${lapRecords.map(r=>`<div class="result"><b>${shareEscape(shareDate(r.record_date))}　${shareFmt(r.time_seconds)}</b><p class="small muted">${shareEscape(r.meet_name||'大会名未登録')}</p>${publicLapSegments(r).map(l=>`<div class="row"><span>${l.distance}m</span><span>${shareFmt(l.cumulative)} ／ ラップ ${shareFmt(l.split)}</span></div>`).join('')}${publicFiftyMeterLapHtml(r)}</div>`).join('')}</details>`:'<p class="muted small">公開できるラップ履歴がありません。</p>';
  target.innerHTML=info+joHtml+'<div class="result"><h3>🏊 ラップ分析・履歴</h3>'+lapHtml+'</div>';
 }
 function updatePublicShareChart(){
