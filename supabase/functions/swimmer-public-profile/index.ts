@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { mergePublicLaps } from "./laps.ts";
 import { JO_STANDARDS } from "../_shared/jo-standards.ts";
 
 const corsHeaders = {
@@ -158,7 +159,7 @@ Deno.serve(async (req) => {
     const pageSize = 500;
     for (let from = 0; ; from += pageSize) {
       const { data: page, error } = await sb.from("swim_records")
-        .select("stroke, distance, course, time_seconds, meet_name, record_date, laps, is_personal_best, is_jo_qualified")
+        .select("id, stroke, distance, course, time_seconds, meet_name, record_date, laps, is_personal_best, is_jo_qualified")
         .eq("swimmer_id", swimmer.id)
         .order("record_date", { ascending: true })
         .order("id", { ascending: true })
@@ -166,6 +167,22 @@ Deno.serve(async (req) => {
       if (error) throw error;
       records.push(...(page ?? []));
       if ((page ?? []).length < pageSize) break;
+    }
+
+    // Fetch only this consented swimmer's manual laps, never other swimmers' rows.
+    const manualLaps: any[] = [];
+    for (let offset = 0; offset < records.length; offset += 100) {
+      const ids = records.slice(offset, offset + 100).map((r) => r.id);
+      for (let from = 0; ; from += pageSize) {
+      const { data: page, error } = await sb.from("swim_manual_laps")
+        .select("record_id, distance, cumulative_seconds")
+        .in("record_id", ids)
+        .order("id", { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      manualLaps.push(...(page ?? []));
+      if ((page ?? []).length < pageSize) break;
+      }
     }
 
     // コーチアプリが保存した2026年度同学年順位から、公開許可済みの本人分だけを抽出。
@@ -205,9 +222,7 @@ Deno.serve(async (req) => {
       records: records.map((r) => ({
         stroke: r.stroke, distance: r.distance, course: r.course,
         time_seconds: r.time_seconds, meet_name: r.meet_name, record_date: r.record_date,
-        laps: Array.isArray(r.laps) ? r.laps.map((l: any) => ({
-          distance: l.distance, cumulative_time: l.cumulative_time, split_time: l.split_time,
-        })) : [],
+        laps: mergePublicLaps(r, manualLaps.filter((m) => String(m.record_id) === String(r.id))),
         is_personal_best: r.is_personal_best, is_jo_qualified: r.is_jo_qualified,
       })),
       rankings,
