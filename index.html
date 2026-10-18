@@ -4579,7 +4579,7 @@ function editMeetEntry(id,meetId){
 }
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261017-ranking-sync-merge-v1';
+const APP_BUILD_VERSION='20261018-tokyo2027-update-v1';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));
@@ -4595,7 +4595,11 @@ async function checkForAppUpdate(){
     if(!res.ok)return;
     const html=await res.text();
     const m=html.match(/APP_BUILD_VERSION=['\"]([^'\"]+)/);
-    if(m&&m[1]!==APP_BUILD_VERSION){
+    // バージョン番号の更新漏れでも、配信中のアプリコードの差分を検知する。
+    const latestDoc=new DOMParser().parseFromString(html,'text/html');
+    const mainCode=doc=>Array.from(doc.scripts).find(s=>!s.src&&s.textContent.includes("const APP_BUILD_VERSION="))?.textContent.replace(/\r\n/g,'\n');
+    const currentCode=mainCode(document),latestCode=mainCode(latestDoc);
+    if(m&&(m[1]!==APP_BUILD_VERSION||(currentCode&&latestCode&&currentCode!==latestCode))){
       // 入力中の記録を突然失わないよう、更新は利用者の確認後に行う。
       const banner=document.getElementById('appUpdateNotice');
       if(banner){
