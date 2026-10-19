@@ -3420,7 +3420,7 @@ let joRanking=Object.values(
     return a.qualified ? -1 : 1;
   }
   return b.rate-a.rate;
-}).slice(0,30);
+}).filter(x=>x.rate>=90).slice(0,20);
 
   let joRankingHtml=joRanking.length
     ? joRanking.map((x,i)=>{
@@ -3447,7 +3447,7 @@ let joRanking=Object.values(
           </div>
         `;
       }).join('')
-    : '<p class="muted">JO標準と比較できる記録がまだありません。</p>';
+    : '<p class="muted">JO標準と比較できる達成率90%以上の選手はまだいません。</p>';
 
 
   // 東京SC招待・ゆめカップ突破者（複数種目をすべて表示）
@@ -3483,16 +3483,31 @@ let joRanking=Object.values(
     if(!current||time<current.time)yamanashiBestMap.set(key,{player:p,stroke:r.stroke,distance:Number(r.distance),course:r.course,time});
   });
   const yamanashiQual=[];
+  const yamanashiCandidates=[];
   yamanashiBestMap.forEach(best=>{
     const grade=schoolGrade2026(best.player),gender=String(best.player.gender||'').trim();
     if(!grade||!['男子','女子'].includes(gender))return;
     const standard=window.YAMANASHI_2026_STANDARDS.find(x=>x.gender===gender&&x.grade===grade&&x.stroke===best.stroke&&x.distance===best.distance&&x.course===best.course);
-    if(standard&&best.time<=standard.seconds)yamanashiQual.push({...best,grade,standard:standard.seconds});
+    if(standard&&Number.isFinite(standard.seconds)&&standard.seconds>0){
+      const candidate={...best,grade,standard:standard.seconds};
+      yamanashiCandidates.push(candidate);
+      if(best.time<=standard.seconds)yamanashiQual.push(candidate);
+    }
   });
   yamanashiQual.sort((a,b)=>a.player.name.localeCompare(b.player.name,'ja')||a.stroke.localeCompare(b.stroke,'ja')||a.distance-b.distance||a.course.localeCompare(b.course,'ja'));
   const yamanashiQualifiedPlayers=new Set(yamanashiQual.map(x=>String(x.player.id))).size;
   const yamanashiUnknownPlayers=PLAYERS.filter(p=>!schoolGrade2026(p)||!['男子','女子'].includes(String(p.gender||'').trim())).length;
   const yamanashiEscape=value=>String(value??'').replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+  const yamanashiRanking=Object.values(yamanashiCandidates.reduce((best,x)=>{
+    const id=String(x.player.id),rate=x.standard/x.time*100;
+    if(!best[id]||rate>best[id].rate)best[id]={...x,rate,diff:x.time-x.standard,qualified:x.time<=x.standard};
+    return best;
+  },{})).sort((a,b)=>b.rate-a.rate||a.player.name.localeCompare(b.player.name,'ja')).slice(0,20);
+  const yamanashiRankingHtml=yamanashiRanking.length?yamanashiRanking.map((x,i)=>{
+    const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}位`;
+    const status=x.qualified?`🏆 県強化突破！ 達成率 ${x.rate.toFixed(1)}%`:`県強化まであと ${x.diff.toFixed(2)}秒　達成率 ${x.rate.toFixed(1)}%`;
+    return `<div class="row"><div><b>${medal} ${yamanashiEscape(x.player.name)}</b><br><span class="muted">${yamanashiEscape(x.stroke)} ${x.distance}m・${yamanashiEscape(x.course)} ／ ${x.grade}</span><br><span class="muted">${status}</span></div><div style="text-align:right"><b>${fmt(x.time)}</b><br><span class="muted">県強化 ${fmt(x.standard)}</span></div></div>`;
+  }).join(''):'<p class="muted">山梨県強化の標準と比較できる記録がまだありません。</p>';
   const yamanashiQualifierHtml=yamanashiQual.length?(()=>{
     let last='';
     return yamanashiQual.map(x=>{
@@ -4116,11 +4131,16 @@ ${racesHtml}
 ${lapAnalysisHtml}
     </div>
     <div class="card">
-      <h2>🏆 JOに近い選手・種目ランキング（上位30名）</h2>
+      <h2>🏆 JOに近い選手・種目ランキング（達成率90%以上・上位20名）</h2>
       <p class="muted">
-        各選手のベストタイムを今日から見た次のJO大会基準日の年齢・区分で比較し、1人1種目・上位30名まで表示しています。
+        各選手のベストタイムを今日から見た次のJO大会基準日の年齢・区分で比較し、達成率90%以上の選手を1人1種目・上位20名まで表示しています。
       </p>
       ${joRankingHtml}
+    </div>
+    <div class="card">
+      <h2>🏊 山梨県強化選手ランキング（上位20名）</h2>
+      <p class="muted">2026年4月1日時点の学年・性別と種目・距離・水路ごとの県強化基準で比較し、達成率が高い順に1人1種目・上位20名まで表示しています。達成率は「基準タイム ÷ 自己ベスト × 100」で、100%以上が突破です。</p>
+      ${yamanashiRankingHtml}
     </div>
 
     
@@ -4579,7 +4599,7 @@ function editMeetEntry(id,meetId){
 }
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261017-ranking-sync-merge-v1';
+const APP_BUILD_VERSION='20261019-analysis-rankings-v1';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));
