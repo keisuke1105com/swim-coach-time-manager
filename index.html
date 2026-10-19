@@ -3420,7 +3420,7 @@ let joRanking=Object.values(
     return a.qualified ? -1 : 1;
   }
   return b.rate-a.rate;
-}).filter(x=>x.rate>=90);
+}).filter(x=>x.rate>=90).slice(0,20);
 
   let joRankingHtml=joRanking.length
     ? joRanking.map((x,i)=>{
@@ -4131,9 +4131,9 @@ ${racesHtml}
 ${lapAnalysisHtml}
     </div>
     <div class="card">
-      <h2>🏆 JOに近い選手・種目ランキング（達成率90%以上）</h2>
+      <h2>🏆 JOに近い選手・種目ランキング（達成率90%以上・上位20名）</h2>
       <p class="muted">
-        各選手のベストタイムを今日から見た次のJO大会基準日の年齢・区分で比較し、達成率90%以上の選手を1人1種目で表示しています。
+        各選手のベストタイムを今日から見た次のJO大会基準日の年齢・区分で比較し、達成率90%以上の選手を1人1種目・上位20名まで表示しています。
       </p>
       ${joRankingHtml}
     </div>
