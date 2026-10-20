@@ -196,7 +196,8 @@ header small{color:#C5E7F5}
  #records .record-row{grid-template-columns:minmax(0,1fr);gap:12px}
  #records .record-actions{justify-content:flex-start}
 }
-.pb-celebration{position:fixed;inset:0;z-index:9999;background:rgba(5,28,48,.66);display:flex;align-items:center;justify-content:center;padding:18px}.pb-celebration[hidden]{display:none}.pb-celebration-card{width:min(100%,420px);max-height:90vh;overflow:auto;background:white;color:#123;border-radius:24px;padding:24px;text-align:center;box-shadow:0 18px 55px #0018;animation:pb-pop .3s ease-out}.pb-celebration-title{font-size:29px;font-weight:900;color:#087fd1;margin:10px 0}.pb-celebration-times{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin:16px 0}.pb-celebration-times>div{background:#eef7fc;border-radius:12px;padding:12px;min-width:120px}.pb-celebration-mascot{width:92px;height:92px;object-fit:contain;margin:6px auto}.pb-celebration-medley{margin:6px auto;width:92px;height:92px;flex-basis:92px}@keyframes pb-pop{from{opacity:0;transform:scale(.93)}to{opacity:1;transform:scale(1)}}@media(prefers-reduced-motion:reduce){.pb-celebration-card{animation:none}}.me-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.me-card{margin:12px 0}.me-count{background:#dceeff;color:#14639a;border-radius:12px;padding:10px}.me-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.me-chip{display:inline-block;margin:4px;padding:6px 10px;background:#e8f3ff;border-radius:12px}.me-scroll{overflow-x:auto}.me-table{width:100%;border-collapse:collapse;font-size:13px}.me-table td,.me-table th{border-bottom:1px solid #d9e5ef;padding:9px;text-align:left}.me-qr{padding:14px 0;border-bottom:1px solid #dce5ec}.me-qr p{margin:6px 0;color:#526779}.me-qr strong{display:inline-block;padding:8px 12px;border-radius:12px;background:#dceeff;color:#14639a}</style></head><body>
+.pb-celebration{position:fixed;inset:0;z-index:9999;background:rgba(5,28,48,.66);display:flex;align-items:center;justify-content:center;padding:18px}.pb-celebration[hidden]{display:none}.pb-celebration-card{width:min(100%,420px);max-height:90vh;overflow:auto;background:white;color:#123;border-radius:24px;padding:24px;text-align:center;box-shadow:0 18px 55px #0018;animation:pb-pop .3s ease-out}.pb-celebration-title{font-size:29px;font-weight:900;color:#087fd1;margin:10px 0}.pb-celebration-times{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin:16px 0}.pb-celebration-times>div{background:#eef7fc;border-radius:12px;padding:12px;min-width:120px}.pb-celebration-mascot{width:92px;height:92px;object-fit:contain;margin:6px auto}.pb-celebration-medley{margin:6px auto;width:92px;height:92px;flex-basis:92px}@keyframes pb-pop{from{opacity:0;transform:scale(.93)}to{opacity:1;transform:scale(1)}}@media(prefers-reduced-motion:reduce){.pb-celebration-card{animation:none}}.me-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.me-card{margin:12px 0}.me-count{background:#dceeff;color:#14639a;border-radius:12px;padding:10px}.me-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.me-chip{display:inline-block;margin:4px;padding:6px 10px;background:#e8f3ff;border-radius:12px}.me-scroll{overflow-x:auto}.me-table{width:100%;border-collapse:collapse;font-size:13px}.me-table td,.me-table th{border-bottom:1px solid #d9e5ef;padding:9px;text-align:left}.me-qr{padding:14px 0;border-bottom:1px solid #dce5ec}.me-qr p{margin:6px 0;color:#526779}.me-qr strong{display:inline-block;padding:8px 12px;border-radius:12px;background:#dceeff;color:#14639a}.analysis-jumps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:16px}.analysis-jumps button{min-width:0;padding:12px 8px;font-size:13px}.analysis-stat{text-align:left;color:inherit;font-weight:inherit;width:100%;border:1px solid #dbeaf2}.analysis-stat:hover{background:#f7fbff}.analysis-target{display:inline-block;font-size:17px;font-weight:800;color:#0869a8;margin-top:5px}.analysis-screenshot>summary{cursor:pointer;font-weight:700;list-style-position:inside}.analysis-screenshot>summary span{display:block;margin-top:5px}.analysis-screenshot-body{padding-top:10px}#analysis [id]{scroll-margin-top:16px}#analysis details>summary{cursor:pointer}#analysis button:focus-visible,#analysis [role="button"]:focus-visible,#analysis summary:focus-visible{outline:3px solid #087fd1;outline-offset:3px}@media(max-width:420px){#analysis .row{flex-wrap:wrap}#analysis .row>div{min-width:0;overflow-wrap:anywhere}.analysis-target{font-size:16px}}
+</style></head><body>
 <header><div class="wrap" style="padding:0"><div class="topline"><div><h1>🏊 水泳コーチ・タイム管理 ☁️</h1><small>選手・記録をクラウド共有</small></div><button id="logoutBtn" class="secondary hidden" onclick="logout()">ログアウト</button></div></div></header>
 <main class="wrap"><div id="appUpdateNotice" hidden style="background:#e7f3fb;border:1px solid #91c9ed;border-radius:14px;padding:12px;margin-bottom:12px;color:#075985;font-weight:700">✨ 新しいバージョンがあります。入力内容を保存してから更新してください。 <button type="button" style="margin-top:8px" onclick="reloadLatestApp()">🔄 最新版に更新</button></div><div id="status"></div><section id="auth"></section><section id="publicProfile" class="hidden"></section><div id="app" class="hidden"><section id="home"></section><section id="players" class="hidden"></section><section id="input" class="hidden"></section><section id="records" class="hidden"></section><section id="analysis" class="hidden"></section><section id="meets" class="hidden"></section></div></main>
 <div id="pbCelebration" class="pb-celebration" role="dialog" aria-modal="true" aria-label="自己ベストのお祝い" hidden><div class="pb-celebration-card" id="pbCelebrationContent"></div></div><nav id="tabs" class="tabs hidden"><button data-tab="home">🏠<br>ホーム</button><button data-tab="players">👥<br>選手</button><button data-tab="input">⏱️<br>入力</button><button data-tab="records">📋<br>記録</button><button data-tab="analysis">📊<br>分析</button><button data-tab="meets">📅<br>大会</button></nav>
@@ -3344,7 +3345,45 @@ async function saveScreenshotRows(){
     const payload={swimmer_id:r.playerId,stroke:r.stroke,distance:r.distance,course:r.course,time_seconds:timeSeconds,meet_name:'大会速報スクリーンショット',record_date:today,memo:'📱速報 / スクリーンショット解析から登録 / 日本水泳連盟公式記録取得時に自動置換',is_personal_best:isBest,is_jo_qualified:st!=null&&timeSeconds<=st}; const existing=records.find(x=>recordExactKey(x)===recordExactKey(payload)); if(existing){ if(recordSourcePriority(existing)>=recordSourcePriority(payload)){skippedDuplicate++;continue;} const {error:delDupErr}=await sb.from('swim_records').delete().eq('id',existing.id); if(delDupErr){alert('重複整理エラー：'+delDupErr.message);return;} records=records.filter(x=>String(x.id)!==String(existing.id)); } const {data:inserted,error}=await sb.from('swim_records').insert(payload).select('id,swimmer_id,stroke,distance,course,time_seconds').single(); if(error){alert('保存エラー：'+error.message);return;} if(!inserted?.id){alert('保存確認に失敗しました。データベースへの追加を確認できませんでした。');return;} saved++;}
   await loadCloud();renderHome();renderPlayers();renderAnalysis();const savedPlayerIds=[...new Set(rows.map(r=>r.playerId).filter(Boolean))];if(savedPlayerIds.length===1){showPlayerDetail(savedPlayerIds[0]);}alert(`${saved}件を保存しました！${skippedDuplicate?`\n完全一致の重複 ${skippedDuplicate}件は保存しませんでした。`:''}\nデータベースへの保存確認も完了しました。`);
 }
-function screenshotAnalysisCard(){return `<div class="card"><h2>📸 大会速報スクショ解析</h2><p class="muted">スイムレコードモバイルなどの結果画面を読み取り、登録選手と照合してJO・東京SC・ゆめカップまでの差をその場で判定します。種目・距離は画面全体から判定し、不確かな場合は保存前に1か所だけ指定できます。</p><input id="screenshotFile" type="file" accept="image/*" onchange="const f=this.files?.[0];if(f){const p=$('#screenshotPreview');p.src=URL.createObjectURL(f);p.classList.remove('hidden')}"/><img id="screenshotPreview" class="shotPreview hidden" alt="スクリーンショット"><button style="width:100%;margin-top:10px" onclick="analyzeScreenshot()">🔎 スクリーンショットを解析</button><div id="screenshotStatus" style="margin-top:10px"></div><div id="screenshotResults"><p class="muted">解析結果がここに表示されます。</p></div></div>`;}
+const analysisUiState={playerId:'',events:new Set(),screenshotOpen:false,meet:'tokyo'};
+function selectAnalysisPlayer(value){
+  analysisUiState.playerId=value;
+  document.querySelectorAll('#analysis .lap-player-group').forEach(el=>{
+    const selected=el.dataset.playerId===value;
+    el.style.display=selected?'':'none';
+    if(selected)el.open=true;
+  });
+}
+function analysisJump(target,meet){
+  if(meet){
+    analysisUiState.meet=meet;
+    const select=$('#qualifierMeetSelect');if(select)select.value=meet;
+    ['tokyo','yume','yamanashi'].forEach(kind=>{
+      const el=document.getElementById({tokyo:'qualifierTokyo',yume:'qualifierYume',yamanashi:'qualifierYamanashi'}[kind]);
+      if(el)el.style.display=kind===meet?'block':'none';
+    });
+  }
+  const el=document.getElementById(target);
+  if(el){if(el.tagName==='DETAILS')el.open=true;el.scrollIntoView({behavior:'smooth',block:'start'});}
+}
+function restoreAnalysisUi(){
+  const root=$('#analysis'),select=$('#lapPlayerSelect');
+  if(select){select.value=analysisUiState.playerId;if(!select.value)analysisUiState.playerId='';selectAnalysisPlayer(select.value);}
+  root.querySelectorAll('[data-analysis-event]').forEach(el=>{el.open=analysisUiState.events.has(el.dataset.analysisEvent);});
+  const shot=$('#analysis-screenshot');if(shot)shot.open=analysisUiState.screenshotOpen;
+  const meet=analysisUiState.meet;
+  const meetSelect=$('#qualifierMeetSelect');if(meetSelect)meetSelect.value=meet;
+  ['tokyo','yume','yamanashi'].forEach(kind=>{const el=document.getElementById({tokyo:'qualifierTokyo',yume:'qualifierYume',yamanashi:'qualifierYamanashi'}[kind]);if(el)el.style.display=kind===meet?'block':'none';});
+  if(!root.dataset.analysisListener){
+    root.addEventListener('toggle',event=>{
+      const el=event.target;if(!root.contains(el))return;
+      if(el.id==='analysis-screenshot')analysisUiState.screenshotOpen=el.open;
+      if(el.dataset.analysisEvent){if(el.open)analysisUiState.events.add(el.dataset.analysisEvent);else analysisUiState.events.delete(el.dataset.analysisEvent);}
+    },true);
+    root.dataset.analysisListener='true';
+  }
+}
+function screenshotAnalysisCard(){return `<details class="card analysis-screenshot" id="analysis-screenshot"><summary>📸 大会結果を読み込む<span class="small muted">スクショ解析を開く・閉じる</span></summary><div class="analysis-screenshot-body"><h2>大会速報スクショ解析</h2><p class="muted">スイムレコードモバイルなどの結果画面を読み取り、登録選手と照合してJO・東京SC・ゆめカップまでの差をその場で判定します。種目・距離は画面全体から判定し、不確かな場合は保存前に1か所だけ指定できます。</p><input id="screenshotFile" type="file" accept="image/*" onchange="const f=this.files?.[0];if(f){const p=$('#screenshotPreview');p.src=URL.createObjectURL(f);p.classList.remove('hidden')}"/><img id="screenshotPreview" class="shotPreview hidden" alt="スクリーンショット"><button style="width:100%;margin-top:10px" onclick="analyzeScreenshot()">🔎 スクリーンショットを解析</button><div id="screenshotStatus" style="margin-top:10px"></div><div id="screenshotResults"><p class="muted">解析結果がここに表示されます。</p></div></div></details>`;}
 
 function renderAnalysis(){
   let jo=records.filter(r=>r.is_jo_qualified).length;
@@ -3437,7 +3476,7 @@ let joRanking=Object.values(
               <span class="muted">
                 ${x.stroke} ${x.distance}m・${x.course}
               </span><br>
-              <span class="muted">${status}</span>
+              <span class="analysis-target">${x.qualified?'🏆 JO突破！':`JOまであと ${x.diff.toFixed(2)}秒`}</span><br><span class="muted small">達成率 ${x.rate.toFixed(1)}%</span>
             </div>
 
             <div style="text-align:right">
@@ -3506,7 +3545,7 @@ let joRanking=Object.values(
   const yamanashiRankingHtml=yamanashiRanking.length?yamanashiRanking.map((x,i)=>{
     const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}位`;
     const status=x.qualified?`🏆 県強化突破！ 達成率 ${x.rate.toFixed(1)}%`:`県強化まであと ${x.diff.toFixed(2)}秒　達成率 ${x.rate.toFixed(1)}%`;
-    return `<div class="row"><div><b>${medal} ${yamanashiEscape(x.player.name)}</b><br><span class="muted">${yamanashiEscape(x.stroke)} ${x.distance}m・${yamanashiEscape(x.course)} ／ ${x.grade}</span><br><span class="muted">${status}</span></div><div style="text-align:right"><b>${fmt(x.time)}</b><br><span class="muted">県強化 ${fmt(x.standard)}</span></div></div>`;
+    return `<div class="row"><div><b>${medal} ${yamanashiEscape(x.player.name)}</b><br><span class="muted">${yamanashiEscape(x.stroke)} ${x.distance}m・${yamanashiEscape(x.course)} ／ ${x.grade}</span><br><span class="analysis-target">${x.qualified?'🏆 県強化突破！':`県強化まであと ${x.diff.toFixed(2)}秒`}</span><br><span class="muted small">達成率 ${x.rate.toFixed(1)}%</span></div><div style="text-align:right"><b>${fmt(x.time)}</b><br><span class="muted">県強化 ${fmt(x.standard)}</span></div></div>`;
   }).join(''):'<p class="muted">山梨県強化の標準と比較できる記録がまだありません。</p>';
   const yamanashiQualifierHtml=yamanashiQual.length?(()=>{
     let last='';
@@ -4005,7 +4044,7 @@ if(comparisons.length){
               }).join('');
 
               return `
-                <details style="
+                <details data-analysis-event="${encodeURIComponent(JSON.stringify([String(group.player.id),event.stroke,Number(event.distance),event.course]))}" style="
                   margin-top:10px;
                   border-top:1px solid #e5edf3;
                   padding-top:10px;
@@ -4055,44 +4094,52 @@ ${racesHtml}
           ラップデータのある公式記録がまだありません。
         </p>
       `;
+  const analysisEscape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const analysisRecordList=items=>items.length?items.map(r=>`<div class="row"><div><b>${analysisEscape(playerById(r.swimmer_id)?.name||'選手')}</b><br><span class="muted small">${analysisEscape(r.stroke)} ${Number(r.distance)}m・${analysisEscape(r.course)} ／ ${analysisEscape(r.record_date||'')}</span></div><b>${fmt(r.time_seconds)}</b></div>`).join(''):'<p class="muted">記録はまだありません。</p>';
   $('#analysis').innerHTML=`
+    <nav class="analysis-jumps" aria-label="分析画面内の移動">
+      <button class="secondary" onclick="analysisJump('analysis-jo-ranking')">🏆 JOランキング</button>
+      <button class="secondary" onclick="analysisJump('analysis-pref-ranking')">🏊 県強化ランキング</button>
+      <button class="secondary" onclick="analysisJump('analysis-qualifiers')">🎖️ 大会突破者</button>
+      <button class="secondary" onclick="analysisJump('analysis-personal')">📊 個人分析</button>
+    </nav>
     <div class="grid">
-      <div class="card">
+      <button type="button" class="card analysis-stat" onclick="go('records')">
         <div class="label">記録件数</div>
         <div class="stat">${records.length}</div>
-      </div>
+      </button>
 
-      <div class="card">
+      <button type="button" class="card analysis-stat" onclick="analysisJump('analysis-jo-records')">
         <div class="label">JO突破数</div>
         <div class="stat">${jo}</div>
-      </div>
+      </button>
 
-      <div class="card" role="button" tabindex="0" onclick="document.getElementById('tokyo-qualifiers')?.scrollIntoView({behavior:'smooth',block:'start'})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('tokyo-qualifiers')?.scrollIntoView({behavior:'smooth',block:'start'})}" style="cursor:pointer">
+      <div class="card" role="button" tabindex="0" onclick="analysisJump('tokyo-qualifiers','tokyo')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();analysisJump('tokyo-qualifiers','tokyo')}" style="cursor:pointer">
         <div class="label">🗼 東京SC招待2027（予定） 突破予定者数</div>
         <div class="stat">${tokyoQualifiedPlayers}<span class="small">名</span></div>
         <div class="muted small">延べ ${tokyoQual.length}種目</div>
       </div>
 
-      <div class="card" role="button" tabindex="0" onclick="document.getElementById('yamanashi-qualifiers')?.scrollIntoView({behavior:'smooth',block:'start'})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('yamanashi-qualifiers')?.scrollIntoView({behavior:'smooth',block:'start'})}" style="cursor:pointer">
+      <div class="card" role="button" tabindex="0" onclick="analysisJump('yamanashi-qualifiers','yamanashi')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();analysisJump('yamanashi-qualifiers','yamanashi')}" style="cursor:pointer">
         <div class="label">🏊 山梨県強化突破者</div>
         <div class="stat">${yamanashiQualifiedPlayers}<span class="small">名</span></div>
         <div class="muted small">延べ ${yamanashiQual.length}種目</div>
       </div>
 
-      <div class="card" role="button" tabindex="0" onclick="document.getElementById('yume-qualifiers')?.scrollIntoView({behavior:'smooth',block:'start'})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('yume-qualifiers')?.scrollIntoView({behavior:'smooth',block:'start'})}" style="cursor:pointer">
+      <div class="card" role="button" tabindex="0" onclick="analysisJump('yume-qualifiers','yume')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();analysisJump('yume-qualifiers','yume')}" style="cursor:pointer">
         <div class="label">🌈 ゆめカップ2027（予定） 突破者数</div>
         <div class="stat">${yumeQualifiedPlayers}<span class="small">名</span></div>
         <div class="muted small">延べ ${yumeQual.length}種目</div>
       </div>
 
-      <div class="card">
+      <button type="button" class="card analysis-stat" onclick="analysisJump('analysis-best-records')">
         <div class="label">ベスト更新</div>
         <div class="stat">${bestRecords}</div>
-      </div>
+      </button>
     </div>
 
     ${screenshotAnalysisCard()}
-    <div class="card">
+    <div class="card" id="analysis-personal">
       <h2>🏊 ラップ分析</h2>
       <p class="muted">
         日本水泳連盟公式記録から取得したラップを、
@@ -4115,12 +4162,7 @@ ${racesHtml}
       <div style="margin-bottom:12px">
   <label for="lapPlayerSelect">🏊 分析する選手</label>
   <select id="lapPlayerSelect"
-    onchange="
-      document.querySelectorAll('.lap-player-group').forEach(el=>{
-        el.style.display =
-          el.dataset.playerId===this.value ? '' : 'none';
-      });
-    ">
+    onchange="selectAnalysisPlayer(this.value)">
     <option value="">選手を選択してください</option>
     ${lapPlayerOptions}
   </select>
@@ -4130,27 +4172,28 @@ ${racesHtml}
 
 ${lapAnalysisHtml}
     </div>
-    <div class="card">
+    <div class="card" id="analysis-jo-ranking">
       <h2>🏆 JOに近い選手・種目ランキング（達成率90%以上・上位20名）</h2>
       <p class="muted">
         各選手のベストタイムを今日から見た次のJO大会基準日の年齢・区分で比較し、達成率90%以上の選手を1人1種目・上位20名まで表示しています。
       </p>
       ${joRankingHtml}
     </div>
-    <div class="card">
+    <div class="card" id="analysis-pref-ranking">
       <h2>🏊 山梨県強化選手ランキング（上位20名）</h2>
       <p class="muted">2026年4月1日時点の学年・性別と種目・距離・水路ごとの県強化基準で比較し、達成率が高い順に1人1種目・上位20名まで表示しています。達成率は「基準タイム ÷ 自己ベスト × 100」で、100%以上が突破です。</p>
       ${yamanashiRankingHtml}
     </div>
 
     
-<div class="card">
+<div class="card" id="analysis-qualifiers">
   <h2>🏆 大会突破者リスト</h2>
 
   <div class="field">
     <label>表示する大会を選択</label>
     <select id="qualifierMeetSelect"
       onchange="
+        analysisUiState.meet=this.value;
         document.getElementById('qualifierTokyo').style.display =
           this.value==='tokyo' ? 'block' : 'none';
         document.getElementById('qualifierYume').style.display =
@@ -4192,6 +4235,8 @@ ${lapAnalysisHtml}
   </div>
 </div>
 
+    <details class="card" id="analysis-jo-records"><summary>🏆 JO突破記録（${jo}件）</summary>${analysisRecordList(records.filter(r=>r.is_jo_qualified))}</details>
+    <details class="card" id="analysis-best-records"><summary>✨ ベスト更新記録（${bestRecords}件）</summary>${analysisRecordList(records.filter(r=>r.is_personal_best))}</details>
     <div class="card">
       <h3>☁️ クラウド共有</h3>
       <p>
@@ -4212,6 +4257,7 @@ ${lapAnalysisHtml}
       <p class="muted small" style="margin-top:8px">同じ選手・同じ result_id の日本水泳連盟公式記録だけを1件に整理します。手入力記録は削除しません。</p>
     </div>
   `;
+  restoreAnalysisUi();
 }
 async function migrateLocalV3(){
   let old=[];
@@ -4599,7 +4645,7 @@ function editMeetEntry(id,meetId){
 }
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261019-analysis-rankings-v1';
+const APP_BUILD_VERSION='20261020-analysis-ui-v1';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));
