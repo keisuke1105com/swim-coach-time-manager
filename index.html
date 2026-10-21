@@ -197,6 +197,7 @@ header small{color:#C5E7F5}
  #records .record-actions{justify-content:flex-start}
 }
 .pb-celebration{position:fixed;inset:0;z-index:9999;background:rgba(5,28,48,.66);display:flex;align-items:center;justify-content:center;padding:18px}.pb-celebration[hidden]{display:none}.pb-celebration-card{width:min(100%,420px);max-height:90vh;overflow:auto;background:white;color:#123;border-radius:24px;padding:24px;text-align:center;box-shadow:0 18px 55px #0018;animation:pb-pop .3s ease-out}.pb-celebration-title{font-size:29px;font-weight:900;color:#087fd1;margin:10px 0}.pb-celebration-times{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin:16px 0}.pb-celebration-times>div{background:#eef7fc;border-radius:12px;padding:12px;min-width:120px}.pb-celebration-mascot{width:92px;height:92px;object-fit:contain;margin:6px auto}.pb-celebration-medley{margin:6px auto;width:92px;height:92px;flex-basis:92px}@keyframes pb-pop{from{opacity:0;transform:scale(.93)}to{opacity:1;transform:scale(1)}}@media(prefers-reduced-motion:reduce){.pb-celebration-card{animation:none}}.me-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.me-card{margin:12px 0}.me-count{background:#dceeff;color:#14639a;border-radius:12px;padding:10px}.me-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.me-chip{display:inline-block;margin:4px;padding:6px 10px;background:#e8f3ff;border-radius:12px}.me-scroll{overflow-x:auto}.me-table{width:100%;border-collapse:collapse;font-size:13px}.me-table td,.me-table th{border-bottom:1px solid #d9e5ef;padding:9px;text-align:left}.me-qr{padding:14px 0;border-bottom:1px solid #dce5ec}.me-qr p{margin:6px 0;color:#526779}.me-qr strong{display:inline-block;padding:8px 12px;border-radius:12px;background:#dceeff;color:#14639a}.analysis-jumps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:16px}.analysis-jumps button{min-width:0;padding:12px 8px;font-size:13px}.analysis-stat{text-align:left;color:inherit;font-weight:inherit;width:100%;border:1px solid #dbeaf2}.analysis-stat:hover{background:#f7fbff}.analysis-target{display:inline-block;font-size:17px;font-weight:800;color:#0869a8;margin-top:5px}.analysis-screenshot>summary{cursor:pointer;font-weight:700;list-style-position:inside}.analysis-screenshot>summary span{display:block;margin-top:5px}.analysis-screenshot-body{padding-top:10px}#analysis [id]{scroll-margin-top:16px}#analysis details>summary{cursor:pointer}#analysis button:focus-visible,#analysis [role="button"]:focus-visible,#analysis summary:focus-visible{outline:3px solid #087fd1;outline-offset:3px}@media(max-width:420px){#analysis .row{flex-wrap:wrap}#analysis .row>div{min-width:0;overflow-wrap:anywhere}.analysis-target{font-size:16px}}
+#publicProfile [id]{scroll-margin-top:16px}@media(max-width:420px){#publicProfile .row{flex-wrap:wrap}#publicProfile .row>div{min-width:0;overflow-wrap:anywhere}}
 </style></head><body>
 <header><div class="wrap" style="padding:0"><div class="topline"><div><h1>🏊 水泳コーチ・タイム管理 ☁️</h1><small>選手・記録をクラウド共有</small></div><button id="logoutBtn" class="secondary hidden" onclick="logout()">ログアウト</button></div></div></header>
 <main class="wrap"><div id="appUpdateNotice" hidden style="background:#e7f3fb;border:1px solid #91c9ed;border-radius:14px;padding:12px;margin-bottom:12px;color:#075985;font-weight:700">✨ 新しいバージョンがあります。入力内容を保存してから更新してください。 <button type="button" style="margin-top:8px" onclick="reloadLatestApp()">🔄 最新版に更新</button></div><div id="status"></div><section id="auth"></section><section id="publicProfile" class="hidden"></section><div id="app" class="hidden"><section id="home"></section><section id="players" class="hidden"></section><section id="input" class="hidden"></section><section id="records" class="hidden"></section><section id="analysis" class="hidden"></section><section id="meets" class="hidden"></section></div></main>
@@ -4458,6 +4459,18 @@ function updatePublicShareChart(){
   const rows=publicShareRecords.filter(r=>shareEventKey(r)===sel.value);
   target.innerHTML=shareChartSvg(rows);
 }
+function publicLeaderboardHtml(items,{id,title,label,note,minRate=0}){
+  const rows=(Array.isArray(items)?items:[]).map(x=>{
+    const time=Number(x?.time),standard=Number(x?.standard);
+    return {...x,time,standard,rate:standard/time*100};
+  }).filter(x=>Number.isFinite(x.time)&&x.time>0&&Number.isFinite(x.standard)&&x.standard>0&&Number.isFinite(x.rate)&&x.rate>=minRate)
+    .sort((a,b)=>b.rate-a.rate).slice(0,20);
+  return `<div class="card" id="${id}"><h3>${title}</h3><p class="small muted">${note} ／ 公開同意済みの選手を対象・1人1種目</p>${rows.length?rows.map((x,i)=>{
+    const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}位`;
+    const status=x.time<=x.standard?`🏆 ${label}突破！`:`${label}まであと ${(x.time-x.standard).toFixed(2)}秒`;
+    return `<div class="row"><div><b>${medal} ${shareEscape(x.name)}</b><br><span class="muted">${shareEscape(x.stroke)} ${shareEscape(x.distance)}m・${shareEscape(x.course)}${x.grade?` ／ ${shareEscape(x.grade)}`:''}</span><br><span class="analysis-target">${status}</span><br><span class="muted small">達成率 ${x.rate.toFixed(1)}%</span></div><div style="text-align:right"><b>${shareFmt(x.time)}</b><br><span class="muted">${label} ${shareFmt(x.standard)}</span></div></div>`;
+  }).join(''):'<p class="muted">条件に合うランキング対象の記録はまだありません。</p>'}</div>`;
+}
 async function renderPublicSwimmerProfile(){
   $('#auth').classList.add('hidden');$('#app').classList.add('hidden');$('#tabs').classList.add('hidden');$('#logoutBtn').classList.add('hidden');
   const panel=$('#publicProfile');panel.classList.remove('hidden');panel.innerHTML='<div class="card">🏊 公開記録を確認しています…</div>';
@@ -4515,22 +4528,23 @@ async function renderPublicSwimmerProfile(){
     const bestHtml=groupedBests.map(g=>`<div class="public-best-group"><div class="public-best-heading">🏊 ${shareEscape(g.course)} ／ ${g.items.length}種目</div>${g.items.map(r=>`<div class="public-best-item"><div class="public-best-content">${publicMascotImage(r.stroke)}<div class="public-best-copy"><div class="public-best-event">${shareEscape(r.stroke)} ${shareEscape(r.distance)}m</div><div class="public-best-meta">${shareEscape(r.meet_name||'大会名未登録')}<br>${shareEscape(shareDate(r.record_date))}</div><div class="public-best-ranks">${publicRankLabels(r)}${r.is_jo_qualified?`<span class="public-best-rank public-best-jo">${publicMascotImage(r.stroke,'public-jo-mascot')}<span>🏅 JO突破（登録時の判定）</span></span>`:''}</div></div></div><div class="public-best-time"><div>${shareFmt(r.time_seconds)}</div>${publicGoalHtml(r)}</div></div>`).join('')}</div>`).join('');
     const qrMeets=Array.isArray(data.meets)?data.meets:[];
     const qrMeetHtml=qrMeets.length?'<div class="card"><h3>📅 出場予定の大会</h3>'+qrMeets.map(m=>'<div class="me-qr"><b>'+shareEscape(m.name)+'</b><p>📅 '+shareEscape(meDate(m.meet_date))+'</p><p>📍 '+shareEscape(m.venue||'会場未登録')+'</p><strong>'+shareEscape(meCountdown(m.meet_date))+'</strong></div>').join('')+'</div>':'';
-    const joRanking=Array.isArray(data.joRanking)?data.joRanking:[];
     const joRankingMeetDate=String(data.joRankingMeetDate||"");
-    const joRankingHtml=`<div class="card"><h3>🏆 JO突破率ランキング TOP30</h3><p class="small muted">${joRankingMeetDate?`${shareEscape(joRankingMeetDate)} 基準日のJO標準で判定`:"次回JOの標準記録で判定"} ／ 公開同意済みの選手を対象</p>${joRanking.length?joRanking.map((x,i)=>{
-      const time=Number(x.time),standard=Number(x.standard),rate=Number(x.rate),diff=Number(x.diff);
-      if(!Number.isFinite(time)||!Number.isFinite(standard)||!Number.isFinite(rate))return "";
-      const medal=i===0?"🥇":i===1?"🥈":i===2?"🥉":`${i+1}位`;
-      const status=x.qualified?`🏆 JO突破！ 達成率 ${rate.toFixed(1)}%`:`JOまであと ${Math.max(0,diff).toFixed(2)}秒　達成率 ${rate.toFixed(1)}%`;
-      return `<div class="row"><div><b>${medal} ${shareEscape(x.name)}</b><br><span class="muted">${shareEscape(x.stroke)} ${shareEscape(x.distance)}m・${shareEscape(x.course)}</span><br><span class="muted">${status}</span></div><div style="text-align:right"><b style="font-size:19px">${shareFmt(time)}</b><br><span class="muted">JO ${shareFmt(standard)}</span></div></div>`;
-    }).join(""):`<p class="muted">ランキング対象の記録がまだありません。</p>`}</div>`;
+    const joRankingHtml=publicLeaderboardHtml(data.joRanking,{id:'share-jo-ranking',title:'🏆 JO突破率ランキング（90%以上・上位20名）',label:'JO',minRate:90,note:joRankingMeetDate?`${shareEscape(joRankingMeetDate)} 基準日のJO標準で判定`:'次回JOの標準記録で判定'});
+    const yamanashiRankingHtml=publicLeaderboardHtml(data.yamanashiRanking,{id:'share-pref-ranking',title:'🏊 山梨県強化突破率ランキング（上位20名）',label:'県強化',note:'2026年度・4月1日時点の学年、性別、種目・距離・水路別基準で判定'});
     const recordList=[...publicShareRecords].sort((a,b)=>String(b.record_date||'').localeCompare(String(a.record_date||''))||Number(a.distance)-Number(b.distance));
     panel.innerHTML=`<div class="card public-profile-hero"><div><h2>🏊 ${shareEscape(swimmer.name)}</h2><p class="muted">${shareEscape(swimmer.age_group||'')} ${swimmer.team?'・所属：'+shareEscape(swimmer.team):''}</p></div><img class="public-profile-hero-mascot" src="assets/characters/fitz-butterfly.jpg" alt="フィッツ君" loading="eager"></div>
-    <div class="card"><div class="public-best-title"><h3>🏅 自己ベスト記録</h3><div class="public-best-team" aria-label="公式キャラクター"><img src="assets/characters/fitz-butterfly.jpg" alt="フィッツ君" loading="lazy"><img src="assets/characters/kurin-butterfly.jpg" alt="クリンちゃん" loading="lazy"><img src="assets/characters/relief-butterfly.jpg" alt="リリーフ君" loading="lazy"></div></div><p class="small muted">種目・距離・水路ごとの最速記録です。ランキングは取得済みの2026年度同学年順位を表示します。</p>${bests.length?bestHtml:'<p class="muted">記録はありません。</p>'}</div>
+    <nav class="analysis-jumps" aria-label="選手ページ内の移動">
+      <button class="secondary" onclick="document.getElementById('share-bests')?.scrollIntoView({behavior:'smooth',block:'start'})">🏅 自己ベスト</button>
+      <button class="secondary" onclick="document.getElementById('share-personal')?.scrollIntoView({behavior:'smooth',block:'start'})">📊 個人分析</button>
+      <button class="secondary" onclick="document.getElementById('share-jo-ranking')?.scrollIntoView({behavior:'smooth',block:'start'})">🏆 JOランキング</button>
+      <button class="secondary" onclick="document.getElementById('share-pref-ranking')?.scrollIntoView({behavior:'smooth',block:'start'})">🏊 県強化ランキング</button>
+    </nav>
+    <div class="card" id="share-bests"><div class="public-best-title"><h3>🏅 自己ベスト記録</h3><div class="public-best-team" aria-label="公式キャラクター"><img src="assets/characters/fitz-butterfly.jpg" alt="フィッツ君" loading="lazy"><img src="assets/characters/kurin-butterfly.jpg" alt="クリンちゃん" loading="lazy"><img src="assets/characters/relief-butterfly.jpg" alt="リリーフ君" loading="lazy"></div></div><p class="small muted">種目・距離・水路ごとの最速記録です。ランキングは取得済みの2026年度同学年順位を表示します。</p>${bests.length?bestHtml:'<p class="muted">記録はありません。</p>'}</div>
     ${qrMeetHtml}
     <div class="card"><h3>📈 タイム推移グラフ</h3>${keys.length?`<div class="field"><label for="shareChartEvent">種目・距離・水路を選択</label><select id="shareChartEvent" onchange="updatePublicShareChart()">${events}</select></div><div id="shareChartTarget"></div>`:'<p class="muted">記録はありません。</p>'}</div>
-    <div class="card"><h3>📊 JO標準・記録・ラップ詳細分析</h3>${keys.length?`<div class="field"><label for="shareAnalysisEvent">分析する種目・距離・水路</label><select id="shareAnalysisEvent" onchange="updatePublicShareAnalysis()">${events}</select></div><div id="shareAnalysisTarget"></div>`:'<p class="muted">記録がありません。</p>'}</div>
+    <div class="card" id="share-personal"><h3>📊 JO標準・記録・ラップ詳細分析</h3>${keys.length?`<div class="field"><label for="shareAnalysisEvent">分析する種目・距離・水路</label><select id="shareAnalysisEvent" onchange="updatePublicShareAnalysis()">${events}</select></div><div id="shareAnalysisTarget"></div>`:'<p class="muted">記録がありません。</p>'}</div>
     ${joRankingHtml}
+    ${yamanashiRankingHtml}
     <div class="card"><details class="public-record-details"><summary style="cursor:pointer;font-size:18px;font-weight:700;padding:4px 0">📋 過去の大会記録（全${recordList.length}件） <span class="small muted">▼ 開く</span></summary><p class="small muted">新しい記録から順に表示します。</p>${recordList.length?recordList.map(r=>`<div class="row"><div class="public-history-content">${publicMascotImage(r.stroke)}<div><b>${shareEscape(r.stroke)} ${shareEscape(r.distance)}m</b><br><span class="small muted">${shareEscape(r.course)} ／ ${shareEscape(shareDate(r.record_date))}<br>${shareEscape(r.meet_name||'大会名未登録')}</span></div></div><b style="white-space:nowrap">${shareFmt(r.time_seconds)}</b></div>`).join(''):'<p class="muted">記録はありません。</p>'}</details><p class="small muted">このページのURLを知っている方は閲覧できます。コーチ用の非公開情報は表示しません。</p></div>`;
     updatePublicShareChart();updatePublicShareAnalysis();
   }catch(e){panel.innerHTML='<div class="card error">記録を取得できませんでした。時間をおいてお試しください。</div>'}
@@ -4645,7 +4659,7 @@ function editMeetEntry(id,meetId){
 }
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261020-analysis-ui-v1';
+const APP_BUILD_VERSION='20261021-qr-rankings-v1';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));

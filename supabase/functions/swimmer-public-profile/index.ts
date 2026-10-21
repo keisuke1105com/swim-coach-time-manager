@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { mergePublicLaps } from "./laps.ts";
 import { JO_STANDARDS } from "../_shared/jo-standards.ts";
+import { YAMANASHI_2026_STANDARDS } from "../_shared/yamanashi-standards.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -64,20 +65,32 @@ function joStandard(swimmer: any, stroke: string, distance: number, course: stri
     ? Number(field) : null;
 }
 
-async function buildPublicJoRanking(sb: any) {
+function schoolGrade2026(swimmer: any) {
+  const age = ageOnDate(swimmer.birth_date || null, "2026-04-01");
+  if (age === null) return null;
+  const grade = age - 5;
+  return grade >= 7 && grade <= 9 ? `中${grade - 6}` : grade >= 10 && grade <= 12 ? `高${grade - 9}` : null;
+}
+function yamanashiStandard(swimmer: any, stroke: string, distance: number, course: string) {
+  const grade = schoolGrade2026(swimmer);
+  const row = YAMANASHI_2026_STANDARDS.find(x => x.grade === grade && x.gender === String(swimmer.gender || "").trim() && x.stroke === stroke && x.distance === distance && x.course === course);
+  return row && Number.isFinite(row.seconds) && row.seconds > 0 ? row.seconds : null;
+}
+
+async function buildPublicRankings(sb: any) {
   const meetDate = nextJoMeetDate();
-  if (!meetDate) return [];
+
   const { data: shares, error: sharesError } = await sb.from("swimmer_public_shares")
     .select("swimmer_id").eq("is_enabled", true).not("consent_confirmed_at", "is", null);
   if (sharesError) throw sharesError;
   const ids = [...new Set((shares || []).map((row: any) => String(row.swimmer_id)).filter(Boolean))];
-  if (!ids.length) return [];
+  if (!ids.length) return { joRanking: [], yamanashiRanking: [] };
 
   const { data: swimmers, error: swimmersError } = await sb.from("swimmers")
     .select("id, name, age_group, gender, birth_date").eq("active", true).in("id", ids);
   if (swimmersError) throw swimmersError;
   const swimmerById = new Map((swimmers || []).map((row: any) => [String(row.id), row]));
-  if (!swimmerById.size) return [];
+  if (!swimmerById.size) return { joRanking: [], yamanashiRanking: [] };
 
   const records: any[] = [];
   const pageSize = 500;
@@ -91,45 +104,52 @@ async function buildPublicJoRanking(sb: any) {
     if ((page ?? []).length < pageSize) break;
   }
 
-  const eventBests = new Map<string, any>();
-  for (const record of records) {
-    const swimmer = swimmerById.get(String(record.swimmer_id));
-    const time = Number(record.time_seconds);
-    const distance = Number(record.distance);
-    if (!swimmer || !Number.isFinite(time) || time <= 0 || !Number.isInteger(distance)) continue;
-    if (!["短水路", "長水路"].includes(String(record.course))) continue;
-    const standard = joStandard(swimmer, String(record.stroke || ""), distance, String(record.course), meetDate);
-    if (standard === null) continue;
-    const key = `${swimmer.id}|${record.stroke}|${distance}|${record.course}`;
-    const previous = eventBests.get(key);
-    if (!previous || time < previous.time) {
-      eventBests.set(key, { swimmer, stroke: record.stroke, distance, course: record.course, time, standard });
+  function build(kind: "jo" | "yamanashi") {
+    const eventBests = new Map<string, any>();
+    for (const record of records) {
+      const swimmer = swimmerById.get(String(record.swimmer_id));
+      const time = Number(record.time_seconds);
+      const distance = Number(record.distance);
+      if (!swimmer || !Number.isFinite(time) || time <= 0 || !Number.isInteger(distance)) continue;
+      if (!["短水路", "長水路"].includes(String(record.course))) continue;
+      const standard = kind === "jo"
+        ? (meetDate ? joStandard(swimmer, String(record.stroke || ""), distance, String(record.course), meetDate) : null)
+        : yamanashiStandard(swimmer, String(record.stroke || ""), distance, String(record.course));
+      if (standard === null) continue;
+      const key = `${swimmer.id}|${record.stroke}|${distance}|${record.course}`;
+      const previous = eventBests.get(key);
+      if (!previous || time < previous.time) {
+        eventBests.set(key, { swimmer, stroke: record.stroke, distance, course: record.course, time, standard });
+      }
     }
-  }
 
-  const bestBySwimmer = new Map<string, any>();
-  for (const item of eventBests.values()) {
-    const rate = item.standard / item.time * 100;
-    const swimmerId = String(item.swimmer.id);
-    const previous = bestBySwimmer.get(swimmerId);
-    if (!previous || rate > previous.rate) {
-      bestBySwimmer.set(swimmerId, {
-        name: String(item.swimmer.name || ""),
-        stroke: String(item.stroke),
-        distance: item.distance,
-        course: String(item.course),
-        time: item.time,
-        standard: item.standard,
-        rate,
-        diff: item.time - item.standard,
-        qualified: item.time <= item.standard,
-      });
+    const bestBySwimmer = new Map<string, any>();
+    for (const item of eventBests.values()) {
+      const rate = item.standard / item.time * 100;
+      const swimmerId = String(item.swimmer.id);
+      const previous = bestBySwimmer.get(swimmerId);
+      if (!previous || rate > previous.rate) {
+        bestBySwimmer.set(swimmerId, {
+          name: String(item.swimmer.name || ""),
+          ...(kind === "yamanashi" ? { grade: schoolGrade2026(item.swimmer) } : {}),
+          stroke: String(item.stroke),
+          distance: item.distance,
+          course: String(item.course),
+          time: item.time,
+          standard: item.standard,
+          rate,
+          diff: item.time - item.standard,
+          qualified: item.time <= item.standard,
+        });
+      }
     }
+    return [...bestBySwimmer.values()]
+      .sort((a, b) => Number(b.qualified) - Number(a.qualified) || b.rate - a.rate)
+      .filter(row => kind !== "jo" || row.rate >= 90)
+      .slice(0, 20)
+      .map((row, index) => ({ rank: index + 1, ...row }));
   }
-  return [...bestBySwimmer.values()]
-    .sort((a, b) => Number(b.qualified) - Number(a.qualified) || b.rate - a.rate)
-    .slice(0, 30)
-    .map((row, index) => ({ rank: index + 1, ...row }));
+  return { joRanking: build("jo"), yamanashiRanking: build("yamanashi") };
 }
 
 Deno.serve(async (req) => {
@@ -210,12 +230,36 @@ Deno.serve(async (req) => {
     }
 
     let joRanking: any[] = [];
+    let yamanashiRanking: any[] = [];
     try {
-      joRanking = await buildPublicJoRanking(sb);
+      ({ joRanking, yamanashiRanking } = await buildPublicRankings(sb));
     } catch (rankingError) {
       // Leaderboard failure must not take down the existing individual QR profile.
       console.warn("Public JO ranking unavailable:", rankingError);
     }
+
+    let goals: any[] = [];
+    try {
+      const { data: rows, error } = await sb.from("swimmer_goals")
+        .select("stroke,distance,course,target_seconds").eq("swimmer_id", swimmer.id);
+      if (error) throw error;
+      goals = rows || [];
+    } catch (e) { console.warn("Goals unavailable", e); }
+
+    // QR閲覧者には公開同意済みの本人の出場予定のみを返す。出場選手名・申込タイムは返さない。
+    let meets: any[] = [];
+    try {
+      const { data: entries, error: entryError } = await sb.from("swim_meet_swimmers")
+        .select("meet_id").eq("swimmer_id", swimmer.id);
+      if (entryError) throw entryError;
+      const ids = [...new Set((entries || []).map((x: any) => x.meet_id).filter(Boolean))];
+      if (ids.length) {
+        const { data: meetRows, error: meetError } = await sb.from("swim_meets")
+          .select("id,name,meet_date,venue").in("id", ids).gte("meet_date", new Date().toISOString().slice(0,10)).order("meet_date").limit(30);
+        if (meetError) throw meetError;
+        meets = meetRows || [];
+      }
+    } catch (e) { console.warn("Public meet schedule unavailable", e); }
 
     return json({
       swimmer: { name: swimmer.name, age_group: swimmer.age_group, team: swimmer.team, gender: swimmer.gender },
@@ -226,7 +270,11 @@ Deno.serve(async (req) => {
         is_personal_best: r.is_personal_best, is_jo_qualified: r.is_jo_qualified,
       })),
       rankings,
+      goals,
+      meets,
       joRanking,
+      yamanashiRanking,
+      yamanashiRankingYear: 2026,
       joRankingMeetDate: nextJoMeetDate(),
     });
   } catch (error) {
