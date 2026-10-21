@@ -198,6 +198,14 @@ header small{color:#C5E7F5}
 }
 .pb-celebration{position:fixed;inset:0;z-index:9999;background:rgba(5,28,48,.66);display:flex;align-items:center;justify-content:center;padding:18px}.pb-celebration[hidden]{display:none}.pb-celebration-card{width:min(100%,420px);max-height:90vh;overflow:auto;background:white;color:#123;border-radius:24px;padding:24px;text-align:center;box-shadow:0 18px 55px #0018;animation:pb-pop .3s ease-out}.pb-celebration-title{font-size:29px;font-weight:900;color:#087fd1;margin:10px 0}.pb-celebration-times{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin:16px 0}.pb-celebration-times>div{background:#eef7fc;border-radius:12px;padding:12px;min-width:120px}.pb-celebration-mascot{width:92px;height:92px;object-fit:contain;margin:6px auto}.pb-celebration-medley{margin:6px auto;width:92px;height:92px;flex-basis:92px}@keyframes pb-pop{from{opacity:0;transform:scale(.93)}to{opacity:1;transform:scale(1)}}@media(prefers-reduced-motion:reduce){.pb-celebration-card{animation:none}}.me-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.me-card{margin:12px 0}.me-count{background:#dceeff;color:#14639a;border-radius:12px;padding:10px}.me-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.me-chip{display:inline-block;margin:4px;padding:6px 10px;background:#e8f3ff;border-radius:12px}.me-scroll{overflow-x:auto}.me-table{width:100%;border-collapse:collapse;font-size:13px}.me-table td,.me-table th{border-bottom:1px solid #d9e5ef;padding:9px;text-align:left}.me-qr{padding:14px 0;border-bottom:1px solid #dce5ec}.me-qr p{margin:6px 0;color:#526779}.me-qr strong{display:inline-block;padding:8px 12px;border-radius:12px;background:#dceeff;color:#14639a}.analysis-jumps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:16px}.analysis-jumps button{min-width:0;padding:12px 8px;font-size:13px}.analysis-stat{text-align:left;color:inherit;font-weight:inherit;width:100%;border:1px solid #dbeaf2}.analysis-stat:hover{background:#f7fbff}.analysis-target{display:inline-block;font-size:17px;font-weight:800;color:#0869a8;margin-top:5px}.analysis-screenshot>summary{cursor:pointer;font-weight:700;list-style-position:inside}.analysis-screenshot>summary span{display:block;margin-top:5px}.analysis-screenshot-body{padding-top:10px}#analysis [id]{scroll-margin-top:16px}#analysis details>summary{cursor:pointer}#analysis button:focus-visible,#analysis [role="button"]:focus-visible,#analysis summary:focus-visible{outline:3px solid #087fd1;outline-offset:3px}@media(max-width:420px){#analysis .row{flex-wrap:wrap}#analysis .row>div{min-width:0;overflow-wrap:anywhere}.analysis-target{font-size:16px}}
 #publicProfile [id]{scroll-margin-top:16px}@media(max-width:420px){#publicProfile .row{flex-wrap:wrap}#publicProfile .row>div{min-width:0;overflow-wrap:anywhere}}
+
+body.public-themed{background:var(--public-page-background,#eef7fc)}
+.public-theme-picker summary{cursor:pointer;font-weight:700;min-height:44px;display:flex;align-items:center;gap:8px}
+.public-theme-options{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.public-theme-options button{min-height:44px;padding:10px 12px;background:#fff;color:#123;border:2px solid #d5e3eb;display:inline-flex;align-items:center;gap:6px}
+.public-theme-options button[aria-pressed="true"]{border-color:#164f72;box-shadow:0 0 0 1px #164f72}
+.public-theme-options button:focus-visible{outline:3px solid #164f72;outline-offset:3px}
+.public-theme-dot{width:18px;height:18px;border:1px solid #607580;border-radius:50%;display:inline-block}
 </style></head><body>
 <header><div class="wrap" style="padding:0"><div class="topline"><div><h1>🏊 水泳コーチ・タイム管理 ☁️</h1><small>選手・記録をクラウド共有</small></div><button id="logoutBtn" class="secondary hidden" onclick="logout()">ログアウト</button></div></div></header>
 <main class="wrap"><div id="appUpdateNotice" hidden style="background:#e7f3fb;border:1px solid #91c9ed;border-radius:14px;padding:12px;margin-bottom:12px;color:#075985;font-weight:700">✨ 新しいバージョンがあります。入力内容を保存してから更新してください。 <button type="button" style="margin-top:8px" onclick="reloadLatestApp()">🔄 最新版に更新</button></div><div id="status"></div><section id="auth"></section><section id="publicProfile" class="hidden"></section><div id="app" class="hidden"><section id="home"></section><section id="players" class="hidden"></section><section id="input" class="hidden"></section><section id="records" class="hidden"></section><section id="analysis" class="hidden"></section><section id="meets" class="hidden"></section></div></main>
@@ -4471,6 +4479,48 @@ function publicLeaderboardHtml(items,{id,title,label,note,minRate=0}){
     return `<div class="row"><div><b>${medal} ${shareEscape(x.name)}</b><br><span class="muted">${shareEscape(x.stroke)} ${shareEscape(x.distance)}m・${shareEscape(x.course)}${x.grade?` ／ ${shareEscape(x.grade)}`:''}</span><br><span class="analysis-target">${status}</span><br><span class="muted small">達成率 ${x.rate.toFixed(1)}%</span></div><div style="text-align:right"><b>${shareFmt(x.time)}</b><br><span class="muted">${label} ${shareFmt(x.standard)}</span></div></div>`;
   }).join(''):'<p class="muted">条件に合うランキング対象の記録はまだありません。</p>'}</div>`;
 }
+// QRテーマはこのブラウザ内だけに保存し、API・管理画面には送信しない。
+const PUBLIC_BACKGROUND_THEMES={
+  blue:{label:'ブルー',color:'#d6ecfb',background:'linear-gradient(145deg,#eef7fc,#dceffc)'},
+  pink:{label:'ピンク',color:'#f8cfe0',background:'linear-gradient(145deg,#fff4f8,#f9deeb)'},
+  mint:{label:'ミント',color:'#c6eee1',background:'linear-gradient(145deg,#f0fcf7,#d8f2e8)'},
+  lavender:{label:'ラベンダー',color:'#dfd4f4',background:'linear-gradient(145deg,#f7f3ff,#e8dff8)'},
+  orange:{label:'オレンジ',color:'#ffdfb8',background:'linear-gradient(145deg,#fff8ef,#ffe7cc)'}
+};
+let selectedPublicTheme='blue';
+function publicThemeStorageKey(){
+  const token=new URLSearchParams(location.search).get('share');
+  return token?'swim-public-background:'+token:null;
+}
+function applyPublicBackgroundTheme(name){
+  if(!new URLSearchParams(location.search).has('share'))return;
+  const theme=Object.hasOwn(PUBLIC_BACKGROUND_THEMES,name)?name:'blue';
+  selectedPublicTheme=theme;
+  document.body.classList.add('public-themed');
+  document.body.style.setProperty('--public-page-background',PUBLIC_BACKGROUND_THEMES[theme].background);
+  document.querySelectorAll('[data-public-theme]').forEach(button=>{
+    const active=button.dataset.publicTheme===theme;
+    button.setAttribute('aria-pressed',String(active));
+    const mark=button.querySelector('.public-theme-check');if(mark)mark.textContent=active?' ✓':'';
+  });
+  const label=document.getElementById('publicThemeCurrent');
+  if(label)label.textContent=PUBLIC_BACKGROUND_THEMES[theme].label;
+}
+function restorePublicBackgroundTheme(){
+  const key=publicThemeStorageKey();if(!key)return;
+  let theme='blue';try{theme=localStorage.getItem(key)||'blue'}catch(e){}
+  applyPublicBackgroundTheme(theme);
+}
+function choosePublicBackgroundTheme(name){
+  const key=publicThemeStorageKey();if(!key||!Object.hasOwn(PUBLIC_BACKGROUND_THEMES,name))return;
+  applyPublicBackgroundTheme(name);
+  let saved=true;try{localStorage.setItem(key,name)}catch(e){saved=false}
+  const status=document.getElementById('publicThemeStatus');
+  if(status)status.textContent=saved?'この端末に保存しました。管理者には共有されません。':'色を変更しました。この端末では保存できないため、次に開くと元に戻る場合があります。';
+}
+function publicBackgroundThemePicker(){
+  return `<div class="card public-theme-picker"><details><summary>🎨 テーマカラー：<span id="publicThemeCurrent">${PUBLIC_BACKGROUND_THEMES[selectedPublicTheme].label}</span><span class="small muted">変更する</span></summary><p class="small muted">好きな背景色を選べます。この端末にだけ保存され、管理者には共有されません。</p><div class="public-theme-options" role="group" aria-label="背景のテーマカラー">${Object.entries(PUBLIC_BACKGROUND_THEMES).map(([id,theme])=>`<button type="button" data-public-theme="${id}" aria-pressed="${id===selectedPublicTheme}" onclick="choosePublicBackgroundTheme('${id}')"><span class="public-theme-dot" style="background:${theme.color}" aria-hidden="true"></span>${theme.label}<span class="public-theme-check" aria-hidden="true">${id===selectedPublicTheme?' ✓':''}</span></button>`).join('')}</div><p id="publicThemeStatus" class="small muted" role="status" aria-live="polite"></p></details></div>`;
+}
 async function renderPublicSwimmerProfile(){
   $('#auth').classList.add('hidden');$('#app').classList.add('hidden');$('#tabs').classList.add('hidden');$('#logoutBtn').classList.add('hidden');
   const panel=$('#publicProfile');panel.classList.remove('hidden');panel.innerHTML='<div class="card">🏊 公開記録を確認しています…</div>';
@@ -4478,6 +4528,7 @@ async function renderPublicSwimmerProfile(){
   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(token)){
     panel.innerHTML='<div class="card"><h2>公開記録が見つかりません</h2><p>URLをご確認ください。</p></div>';return;
   }
+  restorePublicBackgroundTheme();
   if(!configured()){panel.innerHTML='<div class="card error">公開ページの設定が見つかりません。</div>';return}
   try{
     const base=String(window.SUPABASE_URL).replace(/\/$/,'');
@@ -4533,6 +4584,7 @@ async function renderPublicSwimmerProfile(){
     const yamanashiRankingHtml=publicLeaderboardHtml(data.yamanashiRanking,{id:'share-pref-ranking',title:'🏊 山梨県強化突破率ランキング（上位20名）',label:'県強化',note:'2026年度・4月1日時点の学年、性別、種目・距離・水路別基準で判定'});
     const recordList=[...publicShareRecords].sort((a,b)=>String(b.record_date||'').localeCompare(String(a.record_date||''))||Number(a.distance)-Number(b.distance));
     panel.innerHTML=`<div class="card public-profile-hero"><div><h2>🏊 ${shareEscape(swimmer.name)}</h2><p class="muted">${shareEscape(swimmer.age_group||'')} ${swimmer.team?'・所属：'+shareEscape(swimmer.team):''}</p></div><img class="public-profile-hero-mascot" src="assets/characters/fitz-butterfly.jpg" alt="フィッツ君" loading="eager"></div>
+    ${publicBackgroundThemePicker()}
     <nav class="analysis-jumps" aria-label="選手ページ内の移動">
       <button class="secondary" onclick="document.getElementById('share-bests')?.scrollIntoView({behavior:'smooth',block:'start'})">🏅 自己ベスト</button>
       <button class="secondary" onclick="document.getElementById('share-personal')?.scrollIntoView({behavior:'smooth',block:'start'})">📊 個人分析</button>
@@ -4659,7 +4711,7 @@ function editMeetEntry(id,meetId){
 }
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261021-qr-rankings-v1';
+const APP_BUILD_VERSION='20261021-qr-background-themes-v1';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));
