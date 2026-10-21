@@ -200,7 +200,14 @@ header small{color:#C5E7F5}
 #publicProfile [id]{scroll-margin-top:16px}@media(max-width:420px){#publicProfile .row{flex-wrap:wrap}#publicProfile .row>div{min-width:0;overflow-wrap:anywhere}}
 
 body.public-themed{background:var(--public-page-background,#eef7fc)}
-.public-theme-picker summary{cursor:pointer;font-weight:700;min-height:44px;display:flex;align-items:center;gap:8px}
+.public-theme-picker{margin:-8px 0 8px;text-align:right}
+.public-theme-picker summary{cursor:pointer;font-size:13px;color:#365b70;min-height:44px;display:inline-flex;align-items:center;gap:6px;padding:4px 8px;list-style:none;border-radius:10px}
+.public-theme-picker summary::-webkit-details-marker{display:none}
+.public-theme-picker summary:focus-visible{outline:3px solid #164f72;outline-offset:2px}
+.public-theme-picker details[open] summary{background:#ffffffb3}
+.public-theme-panel{text-align:left;background:#fff;padding:12px;border:1px solid #d5e3eb;border-radius:12px;margin:0 0 8px}
+.public-theme-panel p{margin:4px 0}
+#publicThemeStatus:empty{display:none}
 .public-theme-options{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
 .public-theme-options button{min-height:44px;padding:10px 12px;background:#fff;color:#123;border:2px solid #d5e3eb;display:inline-flex;align-items:center;gap:6px}
 .public-theme-options button[aria-pressed="true"]{border-color:#164f72;box-shadow:0 0 0 1px #164f72}
@@ -4519,7 +4526,7 @@ function choosePublicBackgroundTheme(name){
   if(status)status.textContent=saved?'この端末に保存しました。管理者には共有されません。':'色を変更しました。この端末では保存できないため、次に開くと元に戻る場合があります。';
 }
 function publicBackgroundThemePicker(){
-  return `<div class="card public-theme-picker"><details><summary>🎨 テーマカラー：<span id="publicThemeCurrent">${PUBLIC_BACKGROUND_THEMES[selectedPublicTheme].label}</span><span class="small muted">変更する</span></summary><p class="small muted">好きな背景色を選べます。この端末にだけ保存され、管理者には共有されません。</p><div class="public-theme-options" role="group" aria-label="背景のテーマカラー">${Object.entries(PUBLIC_BACKGROUND_THEMES).map(([id,theme])=>`<button type="button" data-public-theme="${id}" aria-pressed="${id===selectedPublicTheme}" onclick="choosePublicBackgroundTheme('${id}')"><span class="public-theme-dot" style="background:${theme.color}" aria-hidden="true"></span>${theme.label}<span class="public-theme-check" aria-hidden="true">${id===selectedPublicTheme?' ✓':''}</span></button>`).join('')}</div><p id="publicThemeStatus" class="small muted" role="status" aria-live="polite"></p></details></div>`;
+  return `<div class="public-theme-picker"><details><summary>🎨 カラー変更<span class="small muted">（<span id="publicThemeCurrent">${PUBLIC_BACKGROUND_THEMES[selectedPublicTheme].label}</span>）</span></summary><div class="public-theme-panel"><p class="small muted">この端末にだけ保存され、管理者には共有されません。</p><div class="public-theme-options" role="group" aria-label="背景のテーマカラー">${Object.entries(PUBLIC_BACKGROUND_THEMES).map(([id,theme])=>`<button type="button" data-public-theme="${id}" aria-pressed="${id===selectedPublicTheme}" onclick="choosePublicBackgroundTheme('${id}')"><span class="public-theme-dot" style="background:${theme.color}" aria-hidden="true"></span>${theme.label}<span class="public-theme-check" aria-hidden="true">${id===selectedPublicTheme?' ✓':''}</span></button>`).join('')}</div><p id="publicThemeStatus" class="small muted" role="status" aria-live="polite"></p></div></details></div>`;
 }
 async function renderPublicSwimmerProfile(){
   $('#auth').classList.add('hidden');$('#app').classList.add('hidden');$('#tabs').classList.add('hidden');$('#logoutBtn').classList.add('hidden');
@@ -4711,7 +4718,7 @@ function editMeetEntry(id,meetId){
 }
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261021-qr-background-themes-v1';
+const APP_BUILD_VERSION='20261021-qr-theme-compact-v1';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));
