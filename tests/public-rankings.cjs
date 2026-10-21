@@ -1,0 +1,38 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),{stripTypeScriptTypes}=require('node:module');
+const path=require('node:path'),base=path.join(__dirname,'..');
+const raw=fs.readFileSync(path.join(base,'supabase/functions/swimmer-public-profile/index.ts'),'utf8');
+const source=stripTypeScriptTypes(raw.slice(0,raw.indexOf('Deno.serve(')).replace(/^import .*;\n/gm,''));
+const prefContext={window:{}};vm.runInNewContext(fs.readFileSync(path.join(base,'yamanashi_2026.js'),'utf8'),prefContext);
+const pref=prefContext.window.YAMANASHI_2026_STANDARDS;
+const moduleText=fs.readFileSync(path.join(base,'supabase/functions/_shared/yamanashi-standards.ts'),'utf8');
+assert.deepEqual(JSON.parse(moduleText.slice(moduleText.indexOf('=')+1).trim().replace(/;$/,'')),JSON.parse(JSON.stringify(pref)),'server/admin prefectural standards match exactly');
+const context=vm.createContext({Response,JO_STANDARDS:[{event:'自由形',distance:'100m',division:'14歳',maleSC:90,maleLC:91,femaleSC:92,femaleLC:93}],YAMANASHI_2026_STANDARDS:pref});
+vm.runInContext(source,context);
+const swimmers=Array.from({length:25},(_,i)=>({id:String(i),name:`選手${i}`,active:true,birth_date:'2012-10-10',gender:'男子'}));
+swimmers.push({id:'no-consent',name:'非公開',active:true,birth_date:'2012-10-10',gender:'男子'},{id:'disabled',name:'無効',active:true},{id:'inactive',name:'非活動',active:false});
+const shares=swimmers.map(p=>({swimmer_id:p.id,is_enabled:p.id!=='disabled',consent_confirmed_at:p.id==='no-consent'?null:'2026-01-01'}));
+const records=swimmers.map(p=>({swimmer_id:p.id,stroke:'自由形',distance:100,course:'短水路',time_seconds:['no-consent','disabled','inactive'].includes(p.id)?1:100}));
+records.push({...records[0],time_seconds:101},{...records[0],time_seconds:0});
+function client(data){return {from(table){let rows=data[table]||[];const q={select(){return q},eq(k,v){rows=rows.filter(x=>x[k]===v);return q},not(k,op,v){rows=rows.filter(x=>x[k]!==v);return q},in(k,vs){rows=rows.filter(x=>vs.includes(x[k]));return q},range(a,b){rows=rows.slice(a,b+1);return q},then(ok,bad){return Promise.resolve({data:rows,error:null}).then(ok,bad)}};return q}};}
+(async()=>{
+let result=await context.buildPublicRankings(client({swimmers,swimmer_public_shares:shares,swim_records:records}));
+assert.equal(result.joRanking.length,20);assert.equal(result.yamanashiRanking.length,20);
+assert.equal(result.joRanking[0].rate,90);assert.equal(result.joRanking[0].time,100);
+assert.ok(result.joRanking.every(x=>!['非公開','無効','非活動'].includes(x.name)));
+assert.equal(new Set(result.joRanking.map(x=>x.name)).size,20);
+assert.ok(result.yamanashiRanking.every(x=>x.grade==='中2'));
+for(const row of [...result.joRanking,...result.yamanashiRanking])for(const forbidden of ['id','birth_date','swimmer_id','share_token'])assert.equal(forbidden in row,false);
+const below=records.map(x=>({...x,time_seconds:101}));result=await context.buildPublicRankings(client({swimmers,swimmer_public_shares:shares,swim_records:below}));assert.equal(result.joRanking.length,0);assert.equal(result.yamanashiRanking.length,20);
+result=await context.buildPublicRankings(client({}));assert.equal(result.joRanking.length,0);assert.equal(result.yamanashiRanking.length,0);
+assert.equal(context.yamanashiStandard({birth_date:'2012-10-10',gender:'男子'},'自由形',100,'短水路'),55.2);
+assert.equal(context.yamanashiStandard({birth_date:'2012-10-10',gender:'女子'},'自由形',100,'長水路'),60.9);
+assert.equal(context.yamanashiStandard({gender:'女子'},'自由形',100,'長水路'),null);
+const html=fs.readFileSync(path.join(base,'index.html'),'utf8');
+for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))new vm.Script(m[1]);
+const helper=html.slice(html.indexOf('function publicLeaderboardHtml('),html.indexOf('\nasync function ',html.indexOf('function publicLeaderboardHtml(')));
+const ui=vm.createContext({shareEscape:v=>String(v).replaceAll('<','&lt;'),shareFmt:n=>String(n)});vm.runInContext(helper,ui);
+const rendered=ui.publicLeaderboardHtml([{name:'<選手>',time:100,standard:90,stroke:'自由形',distance:100,course:'短水路'},{name:'低',time:100,standard:89.99}],{id:'share-jo-ranking',title:'JO',label:'JO',note:'test',minRate:90});
+assert.ok(rendered.includes('&lt;選手>'));assert.ok(rendered.includes('あと 10.00秒'));assert.ok(!rendered.includes('<b>🥈'));
+assert.ok(raw.includes('goals,')&&raw.includes('meets,')&&raw.includes('mergePublicLaps(r,'),'deployed goals, meet schedule and manual laps preserved');
+console.log('PASS: consent/active filtering, JO90% and top20, prefecture20 and shared standards, deduplication, best time, private-field exclusion, gender/grade/course, empty data, escaped UI and syntax');
+})().catch(e=>{console.error(e);process.exitCode=1});
