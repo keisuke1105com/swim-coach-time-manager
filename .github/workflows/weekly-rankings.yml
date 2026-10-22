@@ -1,0 +1,31 @@
+name: Weekly swimmer rankings
+on:
+  schedule:
+    # Thursday 21:17 JST; pending events only on Friday 06:17 JST.
+    - cron: '17 12 * * 4'
+    - cron: '17 21 * * 4'
+  workflow_dispatch:
+    inputs:
+      retry_only:
+        type: boolean
+        default: false
+        description: Retry pending events only
+permissions:
+  contents: read
+concurrency:
+  group: weekly-swimmer-rankings
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 175
+    env:
+      SUPABASE_URL: ${{ secrets.SWIM_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SWIM_SUPABASE_SERVICE_ROLE_KEY }}
+      RETRY_ONLY: ${{ github.event.schedule == '17 21 * * 4' || inputs.retry_only == true }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node scripts/weekly-rankings.cjs

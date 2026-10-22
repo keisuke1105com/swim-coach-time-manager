@@ -1192,6 +1192,7 @@ PLAYERS=p;
 records=r;
 manualLaps=m;
     await loadSharedGoals();
+    await loadSharedRankingBulkProgress();
     setStatus('');
   }catch(e){
     setStatus('クラウドDBにアクセスできません。RLSポリシーを確認してください。 '+String(e?.message||e||''),'error');
@@ -3044,11 +3045,22 @@ async function saveSharedRankingBulkProgress(v){
   });
   if(error)throw error;
   if(data?.rankingCache)applyRankingCacheSnapshot(data.rankingCache);
+  if(data?.weeklyRanking)saveRankingBulkProgress({...v,weeklyRanking:data.weeklyRanking});
  }catch(e){console.warn('ランキング進捗クラウド保存は端末保存のみ継続:',e?.message||e);}
  return v;
 }
 function clearRankingBulkProgress(){try{localStorage.removeItem(ALL_RANKING_PROGRESS_KEY);}catch(e){}}
 
+function weeklyRankingStatusHtml(){
+ const report=loadRankingBulkProgress()?.weeklyRanking;
+ if(!report)return '<div class="card"><h3>🔄 ランキングの自動更新</h3><p class="muted">毎週木曜21:17に更新予定。初回の自動更新結果はまだありません。</p></div>';
+ const date=value=>{const d=new Date(value);return Number.isFinite(d.getTime())?d.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}):'未実行';};
+ const n=value=>Math.max(0,Number(value)||0);
+ const pending=Array.isArray(report.pending)?report.pending.length:0;
+ const stale=report.status==='running'&&Date.now()-new Date(report.checkedAt).getTime()>4*60*60*1000;
+ const status=stale?'更新が中断した可能性があります（次回再試行待ち）':report.status==='running'?'更新中':report.status==='complete'?'更新完了':'一部未確認・再試行対象あり';
+ return `<div class="card"><h3>🔄 ランキングの自動更新</h3><p><b>${status}</b></p><p class="muted">毎週木曜21:17 ／ 未確認の種目は金曜6:17に再試行<br>最終確認：${date(report.checkedAt)}<br>全国・県順位を確認できた種目：${n(report.confirmed)} / ${n(report.totalEvents)}<br>確認できた種目がある選手：${new Set(report.successfulPlayerIds||[]).size} / ${n(report.totalPlayers)}名<br>未確認・未処理：${pending}種目</p><p class="small muted">通信に失敗した場合も以前の順位を残します。表示中の順位が今週のものとは限りません。最新の処理状況は画面の再読み込みで取得できます。</p></div>`;
+}
 function sameGradeRankingSummaryHtml(year=2026,limit=30){
   const rows=[];
   PLAYERS.forEach(p=>{
@@ -4113,6 +4125,7 @@ ${racesHtml}
   const analysisEscape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const analysisRecordList=items=>items.length?items.map(r=>`<div class="row"><div><b>${analysisEscape(playerById(r.swimmer_id)?.name||'選手')}</b><br><span class="muted small">${analysisEscape(r.stroke)} ${Number(r.distance)}m・${analysisEscape(r.course)} ／ ${analysisEscape(r.record_date||'')}</span></div><b>${fmt(r.time_seconds)}</b></div>`).join(''):'<p class="muted">記録はまだありません。</p>';
   $('#analysis').innerHTML=`
+    ${weeklyRankingStatusHtml()}
     <nav class="analysis-jumps" aria-label="分析画面内の移動">
       <button class="secondary" onclick="analysisJump('analysis-jo-ranking')">🏆 JOランキング</button>
       <button class="secondary" onclick="analysisJump('analysis-pref-ranking')">🏊 県強化ランキング</button>
