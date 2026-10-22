@@ -31,10 +31,11 @@ async function run(){
   await new Promise(r=>setTimeout(r,Math.max(0,1500-(Date.now()-lastRequest))));lastRequest=Date.now();requests++;
   const codes=context.jasfEventCodes(stroke,distance);
   const query=new URLSearchParams({year:String(year),waterway_code:course==='短水路'?'2':'1',gender_code:String(context.jasfGenderCode(p)),distance_code:String(codes.distanceCode),swimming_style_code:String(codes.styleCode),school_class_code:String(schoolClass),school_grade:String(grade),swimmer_name:name,page:String(page)});
-  const r=await fetch('https://result.swim.or.jp/api/v1/rankings/results?'+query,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(18000)});
-  if([401,403,429].includes(r.status)){halt=true;throw Object.assign(Error('Official source access restricted'),{halt:true});}
-  if(!r.ok)throw Error('Official source HTTP '+r.status);
-  const json=await r.json(),rows=Array.isArray(json.data)?json.data:json.data?.data;if(!Array.isArray(rows))throw Error('Unexpected official source response');return rows;
+  const r=await fetch(url+'/functions/v1/jasf-ranking',{method:'POST',headers:{'Content-Type':'application/json',apikey:key,Authorization:'Bearer '+key},body:JSON.stringify(Object.fromEntries(query)),signal:AbortSignal.timeout(25000)});
+  const json=await r.json();
+  if([401,403,429].includes(r.status)||/^JASF HTTP (401|403|429)$/.test(json.error||'')){halt=true;throw Object.assign(Error('Ranking source access restricted'),{halt:true});}
+  if(!r.ok||!json.success)throw Error('Ranking server request failed');
+  const rows=json.data;if(!Array.isArray(rows))throw Error('Unexpected official source response');return rows;
  };
  const context=appRankingContext(fetchPage),allTasks=tasksFor(players,records,context),byId=new Map(players.map(p=>[String(p.id),p]));
  const previous=saved.weeklyRanking;
