@@ -33,7 +33,7 @@ async function run(){
   const query=new URLSearchParams({year:String(year),waterway_code:course==='短水路'?'2':'1',gender_code:String(context.jasfGenderCode(p)),distance_code:String(codes.distanceCode),swimming_style_code:String(codes.styleCode),school_class_code:String(schoolClass),school_grade:String(grade),swimmer_name:name,page:String(page)});
   const r=await fetch(url+'/functions/v1/jasf-ranking',{method:'POST',headers:{'Content-Type':'application/json',apikey:key,Authorization:'Bearer '+key},body:JSON.stringify(Object.fromEntries(query)),signal:AbortSignal.timeout(25000)});
   const json=await r.json();
-  if([401,403,429].includes(r.status)||/^JASF HTTP (401|403|429)$/.test(json.error||'')){halt=true;throw Object.assign(Error('Ranking source access restricted'),{halt:true});}
+  if([401,403,429].includes(r.status)||/^JASF HTTP (401|403|429)$/.test(json.error||'')){halt=true;throw Object.assign(Error('Ranking access restricted: '+r.status+' '+(/^JASF HTTP (401|403|429)$/.test(json.error||'')?json.error:'server authentication')),{halt:true});}
   if(!r.ok||!json.success)throw Error('Ranking server request failed');
   const rows=json.data;if(!Array.isArray(rows))throw Error('Unexpected official source response');return rows;
  };
@@ -47,7 +47,7 @@ async function run(){
  for(let i=0;i<tasks.length;i++){
   const t=tasks[i],cache={};let success=false;
   try{const q=await context.fetchJasfRankingForPlayer(byId.get(t.playerId),t.stroke,t.distance,t.course,2026);const result=cacheResult(q,now());if(result){success=!['error','pending','not_found','too_deep','pref_unknown'].includes(result.prefStatus);if(success||!saved.rankingCache?.[t.key]?.found)cache[t.key]=result;if(success){report.confirmed++;report.successfulPlayerIds=[...new Set([...report.successfulPlayerIds,t.playerId])];}}}
-  catch(e){if(e.halt)halt=true;}
+  catch(e){report.lastError=e.halt?e.message:'Ranking request failed';if(e.halt)halt=true;}
   report.attempted++;if(!success)pending.push(t);report.pending=[...pending,...tasks.slice(i+1)];await publish(cache);if(halt)break;
  }
  report.status=report.pending.length?'partial':'complete';report.completedAt=now();await publish();
