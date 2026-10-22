@@ -27,3 +27,5 @@ begin
 end $$;
 revoke execute on function public.merge_swimmer_ranking_cache(text,jsonb,jsonb) from public, anon;
 grant execute on function public.merge_swimmer_ranking_cache(text,jsonb,jsonb) to authenticated, service_role;
+
+grant select, insert, update on table public.swimmer_ranking_share_cache to service_role;
