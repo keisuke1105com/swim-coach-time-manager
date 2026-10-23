@@ -219,6 +219,7 @@ body.public-themed{background:var(--public-page-background,#eef7fc)}
 .growth-history-main{min-width:0;display:grid;gap:4px}.growth-history-main>b{font-size:14px}.growth-history-date{font-size:12px;color:#637786}.growth-history-time{font-size:19px;white-space:nowrap;font-variant-numeric:tabular-nums;padding-top:16px}
 .growth-history-badges{display:flex;flex-wrap:wrap;gap:4px}.growth-history-badges .badge{padding:3px 7px;font-size:11px}.growth-meet{font-size:12px;color:#637786}.growth-meet summary{cursor:pointer;display:list-item}.growth-meet span{display:block;overflow-wrap:anywhere;margin-top:4px}
 .compact-history-list{max-height:420px;overflow:auto;overscroll-behavior:contain;margin-top:8px;padding-right:4px}.growth-more,.player-video-history{margin-top:12px}.growth-more>summary,.player-video-history>summary{cursor:pointer;font-weight:700;color:#087fd1;padding:8px 0}.player-video-record>summary{display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;font-size:13px}.player-video-record>summary:before{content:'▸';flex-shrink:0}.player-video-record[open]>summary:before{content:'▾'}.player-video-record>summary span{flex:1;min-width:0}.player-video-record>summary>b{white-space:nowrap;font-variant-numeric:tabular-nums}
+.player-lap-panel>summary{cursor:pointer;font-size:18px;font-weight:800;padding:4px 0}.player-lap-panel>summary span{font-weight:400;margin-left:6px}.player-lap-record{border-bottom:1px solid #ddd;padding:10px 0}.player-lap-record>summary{cursor:pointer;font-size:14px;padding:4px 0}.player-lap-record>summary span{margin-left:10px}.player-lap-record[open]>summary{margin-bottom:8px}
 </style></head><body>
 <header><div class="wrap" style="padding:0"><div class="topline"><div><h1>🏊 水泳コーチ・タイム管理 ☁️</h1><small>選手・記録をクラウド共有</small></div><button id="logoutBtn" class="secondary hidden" onclick="logout()">ログアウト</button></div></div></header>
 <main class="wrap"><div id="appUpdateNotice" hidden style="background:#e7f3fb;border:1px solid #91c9ed;border-radius:14px;padding:12px;margin-bottom:12px;color:#075985;font-weight:700">✨ 新しいバージョンがあります。入力内容を保存してから更新してください。 <button type="button" style="margin-top:8px" onclick="reloadLatestApp()">🔄 最新版に更新</button></div><div id="status"></div><section id="auth"></section><section id="publicProfile" class="hidden"></section><div id="app" class="hidden"><section id="home"></section><section id="players" class="hidden"></section><section id="input" class="hidden"></section><section id="records" class="hidden"></section><section id="analysis" class="hidden"></section><section id="meets" class="hidden"></section></div></main>
@@ -1553,10 +1554,10 @@ let trendOptions=trendKeys.map(key=>{
   }
 </div>
 <div class="card"><h3>🎥 動画分析</h3><div id="playerVideoAnalyses" data-player-id="${videoEscape(id)}" aria-live="polite"></div></div>
-<div class="card">
-  <h3>🏊 ラップ分析</h3>
-  <div id="playerLapAnalysis"></div>
-</div>
+<details class="card player-lap-panel">
+  <summary>🏊 ラップ分析 <span class="muted small">開いて比較・履歴を見る</span></summary>
+  <div id="playerLapAnalysis" style="margin-top:12px"></div>
+</details>
     <div class="card">
 
       <h3>📈 成長履歴 <span class="muted small">${growthHistory.length}件</span></h3><p class="muted small">最新5件の初回記録・ベスト更新を表示</p>
@@ -1970,8 +1971,8 @@ const signed = n => {
       `).join('') || '<span class="muted small">データなし</span>';
 
     return `
-      <div style="border-bottom:1px solid #ddd;padding:10px 0">
-        <b>${r.record_date || ''}　${fmt(r.time_seconds)}</b>
+      <details class="player-lap-record">
+        <summary>${videoEscape(r.record_date || '')}　<b>${fmt(r.time_seconds)}</b><span class="muted small">ラップを表示</span></summary>
         <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
                     gap:12px;margin-top:8px">
           <div>
@@ -1983,7 +1984,7 @@ const signed = n => {
             ${renderIntervals(50)}
           </div>
         </div>
-      </div>`;
+      </details>`;
   }).join('');
 
   target.innerHTML =
@@ -4721,7 +4722,7 @@ function editMeetEntry(id,meetId){
 }
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261023-player-video-history-v2';
+const APP_BUILD_VERSION='20261023-collapsible-laps-v3';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));
