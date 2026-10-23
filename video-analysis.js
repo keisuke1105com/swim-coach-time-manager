@@ -71,6 +71,14 @@ async function saveVideoAnalyses(){
     videoSavedRows=await fetchAllRows('swim_video_analyses',q=>q.order('record_date',{ascending:false}).order('id'));
     renderSavedVideoAnalyses();
     status.textContent=`${data.length}件を保存しました。重複 ${rows.length-data.length}件は追加していません。`;
+    const playerIds=[...new Set(rows.map(row=>row.playerId))];
+    playerIds.forEach(id=>{
+      const button=document.createElement('button');button.className='secondary';button.style.margin='8px 8px 0 0';
+      button.textContent=(playerById(id)?.name||'選手')+'の欄を見る';
+      button.onclick=()=>{go('players');showPlayerDetail(id);};status.appendChild(button);
+    });
+    const visiblePlayer=document.getElementById('playerVideoAnalyses')?.dataset.playerId;
+    if(visiblePlayer)await renderPlayerVideoAnalyses(visiblePlayer);
   }catch(e){status.textContent='保存・確認エラー：'+e.message+'。再読み込みして保存状況を確認してください。同じファイルを再度取り込んでも重複しません。';}
   finally{videoBusy=false;btn.disabled=false;file.disabled=false;}
 }
@@ -90,4 +98,28 @@ async function deleteVideoAnalysis(id){
   const {data,error}=await sb.from('swim_video_analyses').delete().eq('id',id).select('id');
   if(error||!data?.length){alert('削除できませんでした：'+(error?.message||'権限または保存状況を確認してください'));return;}
   videoSavedRows=videoSavedRows.filter(r=>r.id!==id);renderSavedVideoAnalyses();
+  const visiblePlayer=document.getElementById('playerVideoAnalyses')?.dataset.playerId;
+  if(visiblePlayer)await renderPlayerVideoAnalyses(visiblePlayer);
+}
+
+function playerVideoCard(record,latest=false){
+  const row=parseVideoBackup({format:'swim-split-backup',version:1,records:[record.analysis]})[0];
+  if(row.error)return '<p class="muted">この分析を表示できません。</p>';
+  return `<details class="result player-video-record"><summary><span>${latest?'<span class="badge">最新</span> ':''}${videoEscape(record.record_date)} ／ ${videoEscape(record.stroke)} ${Number(record.distance)}m</span><b>${Number(record.time_seconds).toFixed(3)}秒</b></summary>${videoDetails(row)}</details>`;
+}
+
+async function renderPlayerVideoAnalyses(playerId){
+  const panel=document.getElementById('playerVideoAnalyses');
+  if(!panel||panel.dataset.playerId!==String(playerId))return;
+  panel.textContent='分析を読み込み中…';
+  try{
+    const rows=await fetchAllRows('swim_video_analyses',q=>q.eq('swimmer_id',playerId).order('record_date',{ascending:false}).order('created_at',{ascending:false}).order('id'));
+    // A slow response must not replace a different swimmer's current view.
+    if(document.getElementById('playerVideoAnalyses')!==panel)return;
+    panel.innerHTML=rows.length?`<p class="muted small">保存済み ${rows.length}件 · 日付の新しい順。開くと区間泳速・ストローク・テンポを表示します。</p>${playerVideoCard(rows[0],true)}${rows.length>1?`<details class="player-video-history"><summary>過去の動画分析を見る（${rows.length-1}件）</summary><div class="compact-history-list">${rows.slice(1).map(r=>playerVideoCard(r)).join('')}</div></details>`:''}`:'<p class="muted">この選手の動画分析はまだありません。取り込み時にこの選手を選ぶと、ここに自動で反映されます。</p>';
+  }catch(e){
+    if(document.getElementById('playerVideoAnalyses')!==panel)return;
+    panel.textContent='動画分析を読み込めませんでした。';
+    const retry=document.createElement('button');retry.className='secondary';retry.textContent='再読み込み';retry.onclick=()=>renderPlayerVideoAnalyses(playerId);panel.appendChild(retry);
+  }
 }
