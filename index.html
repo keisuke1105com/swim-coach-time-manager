@@ -3541,7 +3541,7 @@ let joRanking=Object.values(
   const yamanashiGap=(time,standard)=>Math.max(0,(yamanashiTenth(time)-yamanashiTenth(standard))/10);
   const fmtYamanashiTenth=value=>{
     const seconds=yamanashiTenth(value)/10,minutes=Math.floor(seconds/60),rest=seconds-minutes*60;
-    return minutes?\`${minutes}:${rest.toFixed(1).padStart(4,'0')}\`:rest.toFixed(1);
+    return minutes?`${minutes}:${rest.toFixed(1).padStart(4,'0')}`:rest.toFixed(1);
   };
   const yamanashiBestMap=new Map();
   records.forEach(r=>{
