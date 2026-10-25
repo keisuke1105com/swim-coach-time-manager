@@ -3466,7 +3466,7 @@ let joRanking=Object.values(
         swimmer_id:x.player.id,
         rate:rate,
         diff:x.time-x.standard,
-        qualified:meetsYamanashiStandard(x.time,x.standard)
+        qualified:x.time<=x.standard
       };
     }
 
@@ -3564,7 +3564,7 @@ let joRanking=Object.values(
   const yamanashiEscape=value=>String(value??'').replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
   const yamanashiRanking=Object.values(yamanashiCandidates.reduce((best,x)=>{
     const id=String(x.player.id),rate=x.standard/x.time*100;
-    if(!best[id]||rate>best[id].rate)best[id]={...x,rate,diff:x.time-x.standard,qualified:x.time<=x.standard};
+    if(!best[id]||rate>best[id].rate)best[id]={...x,rate,diff:x.time-x.standard,qualified:meetsYamanashiStandard(x.time,x.standard)};
     return best;
   },{})).sort((a,b)=>b.rate-a.rate||a.player.name.localeCompare(b.player.name,'ja')).slice(0,20);
   const yamanashiRankingHtml=yamanashiRanking.length?yamanashiRanking.map((x,i)=>{
