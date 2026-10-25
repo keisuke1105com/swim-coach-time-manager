@@ -3466,7 +3466,7 @@ let joRanking=Object.values(
         swimmer_id:x.player.id,
         rate:rate,
         diff:x.time-x.standard,
-        qualified:x.time<=x.standard
+        qualified:meetsYamanashiStandard(x.time,x.standard)
       };
     }
 
@@ -3532,6 +3532,12 @@ let joRanking=Object.values(
     if(n===9)return '中3'; if(n===8)return '中2'; if(n===7)return '中1';
     return null;
   }
+  // 県強化の標準記録は10分の1秒単位。記録も10分の1秒へ切り捨てて判定する。
+  // 例: 標準 1:06.0 は、記録 1:06.09 までを突破とする。
+  const yamanashiTenth=value=>Math.floor((Number(value)+1e-9)*10);
+  const meetsYamanashiStandard=(time,standard)=>
+    Number.isFinite(Number(time))&&Number.isFinite(Number(standard))&&
+    yamanashiTenth(time)<=yamanashiTenth(standard);
   const yamanashiBestMap=new Map();
   records.forEach(r=>{
     const p=playerById(r.swimmer_id),time=Number(r.time_seconds);
@@ -3549,7 +3555,7 @@ let joRanking=Object.values(
     if(standard&&Number.isFinite(standard.seconds)&&standard.seconds>0){
       const candidate={...best,grade,standard:standard.seconds};
       yamanashiCandidates.push(candidate);
-      if(best.time<=standard.seconds)yamanashiQual.push(candidate);
+      if(meetsYamanashiStandard(best.time,standard.seconds))yamanashiQual.push(candidate);
     }
   });
   yamanashiQual.sort((a,b)=>a.player.name.localeCompare(b.player.name,'ja')||a.stroke.localeCompare(b.stroke,'ja')||a.distance-b.distance||a.course.localeCompare(b.course,'ja'));
@@ -4201,7 +4207,7 @@ ${lapAnalysisHtml}
     </div>
     <div class="card" id="analysis-pref-ranking">
       <h2>🏊 山梨県強化選手ランキング（上位20名）</h2>
-      <p class="muted">2026年4月1日時点の学年・性別と種目・距離・水路ごとの県強化基準で比較し、達成率が高い順に1人1種目・上位20名まで表示しています。達成率は「基準タイム ÷ 自己ベスト × 100」で、100%以上が突破です。</p>
+      <p class="muted">2026年4月1日時点の学年・性別と種目・距離・水路ごとの県強化基準で比較し、達成率が高い順に1人1種目・上位20名まで表示しています。達成率は「基準タイム ÷ 自己ベスト × 100」です。突破判定は県強化標準の10分の1秒単位で行います（例：標準1:06.0は1:06.09まで突破）。</p>
       ${yamanashiRankingHtml}
     </div>
 
