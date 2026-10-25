@@ -3538,6 +3538,11 @@ let joRanking=Object.values(
   const meetsYamanashiStandard=(time,standard)=>
     Number.isFinite(Number(time))&&Number.isFinite(Number(standard))&&
     yamanashiTenth(time)<=yamanashiTenth(standard);
+  const yamanashiGap=(time,standard)=>Math.max(0,(yamanashiTenth(time)-yamanashiTenth(standard))/10);
+  const fmtYamanashiTenth=value=>{
+    const seconds=yamanashiTenth(value)/10,minutes=Math.floor(seconds/60),rest=seconds-minutes*60;
+    return minutes?\`${minutes}:${rest.toFixed(1).padStart(4,'0')}\`:rest.toFixed(1);
+  };
   const yamanashiBestMap=new Map();
   records.forEach(r=>{
     const p=playerById(r.swimmer_id),time=Number(r.time_seconds);
@@ -3573,15 +3578,15 @@ let joRanking=Object.values(
   }).slice(0,20);
   const yamanashiRankingHtml=yamanashiRanking.length?yamanashiRanking.map((x,i)=>{
     const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}位`;
-    const status=x.qualified?`🏆 県強化突破！ 達成率 ${x.rate.toFixed(1)}%`:`県強化まであと ${x.diff.toFixed(2)}秒　達成率 ${x.rate.toFixed(1)}%`;
-    return `<div class="row"><div><b>${medal} ${yamanashiEscape(x.player.name)}</b><br><span class="muted">${yamanashiEscape(x.stroke)} ${x.distance}m・${yamanashiEscape(x.course)} ／ ${x.grade}</span><br><span class="analysis-target">${x.qualified?'🏆 県強化突破！':`県強化まであと ${x.diff.toFixed(2)}秒`}</span><br><span class="muted small">達成率 ${x.rate.toFixed(1)}%</span></div><div style="text-align:right"><b>${fmt(x.time)}</b><br><span class="muted">県強化 ${fmt(x.standard)}</span></div></div>`;
+    const status=x.qualified?`🏆 県強化突破！ 達成率 ${x.rate.toFixed(1)}%`:`県強化まであと ${yamanashiGap(x.time,x.standard).toFixed(1)}秒　達成率 ${x.rate.toFixed(1)}%`;
+    return `<div class="row"><div><b>${medal} ${yamanashiEscape(x.player.name)}</b><br><span class="muted">${yamanashiEscape(x.stroke)} ${x.distance}m・${yamanashiEscape(x.course)} ／ ${x.grade}</span><br><span class="analysis-target">${x.qualified?'🏆 県強化突破！':`県強化まであと ${yamanashiGap(x.time,x.standard).toFixed(1)}秒`}</span><br><span class="muted small">達成率 ${x.rate.toFixed(1)}%</span></div><div style="text-align:right"><b>${fmt(x.time)}</b><br><span class="muted">県強化 ${fmtYamanashiTenth(x.standard)}</span></div></div>`;
   }).join(''):'<p class="muted">山梨県強化の標準と比較できる記録がまだありません。</p>';
   const yamanashiQualifierHtml=yamanashiQual.length?(()=>{
     let last='';
     return yamanashiQual.map(x=>{
       const head=last!==String(x.player.id)?`<div style="margin-top:12px"><b>🏊 ${yamanashiEscape(x.player.name)}</b></div>`:'';
       last=String(x.player.id);
-      return `${head}<div class="row"><div><span>${yamanashiEscape(x.stroke)} ${x.distance}m・${yamanashiEscape(x.course)}</span><br><span class="muted">${x.grade}・2026年度</span></div><div style="text-align:right"><b>🏆 ${fmt(x.time)}</b><br><span class="muted">標準 ${fmt(x.standard)}</span></div></div>`;
+      return `${head}<div class="row"><div><span>${yamanashiEscape(x.stroke)} ${x.distance}m・${yamanashiEscape(x.course)}</span><br><span class="muted">${x.grade}・2026年度</span></div><div style="text-align:right"><b>🏆 ${fmt(x.time)}</b><br><span class="muted">標準 ${fmtYamanashiTenth(x.standard)}</span></div></div>`;
     }).join('');
   })():'<p class="muted">現在、突破記録はありません。</p>';
   const tokyoQual=buildQualifiers('tokyo'),yumeQual=buildQualifiers('yume');
