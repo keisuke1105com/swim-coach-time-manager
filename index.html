@@ -3566,7 +3566,11 @@ let joRanking=Object.values(
     const id=String(x.player.id),rate=x.standard/x.time*100;
     if(!best[id]||rate>best[id].rate)best[id]={...x,rate,diff:x.time-x.standard,qualified:meetsYamanashiStandard(x.time,x.standard)};
     return best;
-  },{})).sort((a,b)=>b.rate-a.rate||a.player.name.localeCompare(b.player.name,'ja')).slice(0,20);
+  },{})).sort((a,b)=>{
+    // 10分の1秒判定での突破者を先に表示し、その中で達成率順にする。
+    if(a.qualified!==b.qualified)return a.qualified?-1:1;
+    return b.rate-a.rate||a.player.name.localeCompare(b.player.name,'ja');
+  }).slice(0,20);
   const yamanashiRankingHtml=yamanashiRanking.length?yamanashiRanking.map((x,i)=>{
     const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}位`;
     const status=x.qualified?`🏆 県強化突破！ 達成率 ${x.rate.toFixed(1)}%`:`県強化まであと ${x.diff.toFixed(2)}秒　達成率 ${x.rate.toFixed(1)}%`;
