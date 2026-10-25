@@ -3569,7 +3569,12 @@ let joRanking=Object.values(
   const yamanashiEscape=value=>String(value??'').replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
   const yamanashiRanking=Object.values(yamanashiCandidates.reduce((best,x)=>{
     const id=String(x.player.id),rate=x.standard/x.time*100;
-    if(!best[id]||rate>best[id].rate)best[id]={...x,rate,diff:x.time-x.standard,qualified:meetsYamanashiStandard(x.time,x.standard)};
+    const qualified=meetsYamanashiStandard(x.time,x.standard);
+    const current=best[id];
+    // 突破種目を最優先し、同じ判定内では達成率が高い種目を代表記録にする。
+    if(!current||(qualified&&!current.qualified)||(qualified===current.qualified&&rate>current.rate)){
+      best[id]={...x,rate,diff:x.time-x.standard,qualified};
+    }
     return best;
   },{})).sort((a,b)=>{
     // 10分の1秒判定での突破者を先に表示し、その中で達成率順にする。
