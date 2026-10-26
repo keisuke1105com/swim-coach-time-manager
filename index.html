@@ -371,9 +371,12 @@ function recordExactKey(r){
   const t=Number(r?.time_seconds);
   return `${r?.swimmer_id||''}|${r?.record_date||''}|${r?.stroke||''}|${Number(r?.distance)||0}|${r?.course||''}|${Number.isFinite(t)?t.toFixed(3):''}`;
 }
+function isJasfOfficialRecord(r){
+  return /^日本水泳連盟(?: ID:|公式記録)/.test(String(r?.memo||'').trim());
+}
 function recordSourcePriority(r){
   const memo=String(r?.memo||''), meet=String(r?.meet_name||'');
-  if(memo.includes('日本水泳連盟'))return 3;       // 公式を最優先
+  if(isJasfOfficialRecord(r))return 3;              // 公式を最優先
   if(memo.includes('スクリーンショット解析')||meet.includes('大会速報スクリーンショット'))return 2; // 速報
   return 1;                                         // 手入力
 }
@@ -451,7 +454,7 @@ async function cleanupJasfDuplicates(playerId){
   if(!p)return;
   if(!confirm(`${p.name} の日本水泳連盟から同期した重複記録を整理します。\n同じ result_id の公式記録だけを1件残し、手入力記録は削除しません。よろしいですか？`))return;
   await loadCloud();
-  const rows=records.filter(r=>String(r.swimmer_id)===String(playerId) && String(r.memo||'').includes('日本水泳連盟'));
+  const rows=records.filter(r=>String(r.swimmer_id)===String(playerId) && isJasfOfficialRecord(r));
   const groups=new Map();
   rows.forEach(r=>{
     const rid=jasfResultIdFromMemo(r.memo);
@@ -499,7 +502,7 @@ async function cleanupAllJasfDuplicates(){
   if(!confirm(`全選手の日本水泳連盟から同期した重複公式記録を整理します。\n同じ選手・同じ result_id の公式記録だけを1件残します。\n手入力記録や result_id が異なる記録は削除しません。よろしいですか？`))return;
   await loadCloud();
 
-  const official=records.filter(r=>String(r.memo||'').includes('日本水泳連盟'));
+  const official=records.filter(r=>isJasfOfficialRecord(r));
   const groups=new Map();
   official.forEach(r=>{
     const rid=jasfResultIdFromMemo(r.memo);
@@ -635,7 +638,7 @@ async function fetchJasfLatest(playerId){
     const existingOfficialFallbackKeys=new Set();
     records.forEach(r=>{
       if(String(r.swimmer_id)!==String(playerId))return;
-      if(!String(r.memo||'').includes('日本水泳連盟'))return;
+      if(!isJasfOfficialRecord(r))return;
       const rid=jasfResultIdFromMemo(r.memo);
       if(rid)existingOfficialResultIds.add(rid);
       existingOfficialFallbackKeys.add(`${r.stroke}|${Number(r.distance)}|${r.course}|${Number(r.time_seconds).toFixed(3)}|${r.record_date||''}`);
@@ -1449,7 +1452,7 @@ let trendOptions=trendKeys.map(key=>{
   const historyRow=r=>`
     <div class="growth-history-row">
       <div class="growth-history-main"><span class="growth-history-date">${videoEscape(r.record_date||'')}</span><b>${videoEscape(r.stroke)} ${Number(r.distance)}m・${videoEscape(r.course)}</b>
-        <div class="growth-history-badges">${String(r.memo||'').includes('日本水泳連盟')?'<span class="badge">🇯🇵 公式</span>':(String(r.memo||'').includes('スクリーンショット解析')?'<span class="badge">📱 速報</span>':'')}${r.improvement?`<span class="badge">${videoEscape(r.improvement)}</span>`:''}${r.is_jo_qualified?'<span class="badge">JO突破</span>':''}</div>
+        <div class="growth-history-badges">${isJasfOfficialRecord(r)?'<span class="badge">🇯🇵 公式</span>':(String(r.memo||'').includes('スクリーンショット解析')?'<span class="badge">📱 速報</span>':'')}${r.improvement?`<span class="badge">${videoEscape(r.improvement)}</span>`:''}${r.is_jo_qualified?'<span class="badge">JO突破</span>':''}</div>
         ${r.meet_name?`<details class="growth-meet"><summary>大会名</summary><span>${videoEscape(r.meet_name)}</span></details>`:''}
       </div><b class="growth-history-time">${fmt(r.time_seconds)}</b>
     </div>`;
