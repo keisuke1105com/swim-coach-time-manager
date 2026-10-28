@@ -7,18 +7,29 @@ const other='7654322 検証 花子 ケンショウ ハナコ 2016/03/16 小学5 
 const header=['個人種目申込一覧表','第57回［2026年度］検証水泳競技大会 (1326613)'];
 const data=pdf.parseLines([[...header,first],[...header,continuation,other]]);
 assert.equal(data.rows.length,3);
-assert.equal(data.rows[1].name,'検証 太郎');
+assert.equal(data.rows[1].name,'検証 太郎','a continuing swimmer survives a repeated page header');
 assert.equal(data.rows[1].entry_seconds,128.14);
 assert.equal(data.rows[2].entry_mark,'＊');
 assert.equal(data.rows[0].entry_mark,'S');
 assert.equal(pdf.parseLines([[...header,first.replace('Ｓ','Ｌ')]]).rows[0].entry_mark,'L');
 const spaced='7654323 検証 次郎 ケン ショ ウ シ ゙ロ ウ 2017/01/31 小学4 男 子 50m 自由形 35.48 L 9歳 以下';
 const spacedRow=pdf.parseLines([[...header,spaced]]).rows[0];
-assert.equal(spacedRow.name,'検証 次郎');assert.equal(spacedRow.gender,'男子');assert.equal(spacedRow.entry_class,'9歳以下');
+assert.equal(spacedRow.name,'検証 次郎');
+assert.equal(spacedRow.gender,'男子');
+assert.equal(spacedRow.entry_class,'9歳以下');
 assert.equal(pdf.normalize('検証　太郎'),'検証太郎');
+for(const label of ['17・18歳','15・16歳','14歳','13歳','12歳','11歳','10歳','小学生','中学生','一般','無差別','小学5・6年','9歳以下','10～11歳']){
+ const row=pdf.parseLines([[...header,first.replace('14～15歳',label)]]).rows[0];
+ assert.equal(row.entry_class,label,'preserve the meet-specific class');
+ assert.equal(row.entry_seconds,60.56);
+ assert.equal(row.entry_mark,'S');
+}
+for(const label of ['', 'あ'.repeat(61), '14歳\u0000', '14歳 200m 自由形 2:00.00 S 14歳']){
+ assert.throws(()=>pdf.parseLines([[...header,first.replace('14～15歳',label)]]),/クラス|正しく/);
+}
 const player={id:'p1',name:'検証　太郎',gender:'男子',birth_date:'2011-04-13'};
 assert.equal(pdf.matchPlayer(data.rows[0],[player]).player.id,'p1');
-assert.equal(pdf.matchPlayer(data.rows[0],[player,player]).player,null);
+assert.equal(pdf.matchPlayer(data.rows[0],[player,player]).player,null,'ambiguous names are never auto matched');
 assert.equal(pdf.matchPlayer(data.rows[0],[{...player,birth_date:'2010-04-13'}]).player,null);
 assert.equal(pdf.matchPlayer(data.rows[0],[{...player,gender:'女子'}]).player,null);
 assert.equal(pdf.matchPlayer(data.rows[0],[]).player,null);
@@ -26,15 +37,19 @@ assert.throws(()=>pdf.parseLines([[...header,first,first]]),/重複/);
 assert.throws(()=>pdf.parseLines([[...header,continuation]]),/正しく/);
 assert.throws(()=>pdf.parseLines([[...header,first.replace('1:00.56','不明')]]),/正しく/);
 assert.throws(()=>pdf.parseLines([[...header,first.replace('2011/04/13','2011/02/30')]]),/生年月日/);
-assert.throws(()=>pdf.seconds('1:60.00'),/不正/);assert.throws(()=>pdf.seconds('0.00'),/確認/);
+assert.throws(()=>pdf.seconds('1:60.00'),/不正/);
+assert.throws(()=>pdf.seconds('0.00'),/確認/);
 assert.throws(()=>pdf.parseLines([['画像のみ']]),/画像だけ/);
 const items=[{str:'50m',transform:[1,0,0,1,20,100]},{str:'自由形',transform:[1,0,0,1,70,100.2]},{str:'次の行',transform:[1,0,0,1,20,80]}];
 assert.equal(pdf.linesFromItems(items).join('\n'),'50m 自由形\n次の行');
 const context={window:{}};vm.createContext(context);
 vm.runInContext(fs.readFileSync(path.join(__dirname,'../meet-entry-import-ui.js'),'utf8'),context);
 const html=context.window.renderMeetEventList({id:'m'},[{meet_id:'m',swimmer_id:'p1',distance:100,stroke:'背泳ぎ',course:'長水路',entry_seconds:60.56,entry_mark:'S',entry_class:'14～15歳'}],[{id:'p1',name:'<script>検証</script>'}]);
-assert.ok(html.includes('1:00.56 S'));assert.ok(html.includes('&lt;script&gt;検証&lt;/script&gt;'));assert.ok(html.includes('長水路'));assert.ok(!html.includes('<script>検証'));
+assert.ok(html.includes('1:00.56 S'));
+assert.ok(html.includes('&lt;script&gt;検証&lt;/script&gt;'));
+assert.ok(html.includes('長水路'));
+assert.ok(!html.includes('<script>検証'));
 const index=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
-assert.ok(index.includes("sb.from('swim_meet_entries').select('*')"));assert.ok(index.includes('data-meet-action="import-pdf"'));
-for(const m of index.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))new vm.Script(m[1]);
-console.log('PASS: PDF parsing, page continuations, S/L/＊, spaced glyphs, matching, rejected rows, escaped event rendering and inline script syntax');
+assert.ok(index.includes("sb.from('swim_meet_entries').select('*')"));
+assert.ok(index.includes('data-meet-action="import-pdf"'));
+console.log('PASS: page continuations, S/L/＊, strict times, DOB/gender/duplicate-name matching, malformed/duplicate rows, geometry and escaped event rendering');

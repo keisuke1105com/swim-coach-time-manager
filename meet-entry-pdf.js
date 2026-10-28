@@ -5,7 +5,7 @@
  const clean=v=>String(v??'').normalize('NFKC').replace(/\u200b/g,'').replace(/([ァ-ヶ])\s*([\u3099\u309a])/g,'$1$2').normalize('NFC').trim();
  const strokes=['自由形','背泳ぎ','平泳ぎ','バタフライ','個人メドレー'];
  const strokePattern=strokes.map(v=>[...v].join('\\s*')).join('|');
- const eventPattern=new RegExp('(\\d+)\\s*m\\s*('+strokePattern+')\\s*([0-9]+(?:\\s*:\\s*[0-9]{1,2})?\\s*\\.\\s*[0-9]{2})\\s*([SL*＊]?)\\s*(\\d+\\s*歳\\s*以下|\\d+\\s*[~〜～-]\\s*\\d+\\s*歳|\\d+\\s*歳\\s*以上)');
+ const eventPattern=new RegExp('(\\d+)\\s*m\\s*('+strokePattern+')\\s*([0-9]+(?:\\s*:\\s*[0-9]{1,2})?\\s*\\.\\s*[0-9]{2})\\s*([SL*＊]?)\\s*(.*?)\\s*$');
  function seconds(text){
   const t=clean(text).replace(/\s/g,'');
   if(!/^(?:\d+:\d{2}|\d{1,3})\.\d{2}$/.test(t))throw Error('申込タイムを読み取れません：'+t);
@@ -48,7 +48,11 @@
     if(!swimmer||!event)throw Error('種目の行を正しく読み取れません：'+line);
     const distance=Number(event[1]),stroke=normalize(event[2]);
     if(![50,100,200,400,800,1500].includes(distance)||(stroke!=='自由形'&&distance>400)||(stroke==='個人メドレー'&&![200,400].includes(distance)))throw Error('対応していない種目があります：'+line);
-    rows.push({...swimmer,distance,stroke,entry_seconds:seconds(event[3]),entry_mark:event[4]==='*'?'＊':event[4]||null,entry_class:normalize(event[5]).replace(/[~〜-]/g,'～')});
+    // Class labels belong to the meet: single ages, middle-dot ranges,
+    // school groups and open classes must not be converted to Tokyo SC ages.
+    const rawClass=event[5],entryClass=normalize(rawClass).replace(/[~〜-]/g,'～');
+    if(/[\u0000-\u001f\u007f]/.test(rawClass)||!entryClass||[...entryClass].length>60||/\d+\s*m\s*(?:自由形|背泳ぎ|平泳ぎ|バタフライ|個人メドレー)/.test(rawClass))throw Error('クラスを正しく読み取れません：'+line);
+    rows.push({...swimmer,distance,stroke,entry_seconds:seconds(event[3]),entry_mark:event[4]==='*'?'＊':event[4]||null,entry_class:entryClass});
    }
   }
   if(!rows.length||rows.length!==expected)throw Error('出場種目を読み取れませんでした。PDFの形式を確認してください。');
@@ -74,9 +78,9 @@
   if(!loading)loading=import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs').catch(e=>{loading=null;throw e});
   let lib;try{lib=await loading}catch(e){throw Error('PDF読取機能を読み込めません。通信状態を確認して再度お試しください。')}
   lib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
-  const task=lib.getDocument({data,isEvalSupported:false});
+  const task=lib.getDocument({data,isEvalSupported:false});let pdf;
   try{
-   const pdf=await task.promise;
+   pdf=await task.promise;
    if(pdf.numPages>50)throw Error('50ページ以下のPDFを選択してください。');
    const pages=[];
    for(let i=1;i<=pdf.numPages;i++){

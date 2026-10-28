@@ -44,7 +44,9 @@ begin
       or (r.stroke='個人メドレー' and r.distance not in (200,400))
       or r.entry_seconds is null or not (r.entry_seconds > 0 and r.entry_seconds < 86400)
       or (r.entry_mark is not null and r.entry_mark not in ('S','L','＊'))
-      or r.entry_class is null or r.entry_class not in ('9歳以下','10～11歳','12～13歳','14～15歳','16～17歳','18歳以上')
+      or r.entry_class is null
+      or length(btrim(r.entry_class)) not between 1 and 60
+      or r.entry_class ~ '[[:cntrl:]]'
   ) then
     raise exception '選手・種目・タイム・クラスを確認してください。保存は行われませんでした。';
   end if;
