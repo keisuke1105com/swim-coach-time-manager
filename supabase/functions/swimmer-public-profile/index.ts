@@ -126,9 +126,14 @@ async function buildPublicRankings(sb: any) {
     const bestBySwimmer = new Map<string, any>();
     for (const item of eventBests.values()) {
       const rate = item.standard / item.time * 100;
+      const qualified = kind === "yamanashi"
+        ? meetsYamanashiStandard(item.time, item.standard)
+        : item.time <= item.standard;
       const swimmerId = String(item.swimmer.id);
       const previous = bestBySwimmer.get(swimmerId);
-      if (!previous || rate > previous.rate) {
+      if (!previous ||
+          (qualified && !previous.qualified) ||
+          (qualified === previous.qualified && rate > previous.rate)) {
         bestBySwimmer.set(swimmerId, {
           name: String(item.swimmer.name || ""),
           ...(kind === "yamanashi" ? { grade: schoolGrade2026(item.swimmer) } : {}),
@@ -139,7 +144,7 @@ async function buildPublicRankings(sb: any) {
           standard: item.standard,
           rate,
           diff: item.time - item.standard,
-          qualified: item.time <= item.standard,
+          qualified,
         });
       }
     }
