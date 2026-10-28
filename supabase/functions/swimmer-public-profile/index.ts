@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { mergePublicLaps } from "./laps.ts";
+import { getPublicMeetSchedule } from "./meets.ts";
 import { JO_STANDARDS } from "../_shared/jo-standards.ts";
 import { YAMANASHI_2026_STANDARDS } from "../_shared/yamanashi-standards.ts";
 
@@ -255,19 +256,10 @@ Deno.serve(async (req) => {
       goals = rows || [];
     } catch (e) { console.warn("Goals unavailable", e); }
 
-    // QR閲覧者には公開同意済みの本人の出場予定のみを返す。出場選手名・申込タイムは返さない。
+    // The helper receives only the active swimmer resolved from the consented token.
     let meets: any[] = [];
     try {
-      const { data: entries, error: entryError } = await sb.from("swim_meet_swimmers")
-        .select("meet_id").eq("swimmer_id", swimmer.id);
-      if (entryError) throw entryError;
-      const ids = [...new Set((entries || []).map((x: any) => x.meet_id).filter(Boolean))];
-      if (ids.length) {
-        const { data: meetRows, error: meetError } = await sb.from("swim_meets")
-          .select("id,name,meet_date,venue").in("id", ids).gte("meet_date", new Date().toISOString().slice(0,10)).order("meet_date").limit(30);
-        if (meetError) throw meetError;
-        meets = meetRows || [];
-      }
+      meets = await getPublicMeetSchedule(sb, swimmer.id);
     } catch (e) { console.warn("Public meet schedule unavailable", e); }
 
     return json({
