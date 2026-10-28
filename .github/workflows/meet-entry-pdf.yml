@@ -1,12 +1,14 @@
 name: Meet PDF import checks
 on:
   push:
-    branches: [feature/meet-entry-pdf-20261028]
+    branches: [feature/meet-entry-pdf-20261028, feature/meet-days-20261028]
   pull_request:
     paths:
       - index.html
       - meet-entry-pdf.js
       - meet-entry-import-ui.js
+      - meet-schedules.js
+      - tests/meet-schedules.cjs
       - tests/meet-entry-pdf.cjs
 permissions:
   contents: read
@@ -18,6 +20,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: node --check meet-schedules.js
+      - run: node tests/meet-schedules.cjs
       - run: node --check meet-entry-pdf.js
       - run: node --check meet-entry-import-ui.js
       - run: node tests/meet-entry-pdf.cjs
