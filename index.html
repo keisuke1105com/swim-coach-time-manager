@@ -220,11 +220,13 @@ body.public-themed{background:var(--public-page-background,#eef7fc)}
 .growth-history-badges{display:flex;flex-wrap:wrap;gap:4px}.growth-history-badges .badge{padding:3px 7px;font-size:11px}.growth-meet{font-size:12px;color:#637786}.growth-meet summary{cursor:pointer;display:list-item}.growth-meet span{display:block;overflow-wrap:anywhere;margin-top:4px}
 .compact-history-list{max-height:420px;overflow:auto;overscroll-behavior:contain;margin-top:8px;padding-right:4px}.growth-more,.player-video-history{margin-top:12px}.growth-more>summary,.player-video-history>summary{cursor:pointer;font-weight:700;color:#087fd1;padding:8px 0}.player-video-record>summary{display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;font-size:13px}.player-video-record>summary:before{content:'▸';flex-shrink:0}.player-video-record[open]>summary:before{content:'▾'}.player-video-record>summary span{flex:1;min-width:0}.player-video-record>summary>b{white-space:nowrap;font-variant-numeric:tabular-nums}
 .player-lap-panel>summary{cursor:pointer;font-size:18px;font-weight:800;padding:4px 0}.player-lap-panel>summary span{font-weight:400;margin-left:6px}.player-lap-record{border-bottom:1px solid #ddd;padding:10px 0}.player-lap-record>summary{cursor:pointer;font-size:14px;padding:4px 0}.player-lap-record>summary span{margin-left:10px}.player-lap-record[open]>summary{margin-bottom:8px}
+
+.me-event-list{margin-top:18px;border-top:1px solid #dce5ec;padding-top:14px}.me-event-list>summary{cursor:pointer;font-weight:700}.me-entry-player{padding:14px 0}.me-table td,.me-table th{white-space:nowrap}.me-pdf-overlay{position:fixed;inset:0;z-index:10070;background:#081e33b3;display:flex;align-items:center;justify-content:center;padding:14px}.me-pdf-dialog{background:white;border-radius:18px;padding:22px;width:min(100%,940px);max-height:92vh;overflow:auto;box-shadow:0 10px 40px #0003}.me-pdf-dialog>label{display:block;margin-top:12px;font-weight:700}.me-pdf-dialog input[type=file]{margin:8px 0}.me-pdf-dialog input[type=checkbox]{width:22px;height:22px;min-height:0;vertical-align:middle}.me-pdf-confirm{display:flex;align-items:flex-start;gap:10px;padding:14px 0}.me-pdf-confirm input{flex-shrink:0}.me-pdf-dialog #meetPdfStatus{padding:12px 0}
 </style></head><body>
 <header><div class="wrap" style="padding:0"><div class="topline"><div><h1>🏊 水泳コーチ・タイム管理 ☁️</h1><small>選手・記録をクラウド共有</small></div><button id="logoutBtn" class="secondary hidden" onclick="logout()">ログアウト</button></div></div></header>
 <main class="wrap"><div id="appUpdateNotice" hidden style="background:#e7f3fb;border:1px solid #91c9ed;border-radius:14px;padding:12px;margin-bottom:12px;color:#075985;font-weight:700">✨ 新しいバージョンがあります。入力内容を保存してから更新してください。 <button type="button" style="margin-top:8px" onclick="reloadLatestApp()">🔄 最新版に更新</button></div><div id="status"></div><section id="auth"></section><section id="publicProfile" class="hidden"></section><div id="app" class="hidden"><section id="home"></section><section id="players" class="hidden"></section><section id="input" class="hidden"></section><section id="records" class="hidden"></section><section id="analysis" class="hidden"></section><section id="meets" class="hidden"></section></div></main>
 <div id="pbCelebration" class="pb-celebration" role="dialog" aria-modal="true" aria-label="自己ベストのお祝い" hidden><div class="pb-celebration-card" id="pbCelebrationContent"></div></div><nav id="tabs" class="tabs hidden"><button data-tab="home">🏠<br>ホーム</button><button data-tab="players">👥<br>選手</button><button data-tab="input">⏱️<br>入力</button><button data-tab="records">📋<br>記録</button><button data-tab="analysis">📊<br>分析</button><button data-tab="meets">📅<br>大会</button></nav>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="config.js"></script><script src="data.js"></script><script src="yamanashi_2026.js"></script><script src="tokyo_sc.js"></script><script src="video-analysis.js?v=20261023-2"></script><script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="config.js"></script><script src="data.js"></script><script src="yamanashi_2026.js"></script><script src="tokyo_sc.js"></script><script src="meet-entry-pdf.js?v=20261028-1"></script><script src="meet-entry-import-ui.js?v=20261028-1"></script><script src="video-analysis.js?v=20261023-2"></script><script>
 let sb=null,session=null,PLAYERS=[],records=[];let shareAdmin=false;let selectedPlayerId='',selectedStroke='自由形',selectedDistance=50,selectedCourse='長水路';
 const VIEW_STATE_KEY='swimCloudViewState';
 function saveViewState(tab,playerId=''){try{localStorage.setItem(VIEW_STATE_KEY,JSON.stringify({tab,playerId,ts:Date.now()}))}catch(e){}}
@@ -4672,27 +4674,28 @@ async function saveShareSettings(playerId,enable){
 }
 
 
-let meetList=[],meetEntries=[];
+let meetList=[],meetEntries=[],meetEventEntries=[];
 const meEsc=v=>String(v??'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
 function meDays(v){const d=new Date(String(v)+'T00:00:00'),t=new Date();if(!Number.isFinite(d.getTime()))return null;return Math.round((Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())-Date.UTC(t.getFullYear(),t.getMonth(),t.getDate()))/86400000)}
 function meDate(v){return new Date(v+'T00:00:00').toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'short'})}
 function meCountdown(v){const d=meDays(v);return d==null?'日程未登録':d===0?'本日開催！':d>0?'あと'+d+'日':'終了'}
-async function loadMeets(){const [a,b]=await Promise.all([sb.from('swim_meets').select('*').order('meet_date'),sb.from('swim_meet_swimmers').select('*')]);if(a.error)throw a.error;if(b.error)throw b.error;meetList=a.data||[];meetEntries=b.data||[]}
+async function loadMeets(){const [a,b,c]=await Promise.all([sb.from('swim_meets').select('*').order('meet_date'),sb.from('swim_meet_swimmers').select('*'),sb.from('swim_meet_entries').select('*').order('created_at')]);if(a.error)throw a.error;if(b.error)throw b.error;if(c.error)throw c.error;meetList=a.data||[];meetEntries=b.data||[];meetEventEntries=c.data||[]}
 async function refreshMeets(){try{await loadMeets();renderMeets()}catch(e){alert('大会情報を取得できませんでした：'+e.message)}}
 function handleMeetButton(ev){
  const button=ev.target.closest('button[data-meet-action]');
  if(!button||!ev.currentTarget.contains(button))return;
  const action=button.dataset.meetAction;
- if(action==='edit-meet')editMeet(button.dataset.meetId);
+ if(action==='import-pdf'){const meet=meetList.find(m=>m.id===button.dataset.meetId);if(meet)showMeetPdfImport({meet,players:PLAYERS,entries:meetEventEntries,client:sb,onSaved:refreshMeets})}
+ else if(action==='edit-meet')editMeet(button.dataset.meetId);
  else if(action==='add-entry')editMeetEntry(null,button.dataset.meetId);
  else if(action==='edit-entry')editMeetEntry(button.dataset.entryId);
 }
 function renderMeets(){
  const card=m=>{const ids=[...new Set(meetEntries.filter(e=>e.meet_id===m.id).map(e=>e.swimmer_id))];
- return '<article class="card me-card"><div class="me-head"><div><small>'+meEsc(meDate(m.meet_date))+'</small><h3>'+meEsc(m.name)+'</h3><p>📍 '+meEsc(m.venue||'会場未登録')+'</p></div><b class="me-count">'+meCountdown(m.meet_date)+'</b></div><div class="me-actions"><button class="secondary" data-meet-action="edit-meet" data-meet-id="'+meEsc(m.id)+'">大会を編集</button><button data-meet-action="add-entry" data-meet-id="'+meEsc(m.id)+'">👥 出場選手を選択</button></div><b>👥 出場選手（'+ids.length+'名）</b><div class="me-swimmers">'+(ids.length?ids.map(id=>'<span class="me-chip">'+meEsc(playerById(id)?.name||'選手')+'</span>').join(''):'<p class="muted">出場選手は未登録です。</p>')+'</div></article>'};
+ return '<article class="card me-card"><div class="me-head"><div><small>'+meEsc(meDate(m.meet_date))+'</small><h3>'+meEsc(m.name)+'</h3><p>📍 '+meEsc(m.venue||'会場未登録')+'</p></div><b class="me-count">'+meCountdown(m.meet_date)+'</b></div><div class="me-actions"><button class="secondary" data-meet-action="edit-meet" data-meet-id="'+meEsc(m.id)+'">大会を編集</button><button data-meet-action="add-entry" data-meet-id="'+meEsc(m.id)+'">👥 出場選手を選択</button><button class="secondary" data-meet-action="import-pdf" data-meet-id="'+meEsc(m.id)+'">PDFから種目を追加</button></div><b>👥 出場選手（'+ids.length+'名）</b><div class="me-swimmers">'+(ids.length?ids.map(id=>'<span class="me-chip">'+meEsc(playerById(id)?.name||'選手')+'</span>').join(''):'<p class="muted">出場選手は未登録です。</p>')+'</div>'+renderMeetEventList(m,meetEventEntries.filter(e=>ids.includes(e.swimmer_id)),PLAYERS)+'</article>'};
  const future=meetList.filter(m=>meDays(m.meet_date)>=0),past=meetList.filter(m=>meDays(m.meet_date)<0).reverse();
  $('#meets').onclick=handleMeetButton;
- $('#meets').innerHTML='<div class="me-head"><h2>📅 大会スケジュール</h2><button onclick="editMeet()">＋ 大会を追加</button></div><p class="muted">大会日程と出場選手だけをコーチ間で共有します。種目やタイムの入力は不要です。</p>'+(future.map(card).join('')||'<div class="card">今後の大会は未登録です。</div>')+'<details class="card"><summary>過去の大会（'+past.length+'件）</summary>'+past.map(card).join('')+'</details>';
+ $('#meets').innerHTML='<div class="me-head"><h2>📅 大会スケジュール</h2><button onclick="editMeet()">＋ 大会を追加</button></div><p class="muted">大会日程・出場選手・出場種目をコーチ間で共有します。申込一覧表のPDFから種目を追加できます。</p>'+(future.map(card).join('')||'<div class="card">今後の大会は未登録です。</div>')+'<details class="card"><summary>過去の大会（'+past.length+'件）</summary>'+past.map(card).join('')+'</details>';
 }
 function validMeetDate(value){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(value)))return false;
@@ -4748,7 +4751,7 @@ function editMeetEntry(id,meetId){
 }
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261023-collapsible-laps-v3';
+const APP_BUILD_VERSION='20261028-meet-pdf-v1';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));

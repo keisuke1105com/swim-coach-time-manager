@@ -1,0 +1,26 @@
+name: Meet PDF import checks
+on:
+  push:
+    branches: [feature/meet-entry-pdf-20261028]
+  pull_request:
+    paths:
+      - index.html
+      - meet-entry-pdf.js
+      - meet-entry-import-ui.js
+      - tests/meet-entry-pdf.cjs
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check meet-entry-pdf.js
+      - run: node --check meet-entry-import-ui.js
+      - run: node tests/meet-entry-pdf.cjs
+      - run: node tests/analysis-ui.cjs
+      - run: node tests/jasf-ranking-fallback.cjs
+      - run: node tests/public-rankings.cjs
