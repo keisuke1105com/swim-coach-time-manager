@@ -4508,17 +4508,23 @@ function updatePublicShareChart(){
 }
 function publicLeaderboardHtml(items,{id,title,label,note,minRate=0}){
   const isYamanashi=label==='県強化';
+  // QRページでは管理画面の関数スコープに依存せず、標準・記録を10分の1秒へ切り捨てて判定する。
+  const tenth=value=>Math.floor((Number(value)+1e-9)*10);
+  const formatTenth=value=>{
+    const seconds=tenth(value)/10,minutes=Math.floor(seconds/60),rest=seconds-minutes*60;
+    return minutes?`${minutes}:${rest.toFixed(1).padStart(4,'0')}`:rest.toFixed(1);
+  };
   const rows=(Array.isArray(items)?items:[]).map(x=>{
     const time=Number(x?.time),standard=Number(x?.standard);
-    const qualified=isYamanashi?meetsYamanashiStandard(time,standard):time<=standard;
+    const qualified=isYamanashi?tenth(time)<=tenth(standard):time<=standard;
     return {...x,time,standard,rate:standard/time*100,qualified};
   }).filter(x=>Number.isFinite(x.time)&&x.time>0&&Number.isFinite(x.standard)&&x.standard>0&&Number.isFinite(x.rate)&&x.rate>=minRate)
     .sort((a,b)=>Number(b.qualified)-Number(a.qualified)||b.rate-a.rate).slice(0,20);
   return `<div class="card" id="${id}"><h3>${title}</h3><p class="small muted">${note} ／ 公開同意済みの選手を対象・1人1種目</p>${rows.length?rows.map((x,i)=>{
     const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}位`;
-    const gap=isYamanashi?yamanashiGap(x.time,x.standard):(x.time-x.standard);
+    const gap=isYamanashi?Math.max(0,(tenth(x.time)-tenth(x.standard))/10):(x.time-x.standard);
     const status=x.qualified?`🏆 ${label}突破！`:`${label}まであと ${isYamanashi?gap.toFixed(1):gap.toFixed(2)}秒`;
-    const standardText=isYamanashi?fmtYamanashiTenth(x.standard):shareFmt(x.standard);
+    const standardText=isYamanashi?formatTenth(x.standard):shareFmt(x.standard);
     return `<div class="row"><div><b>${medal} ${shareEscape(x.name)}</b><br><span class="muted">${shareEscape(x.stroke)} ${shareEscape(x.distance)}m・${shareEscape(x.course)}${x.grade?` ／ ${shareEscape(x.grade)}`:''}</span><br><span class="analysis-target">${status}</span><br><span class="muted small">達成率 ${x.rate.toFixed(1)}%</span></div><div style="text-align:right"><b>${shareFmt(x.time)}</b><br><span class="muted">${label} ${standardText}</span></div></div>`;
   }).join(''):'<p class="muted">条件に合うランキング対象の記録はまだありません。</p>'}</div>`;
 }
