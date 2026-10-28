@@ -1,7 +1,7 @@
 name: Meet PDF import checks
 on:
   push:
-    branches: [feature/meet-entry-pdf-20261028, feature/meet-days-20261028]
+    branches: [feature/meet-entry-pdf-20261028, feature/meet-days-20261028, fix/meet-pdf-classes-20261028]
   pull_request:
     paths:
       - index.html
