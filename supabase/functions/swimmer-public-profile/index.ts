@@ -77,6 +77,10 @@ function yamanashiStandard(swimmer: any, stroke: string, distance: number, cours
   return row && Number.isFinite(row.seconds) && row.seconds > 0 ? row.seconds : null;
 }
 
+function meetsYamanashiStandard(time: number, standard: number) {
+  return Math.floor((time + 1e-9) * 10) <= Math.floor((standard + 1e-9) * 10);
+}
+
 async function buildPublicRankings(sb: any) {
   const meetDate = nextJoMeetDate();
 
