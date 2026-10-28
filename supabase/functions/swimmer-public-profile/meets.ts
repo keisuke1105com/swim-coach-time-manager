@@ -22,25 +22,30 @@ export async function getPublicMeetSchedule(sb: any, swimmerId: string, today = 
     const end = m.id === TOKYO_MEET_ID && m.meet_date === TOKYO_START ? TOKYO_END : m.meet_date;
     return end >= today;
   });
-  const tokyo = meets.find((m: any) => m.id === TOKYO_MEET_ID && m.meet_date === TOKYO_START);
-  if (!tokyo) return meets.map((m: any) => ({id:m.id,name:m.name,meet_date:m.meet_date,venue:m.venue}));
-
-  const { data: rows, error: entryError } = await sb.from('swim_meet_entries')
-    .select('stroke,distance,course').eq('swimmer_id', swimmerId).eq('meet_id', tokyo.id);
-  if (entryError) throw entryError;
+  if (!meets.length) return [];
+  const rows: any[] = [];
+  for (let from = 0; ; from += 500) {
+    const { data: page, error: entryError } = await sb.from('swim_meet_entries')
+      .select('meet_id,stroke,distance,course').eq('swimmer_id', swimmerId)
+      .in('meet_id', meets.map((m: any) => m.id)).order('id').range(from, from + 499);
+    if (entryError) throw entryError;
+    rows.push(...(page || []));
+    if ((page || []).length < 500) break;
+  }
   const events: any[] = [];
   const seen = new Set<string>();
   for (const row of rows || []) {
     const distance = Number(row.distance);
     if (!['自由形','背泳ぎ','平泳ぎ','バタフライ','個人メドレー'].includes(row.stroke) ||
         ![50,100,200,400,800,1500].includes(distance) || !['長水路','短水路'].includes(row.course)) continue;
-    const key = [row.stroke,distance,row.course].join('|');
+    const key = [row.meet_id,row.stroke,distance,row.course].join('|');
     if (seen.has(key)) continue;
     seen.add(key);
-    events.push({stroke:row.stroke,distance,course:row.course});
+    events.push({meet_id:row.meet_id,stroke:row.stroke,distance,course:row.course});
   }
   return meets.map((m: any) => ({
     id:m.id,name:m.name,meet_date:m.meet_date,venue:m.venue,
-    ...(m.id === tokyo.id ? {end_date:TOKYO_END,events} : {}),
+    ...(m.id === TOKYO_MEET_ID && m.meet_date === TOKYO_START ? {end_date:TOKYO_END} : {}),
+    events:events.filter((e: any) => e.meet_id === m.id).map((e: any) => ({stroke:e.stroke,distance:e.distance,course:e.course})),
   }));
 }

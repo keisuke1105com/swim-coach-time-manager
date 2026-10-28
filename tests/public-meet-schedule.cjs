@@ -21,7 +21,7 @@ function client(data,log=[]){return {from(table){
  let values=[...(data[table]||[])],fields=null,single=false;
  const call={table,filters:[]};log.push(call);
  const q={select(s){fields=s.split(',').map(x=>x.trim());call.fields=s;return q},eq(k,v){call.filters.push([k,v]);values=values.filter(x=>x[k]===v);return q},
-  not(k,op,v){values=values.filter(x=>x[k]!==v);return q},in(k,ids){values=values.filter(x=>ids.includes(x[k]));return q},
+  not(k,op,v){values=values.filter(x=>x[k]!==v);return q},in(k,ids){(call.inFilters??=[]).push([k,ids]);values=values.filter(x=>ids.includes(x[k]));return q},
   gte(k,v){values=values.filter(x=>x[k]>=v);return q},order(k){values.sort((a,b)=>String(a[k]).localeCompare(String(b[k])));return q},
   limit(n){values=values.slice(0,n);return q},range(a,b){values=values.slice(a,b+1);return q},maybeSingle(){single=true;return q},
   then(ok,bad){const projected=values.map(x=>Object.fromEntries(fields.map(k=>[k,x[k]])));return Promise.resolve({data:single?(projected[0]||null):projected,error:null}).then(ok,bad)}};return q;
@@ -38,7 +38,9 @@ const clean=x=>JSON.parse(JSON.stringify(x));
  assert.deepEqual(own.map(m=>m.id),[tokyo,'future']);
  for(const e of meet.events)assert.deepEqual(Object.keys(e).sort(),['course','distance','stroke']);
  assert.ok(!JSON.stringify(own).includes('private'));assert.ok(!JSON.stringify(own).includes('他の選手'));
- const query=log.find(x=>x.table==='swim_meet_entries');assert.deepEqual(query.filters,[['swimmer_id','own'],['meet_id',tokyo]]);
+ const query=log.find(x=>x.table==='swim_meet_entries');assert.deepEqual(query.filters,[['swimmer_id','own']]);assert.deepEqual(query.inFilters,[['meet_id',[tokyo,'future']]]);
+ const autumn=own.find(m=>m.id==='future');assert.equal(autumn.events.length,1);assert.equal(autumn.events[0].stroke,'平泳ぎ');
+ const autumnHtml=ui.window.renderPublicMeetEvents(autumn,{gender:'男子'});assert.ok(autumnHtml.includes('100m 平泳ぎ'));assert.ok(!autumnHtml.includes('No.'));assert.ok(!autumnHtml.includes('背泳ぎ'));assert.ok(!autumnHtml.includes('70.00'));
  const other=clean(await context.getPublicMeetSchedule(client(rows),'other','2026-10-28'));
  assert.equal(other[0].events.length,1);assert.equal(other[0].events[0].stroke,'バタフライ');
  assert.equal((await context.getPublicMeetSchedule(client(rows),'missing','2026-10-28')).length,0);
@@ -52,7 +54,7 @@ const clean=x=>JSON.parse(JSON.stringify(x));
  assert.ok(!html.includes('バタフライ'));assert.ok(!html.includes('25.00'));
  assert.ok(html.includes('区分決勝・決勝は進出時のみ'));
  assert.ok(ui.window.renderPublicMeetEvents({...meet,events:[]},{gender:'男子'}).includes('まだ登録'));
- assert.equal(ui.window.renderPublicMeetEvents({id:'future'},{}),'');
+ assert.ok(ui.window.renderPublicMeetEvents({id:'future'},{}).includes('まだ登録'));
  assert.ok(ui.window.renderPublicMeetEvents({...meet,events:[{stroke:'<script>',distance:25,course:'長水路'}]},{gender:'男子'}).includes('&lt;script&gt;'));
 
  // Exercise the actual handler: disabled/unconsented/inactive tokens never reach meet queries.
