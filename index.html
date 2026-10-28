@@ -4507,15 +4507,19 @@ function updatePublicShareChart(){
   target.innerHTML=shareChartSvg(rows);
 }
 function publicLeaderboardHtml(items,{id,title,label,note,minRate=0}){
+  const isYamanashi=label==='県強化';
   const rows=(Array.isArray(items)?items:[]).map(x=>{
     const time=Number(x?.time),standard=Number(x?.standard);
-    return {...x,time,standard,rate:standard/time*100};
+    const qualified=isYamanashi?meetsYamanashiStandard(time,standard):time<=standard;
+    return {...x,time,standard,rate:standard/time*100,qualified};
   }).filter(x=>Number.isFinite(x.time)&&x.time>0&&Number.isFinite(x.standard)&&x.standard>0&&Number.isFinite(x.rate)&&x.rate>=minRate)
-    .sort((a,b)=>b.rate-a.rate).slice(0,20);
+    .sort((a,b)=>Number(b.qualified)-Number(a.qualified)||b.rate-a.rate).slice(0,20);
   return `<div class="card" id="${id}"><h3>${title}</h3><p class="small muted">${note} ／ 公開同意済みの選手を対象・1人1種目</p>${rows.length?rows.map((x,i)=>{
     const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}位`;
-    const status=x.time<=x.standard?`🏆 ${label}突破！`:`${label}まであと ${(x.time-x.standard).toFixed(2)}秒`;
-    return `<div class="row"><div><b>${medal} ${shareEscape(x.name)}</b><br><span class="muted">${shareEscape(x.stroke)} ${shareEscape(x.distance)}m・${shareEscape(x.course)}${x.grade?` ／ ${shareEscape(x.grade)}`:''}</span><br><span class="analysis-target">${status}</span><br><span class="muted small">達成率 ${x.rate.toFixed(1)}%</span></div><div style="text-align:right"><b>${shareFmt(x.time)}</b><br><span class="muted">${label} ${shareFmt(x.standard)}</span></div></div>`;
+    const gap=isYamanashi?yamanashiGap(x.time,x.standard):(x.time-x.standard);
+    const status=x.qualified?`🏆 ${label}突破！`:`${label}まであと ${isYamanashi?gap.toFixed(1):gap.toFixed(2)}秒`;
+    const standardText=isYamanashi?fmtYamanashiTenth(x.standard):shareFmt(x.standard);
+    return `<div class="row"><div><b>${medal} ${shareEscape(x.name)}</b><br><span class="muted">${shareEscape(x.stroke)} ${shareEscape(x.distance)}m・${shareEscape(x.course)}${x.grade?` ／ ${shareEscape(x.grade)}`:''}</span><br><span class="analysis-target">${status}</span><br><span class="muted small">達成率 ${x.rate.toFixed(1)}%</span></div><div style="text-align:right"><b>${shareFmt(x.time)}</b><br><span class="muted">${label} ${standardText}</span></div></div>`;
   }).join(''):'<p class="muted">条件に合うランキング対象の記録はまだありません。</p>'}</div>`;
 }
 // QRテーマはこのブラウザ内だけに保存し、API・管理画面には送信しない。
