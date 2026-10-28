@@ -5,6 +5,16 @@
  root.renderMeetEventList=function(meet,entries,players){
   const list=entries.filter(e=>e.meet_id===meet.id);
   if(!list.length)return '<p class="small muted">出場種目は未登録です。「PDFから種目を追加」で申込一覧表を取り込めます。</p>';
+  const schedule=root.MeetSchedules?.forMeet(meet);
+  if(schedule){
+   const rows=list.map(entry=>{const player=players.find(p=>p.id===entry.swimmer_id);return {entry,player,race:root.MeetSchedules.findRace(schedule,entry,player)}});
+   const table=items=>'<div class="me-scroll"><table class="me-table"><thead><tr><th>競技番号／種目</th><th>選手</th><th>申込タイム</th><th>クラス</th></tr></thead><tbody>'+items.map(({entry:e,player:p,race:r})=>'<tr><td>'+(r?'No.'+r.number+' '+esc(r.round)+'<br>':'')+esc(p?.gender||'')+' '+esc(e.distance)+'m '+esc(e.stroke)+'</td><td>'+esc(p?.name||'未登録の選手')+'</td><td>'+esc(time(e.entry_seconds))+' '+esc(e.entry_mark||'')+'<br><small>大会：'+esc(e.course)+'</small></td><td>'+esc(e.entry_class||'—')+'</td></tr>').join('')+'</tbody></table></div>';
+   const unknown=rows.filter(r=>!r.race);
+   return '<div class="me-event-list"><h4>日別の出場種目（'+list.length+'件）</h4>'+schedule.days.map(day=>{
+    const items=rows.filter(r=>r.race?.day===day.day).sort((a,b)=>a.race.number-b.race.number||String(a.player?.name||'').localeCompare(String(b.player?.name||''),'ja'));
+    return '<details open class="me-entry-player"><summary><b>第'+day.day+'日｜'+esc(day.date.slice(5).replace('-','/'))+'（'+items.length+'種目）</b></summary>'+(items.length?table(items):'<p class="small muted">登録済みの出場種目はありません。</p>')+'</details>';
+   }).join('')+(unknown.length?'<details open><summary>日程未照合（'+unknown.length+'種目）</summary>'+table(unknown)+'</details>':'')+'<p class="small muted">競技番号は予選・タイム決勝の番号です。区分決勝・決勝は進出時のみ出場します。S：短水路での申込、L：長水路での申込、＊：PDF原表の記号。</p><a href="'+schedule.source+'" target="_blank" rel="noopener noreferrer">公式の競技順PDFを見る</a></div>';
+  }
   const grouped=new Map();for(const e of list){if(!grouped.has(e.swimmer_id))grouped.set(e.swimmer_id,[]);grouped.get(e.swimmer_id).push(e)}
   return '<details class="me-event-list" open><summary>出場種目（'+list.length+'件）</summary>'+[...grouped].map(([id,events])=>{
    const p=players.find(p=>p.id===id);
