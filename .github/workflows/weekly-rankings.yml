@@ -1,9 +1,5 @@
-name: Weekly swimmer rankings
+name: Read-only ranking probe
 on:
-  schedule:
-    # Thursday 21:17 JST; pending events only on Friday 06:17 JST.
-    - cron: '17 12 * * 4'
-    - cron: '17 21 * * 4'
   workflow_dispatch:
     inputs:
       retry_only:
@@ -13,12 +9,12 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: weekly-swimmer-rankings
+  group: ranking-readonly-probe
   cancel-in-progress: false
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 175
+    timeout-minutes: 3
     env:
       SUPABASE_URL: ${{ secrets.SWIM_SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SWIM_SUPABASE_SERVICE_ROLE_KEY }}
@@ -28,4 +24,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: node scripts/weekly-rankings.cjs
+      - run: node scripts/ranking-readonly-probe.cjs
