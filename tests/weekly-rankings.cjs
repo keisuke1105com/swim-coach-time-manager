@@ -11,7 +11,8 @@ assert.equal(cacheResult({gradeMatched:[]},'now'),null,'unconfirmed never erases
 const cache=cacheResult(q,'2026-10-22T12:17:00Z');assert.equal(cache.found,true);assert.equal(cache.swimmerCode,'9546708');
 const html=fs.readFileSync(require('node:path').join(__dirname,'../index.html'),'utf8');for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))new vm.Script(m[1]);
 const source=html.slice(html.indexOf('function weeklyRankingStatusHtml('),html.indexOf('function sameGradeRankingSummaryHtml('));
-let report;const ui=vm.createContext({loadRankingBulkProgress:()=>({weeklyRanking:report})});vm.runInContext(source,ui);assert.ok(ui.weeklyRankingStatusHtml().includes('初回'));
-report={status:'partial',checkedAt:'2026-10-22T12:17:00Z',confirmed:3,totalEvents:5,totalPlayers:45,pending:[{},{}],successfulPlayerIds:['p','p']};assert.ok(ui.weeklyRankingStatusHtml().includes('一部未確認'));assert.ok(ui.weeklyRankingStatusHtml().includes('1 / 45名'));assert.ok(ui.weeklyRankingStatusHtml().includes('2種目'));
+let report;const ui=vm.createContext({loadRankingBulkProgress:()=>({weeklyRanking:report})});vm.runInContext(source,ui);assert.ok(ui.weeklyRankingStatusHtml(true).includes('初回'));assert.equal(ui.weeklyRankingStatusHtml(),'');
+report={status:'partial',checkedAt:'2026-10-22T12:17:00Z',confirmed:3,totalEvents:5,totalPlayers:45,pending:[{},{}],successfulPlayerIds:['p','p']};assert.ok(ui.weeklyRankingStatusHtml(true).includes('一部未確認'));assert.ok(ui.weeklyRankingStatusHtml(true).includes('3 / 5種目'));assert.ok(ui.weeklyRankingStatusHtml(true).includes('2種目'));
 console.log('PASS: shared swimmer identity, event deduplication, active targets, failure preservation, weekly status, JS syntax');
 })().catch(e=>{console.error(e);process.exitCode=1});
+
