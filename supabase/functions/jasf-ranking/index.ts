@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.118.0';
 // Supabase Edge Function: jasf-ranking
 // Existing app's JASF ranking query parameters are preserved.
 const corsHeaders = {
@@ -31,7 +31,24 @@ Deno.serve(async (req) => {
   }
   if (!worker) {
     const { data: { user }, error: authError } = await client.auth.getUser(token);
-    if (authError || !user) return reply({ success: false, error: 'Invalid session' }, 401);
+    if (authError || !user) {
+      // A valid server API key may differ from the runtime's legacy key.
+      // Ask the Data API to validate the supplied credential against an
+      // existing admin-only RLS row. Never trust decoded role/user metadata.
+      // Keep this table private: anon must not have a SELECT policy.
+      try {
+        const access = await fetch(supabaseUrl + '/rest/v1/swimmer_ranking_share_cache?select=job_key&job_key=eq.same_grade_2026', {
+          headers: { apikey: token, Authorization: 'Bearer ' + token },
+          signal: AbortSignal.timeout(10000),
+        });
+        const rows = await access.json();
+        if (!access.ok || !Array.isArray(rows) || rows.length !== 1 || rows[0]?.job_key !== 'same_grade_2026') {
+          return reply({ success: false, error: 'Invalid session' }, 401);
+        }
+      } catch {
+        return reply({ success: false, error: 'Credential validation unavailable' }, 503);
+      }
+    }
   }
 
 
@@ -86,3 +103,4 @@ Deno.serve(async (req) => {
     return reply({ success: false, error: 'Function error', detail: String(error) }, 500);
   }
 });
+
