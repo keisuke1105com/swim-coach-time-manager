@@ -42,8 +42,15 @@ assert.equal(result.yamanashiRanking[1].standard,50,'male standard stays separat
 assert.equal(result.yamanashiQualifiedPlayers,1,'existing qualifier count retained');
 assert.equal(result.yamanashiQual.length,1,'existing event list retained');
 assert.ok(result.yamanashiRankingHtml.includes('A&lt;script&gt;'));
-assert.ok(result.yamanashiRankingHtml.includes('あと 5.00秒'));
+assert.ok(result.yamanashiRankingHtml.includes('あと 5.0秒'));
 assert.equal(run([],[]).yamanashiRanking.length,0);
 const many=Array.from({length:25},(_,i)=>({...players[0],id:String(i),name:`選手${i}`}));
 assert.equal(run(many.map(p=>record(p.id,'短水路',55)),many).yamanashiRanking.length,20);
 console.log('PASS: JO 90% boundary/deduplication, prefectural standards/ranking/qualifier counts, empty states, top20, escaping, inline syntax');
+
+for(const [time,qualified] of [[55.09,true],[55.10,false]]){
+  const row=run([record('a','短水路',time)]).yamanashiRanking[0];
+  assert.equal(row.qualified,qualified);
+  assert.equal(row.rate>=100,qualified,'achievement rate agrees with tenth-second qualification');
+}
+assert.equal(run([record('a','短水路',55.09)]).yamanashiRanking[0].rate,100);

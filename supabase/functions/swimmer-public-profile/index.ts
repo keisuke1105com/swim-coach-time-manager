@@ -130,7 +130,9 @@ async function buildPublicRankings(sb: any) {
 
     const bestBySwimmer = new Map<string, any>();
     for (const item of eventBests.values()) {
-      const rate = item.standard / item.time * 100;
+      const rate = kind === "yamanashi"
+        ? Math.floor((item.standard + 1e-9) * 10) / Math.floor((item.time + 1e-9) * 10) * 100
+        : item.standard / item.time * 100;
       const qualified = kind === "yamanashi"
         ? meetsYamanashiStandard(item.time, item.standard)
         : item.time <= item.standard;

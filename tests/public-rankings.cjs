@@ -33,6 +33,13 @@ const helper=html.slice(html.indexOf('function publicLeaderboardHtml('),html.ind
 const ui=vm.createContext({shareEscape:v=>String(v).replaceAll('<','&lt;'),shareFmt:n=>String(n)});vm.runInContext(helper,ui);
 const rendered=ui.publicLeaderboardHtml([{name:'<選手>',time:100,standard:90,stroke:'自由形',distance:100,course:'短水路'},{name:'低',time:100,standard:89.99}],{id:'share-jo-ranking',title:'JO',label:'JO',note:'test',minRate:90});
 assert.ok(rendered.includes('&lt;選手>'));assert.ok(rendered.includes('あと 10.00秒'));assert.ok(!rendered.includes('<b>🥈'));
+const prefRendered=ui.publicLeaderboardHtml([{name:'境界',time:24.66,standard:24.6}],{id:'pref',title:'県強化',label:'県強化',note:'test'});
+assert.ok(prefRendered.includes('県強化突破！'));
+assert.ok(prefRendered.includes('達成率 100.0%'));
+const boundaryRecords=records.map(x=>({...x,time_seconds:55.29}));
+const boundary=await context.buildPublicRankings(client({swimmers,swimmer_public_shares:shares,swim_records:boundaryRecords}));
+assert.equal(boundary.yamanashiRanking[0].qualified,true);
+assert.equal(boundary.yamanashiRanking[0].rate,100);
 assert.ok(raw.includes('goals,')&&raw.includes('meets,')&&raw.includes('mergePublicLaps(r,'),'deployed goals, meet schedule and manual laps preserved');
 console.log('PASS: consent/active filtering, JO90% and top20, prefecture20 and shared standards, deduplication, best time, private-field exclusion, gender/grade/course, empty data, escaped UI and syntax');
 })().catch(e=>{console.error(e);process.exitCode=1});

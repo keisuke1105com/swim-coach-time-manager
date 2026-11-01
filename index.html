@@ -3581,7 +3581,7 @@ let joRanking=Object.values(
   const yamanashiUnknownPlayers=PLAYERS.filter(p=>!schoolGrade2026(p)||!['男子','女子'].includes(String(p.gender||'').trim())).length;
   const yamanashiEscape=value=>String(value??'').replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
   const yamanashiRanking=Object.values(yamanashiCandidates.reduce((best,x)=>{
-    const id=String(x.player.id),rate=x.standard/x.time*100;
+    const id=String(x.player.id),rate=yamanashiTenth(x.standard)/yamanashiTenth(x.time)*100;
     const qualified=meetsYamanashiStandard(x.time,x.standard);
     const current=best[id];
     // 突破種目を最優先し、同じ判定内では達成率が高い種目を代表記録にする。
@@ -4233,7 +4233,7 @@ ${lapAnalysisHtml}
     </div>
     <div class="card" id="analysis-pref-ranking">
       <h2>🏊 山梨県強化選手ランキング（上位20名）</h2>
-      <p class="muted">2026年4月1日時点の学年・性別と種目・距離・水路ごとの県強化基準で比較し、達成率が高い順に1人1種目・上位20名まで表示しています。達成率は「基準タイム ÷ 自己ベスト × 100」です。突破判定は県強化標準の10分の1秒単位で行います（例：標準1:06.0は1:06.09まで突破）。</p>
+      <p class="muted">2026年4月1日時点の学年・性別と種目・距離・水路ごとの県強化基準で比較し、達成率が高い順に1人1種目・上位20名まで表示しています。達成率は基準タイム・自己ベストをともに10分の1秒単位へ切り捨てて「基準タイム ÷ 自己ベスト × 100」で計算します。突破判定は県強化標準の10分の1秒単位で行います（例：標準1:06.0は1:06.09まで突破）。</p>
       ${yamanashiRankingHtml}
     </div>
 
@@ -4521,7 +4521,7 @@ function publicLeaderboardHtml(items,{id,title,label,note,minRate=0}){
   const rows=(Array.isArray(items)?items:[]).map(x=>{
     const time=Number(x?.time),standard=Number(x?.standard);
     const qualified=isYamanashi?tenth(time)<=tenth(standard):time<=standard;
-    return {...x,time,standard,rate:standard/time*100,qualified};
+    return {...x,time,standard,rate:isYamanashi?tenth(standard)/tenth(time)*100:standard/time*100,qualified};
   }).filter(x=>Number.isFinite(x.time)&&x.time>0&&Number.isFinite(x.standard)&&x.standard>0&&Number.isFinite(x.rate)&&x.rate>=minRate)
     .sort((a,b)=>Number(b.qualified)-Number(a.qualified)||b.rate-a.rate).slice(0,20);
   return `<div class="card" id="${id}"><h3>${title}</h3><p class="small muted">${note} ／ 公開同意済みの選手を対象・1人1種目</p>${rows.length?rows.map((x,i)=>{
