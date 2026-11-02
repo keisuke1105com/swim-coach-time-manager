@@ -1,0 +1,23 @@
+name: Ranking update checks
+on:
+  pull_request:
+    paths:
+      - index.html
+      - scripts/weekly-rankings.cjs
+      - tests/weekly-ranking*.cjs
+      - .github/workflows/ranking-checks.yml
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node tests/weekly-rankings.cjs
+      - run: node tests/weekly-ranking-errors.cjs
+      - run: node tests/weekly-ranking-resume.cjs
+      - run: node tests/jasf-ranking-fallback.cjs
+      - run: node tests/analysis-rankings.cjs

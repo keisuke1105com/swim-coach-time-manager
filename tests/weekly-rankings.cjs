@@ -1,4 +1,4 @@
-const assert=require('node:assert/strict');const {appRankingContext,tasksFor,cacheResult}=require('../scripts/weekly-rankings.cjs');
+const assert=require('node:assert/strict');const {appRankingContext,tasksFor,cacheResult,retryTasks,lookupOutcome,outcomeCounts}=require('../scripts/weekly-rankings.cjs');
 const fs=require('node:fs'),vm=require('node:vm');
 (async()=>{
 const player={id:'p',name:'テスト',birth_date:'2012-10-10',gender:'女子',athlete_ids:['58640127']};
@@ -13,6 +13,16 @@ const html=fs.readFileSync(require('node:path').join(__dirname,'../index.html'),
 const source=html.slice(html.indexOf('function weeklyRankingStatusHtml('),html.indexOf('function sameGradeRankingSummaryHtml('));
 let report;const ui=vm.createContext({loadRankingBulkProgress:()=>({weeklyRanking:report})});vm.runInContext(source,ui);assert.ok(ui.weeklyRankingStatusHtml(true).includes('初回'));assert.equal(ui.weeklyRankingStatusHtml(),'');
 report={status:'partial',checkedAt:'2026-10-22T12:17:00Z',confirmed:3,totalEvents:5,totalPlayers:45,pending:[{},{}],successfulPlayerIds:['p','p']};assert.ok(ui.weeklyRankingStatusHtml(true).includes('一部未確認'));assert.ok(ui.weeklyRankingStatusHtml(true).includes('3 / 5種目'));assert.ok(ui.weeklyRankingStatusHtml(true).includes('2種目'));
+const events=['old','fresh','new'].map(key=>({key}));
+const previous={pending:events,outcomes:{old:{checkedAt:'2026-10-01',reason:'not_listed'},fresh:{checkedAt:'2026-10-30',reason:'pref_not_found'}}};
+assert.deepEqual(retryTasks(events,previous).map(t=>t.key),['new','old','fresh']);
+assert.deepEqual(outcomeCounts(events,previous.outcomes),{not_listed:1,pref_not_found:1,unprocessed:1});
+assert.equal(lookupOutcome({status:'grade_unavailable'}),'grade_unavailable');
+assert.equal(lookupOutcome({status:'not_listed'}),'not_listed');
+for(const [status,reason] of Object.entries({found:'confirmed',too_deep:'pref_search_limit',pref_unknown:'pref_unknown',not_found:'pref_not_found',error:'pref_request_failed'}))assert.equal(lookupOutcome({gradeMatched:[{}],prefStatus:status}),reason);
+report.stopReason='request_budget';report.pendingReasons={not_listed:1,unprocessed:1};
+assert.ok(ui.weeklyRankingStatusHtml(true).includes('取得回数の上限'));
+assert.ok(ui.weeklyRankingStatusHtml(true).includes('未処理（確認記録なし）：1種目'));
 console.log('PASS: shared swimmer identity, event deduplication, active targets, failure preservation, weekly status, JS syntax');
 })().catch(e=>{console.error(e);process.exitCode=1});
 

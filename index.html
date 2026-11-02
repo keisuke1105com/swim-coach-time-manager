@@ -3062,7 +3062,11 @@ function weeklyRankingStatusHtml(compact=false){
  const pending=Array.isArray(report.pending)?report.pending.length:0;
  const stale=report.status==='running'&&Date.now()-new Date(report.checkedAt).getTime()>4*60*60*1000;
  const status=stale?'更新が中断した可能性があります（次回再試行待ち）':report.status==='running'?'更新中':report.status==='complete'?'更新完了':'一部未確認・再試行対象あり';
- if(compact)return `<details class="card" style="padding:12px 16px"><summary style="cursor:pointer;font-weight:800;display:flex;justify-content:space-between;gap:12px"><span>🔄 ランキングの自動更新</span><span class="muted small">${status}</span></summary><div class="muted small" style="margin-top:8px;line-height:1.8">最終確認：${date(report.checkedAt)}<br>確認済み：${n(report.confirmed)} / ${n(report.totalEvents)}種目　未確認：${pending}種目<br>毎週木曜21:17更新 ／ 金曜6:17に再試行</div></details>`;
+ const reasonLabels={unprocessed:'未処理（確認記録なし）',not_listed:'公式結果で本人を特定できず',grade_unavailable:'学年情報不足',pref_search_limit:'県順位の検索上限',pref_unknown:'県情報不足',pref_not_found:'県順位を特定できず',pref_request_failed:'県順位の取得失敗',pref_pending:'県順位未確認',lookup_failed:'取得・照合失敗',ranking_lookup_failed:'取得・照合失敗',ranking_server_request_failed:'取得サーバー応答エラー',ranking_server_auth_or_limit:'認証・アクセス制限',upstream_access_restricted:'公式APIのアクセス制限',access_restricted:'認証・アクセス制限',request_budget:'取得上限で中断',time_budget:'時間上限で中断'};
+ const stopLabels={request_budget:'取得回数の上限に達したため、残りは次回再試行します。',time_budget:'実行時間の上限に達したため、残りは次回再試行します。',access_restricted:'認証・アクセス制限で停止しました。'};
+ const reasons=Object.entries(report.pendingReasons||{}).map(([key,count])=>`${reasonLabels[key]||'その他'}：${n(count)}種目`).join(' ／ ');
+ const diagnostic=(stopLabels[report.stopReason]?`<br>${stopLabels[report.stopReason]}`:'')+(reasons?`<br>${reasons}`:'');
+ if(compact)return `<details class="card" style="padding:12px 16px"><summary style="cursor:pointer;font-weight:800;display:flex;justify-content:space-between;gap:12px"><span>🔄 ランキングの自動更新</span><span class="muted small">${status}</span></summary><div class="muted small" style="margin-top:8px;line-height:1.8">最終確認：${date(report.checkedAt)}<br>確認済み：${n(report.confirmed)} / ${n(report.totalEvents)}種目　未確認：${pending}種目${diagnostic}<br>毎週木曜21:17更新 ／ 金曜6:17に再試行</div></details>`;
  return '';
 }
 function sameGradeRankingSummaryHtml(year=2026,limit=30){
