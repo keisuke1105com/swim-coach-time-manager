@@ -4292,7 +4292,7 @@ ${lapAnalysisHtml}
 </div>
 
     <details class="card" id="analysis-jo-records"><summary>🏆 JO突破記録（${jo}件）</summary>${analysisRecordList(records.filter(r=>r.is_jo_qualified))}</details>
-    <details class="card" id="analysis-best-records"><summary>✨ ベスト更新記録（${bestRecords}件）</summary>${analysisRecordList(records.filter(r=>r.is_personal_best))}</details>
+    <details class="card" id="analysis-best-records"><summary>✨ ベスト更新記録（${bestRecords}件）</summary>${analysisRecordList(records.filter(r=>r.is_personal_best).sort((a,b)=>String(b.record_date||'').localeCompare(String(a.record_date||''))))}</details>
     <div class="card">
       <h3>☁️ クラウド共有</h3>
       <p>
