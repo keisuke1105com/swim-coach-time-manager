@@ -410,6 +410,51 @@ async function recalcPersonalBests(playerIds){
   }
 }
 
+// 置換元は、全ての手入力ラップの保存先を確認してから削除する。
+// 同じ距離に異なる手入力値がある場合は、自動でどちらかを捨てない。
+async function preserveManualLaps(keepId,sourceIds){
+  const ids=[...new Set(sourceIds.map(String))].filter(id=>id!==String(keepId));
+  if(!ids.length)return;
+  const target=await fetchAllRows('swim_manual_laps',q=>q.eq('record_id',keepId).order('id'));
+  const byDistance=new Map(target.map(m=>[Number(m.distance),Number(m.cumulative_seconds)]));
+  const additions=[];
+  for(const id of ids){
+    const source=await fetchAllRows('swim_manual_laps',q=>q.eq('record_id',id).order('id'));
+    for(const lap of source){
+      const distance=Number(lap.distance),seconds=Number(lap.cumulative_seconds);
+      if(byDistance.has(distance)){
+        if(Math.abs(byDistance.get(distance)-seconds)>0.000001){
+          throw new Error('同じ距離に異なる手入力ラップがあります。ラップを保護するため元の記録を残しました。');
+        }
+      }else{
+        byDistance.set(distance,seconds);
+        additions.push({record_id:keepId,distance,cumulative_seconds:seconds});
+      }
+    }
+  }
+  if(additions.length){
+    const {error}=await sb.from('swim_manual_laps').insert(additions);
+    if(error)throw new Error('手入力ラップを引き継げなかったため、元の記録を残しました：'+error.message);
+  }
+  const saved=await fetchAllRows('swim_manual_laps',q=>q.eq('record_id',keepId).order('id'));
+  for(const [distance,seconds] of byDistance){
+    if(!saved.some(m=>Number(m.distance)===distance&&Math.abs(Number(m.cumulative_seconds)-seconds)<0.000001)){
+      throw new Error('手入力ラップの保存を確認できないため、元の記録を残しました。');
+    }
+  }
+}
+
+async function removeReplacedRecords(keep,rows){
+  if(!keep?.id)throw new Error('置換先の記録を確認できませんでした。元の記録を残しました。');
+  const ids=rows.map(r=>r.id).filter(id=>id&&String(id)!==String(keep.id));
+  await preserveManualLaps(keep.id,ids);
+  if(ids.length){
+    const {error}=await sb.from('swim_records').delete().in('id',ids);
+    if(error)throw error;
+    records=records.filter(r=>!ids.some(id=>String(id)===String(r.id)));
+  }
+}
+
 async function cleanupExactDuplicatesForPlayerSilent(playerId){
   await loadCloud();
   const mine=records.filter(r=>String(r.swimmer_id)===String(playerId));
@@ -419,6 +464,7 @@ async function cleanupExactDuplicatesForPlayerSilent(playerId){
   for(const arr of groups.values()){
     if(arr.length<2)continue;
     const keep=chooseDuplicateKeeper(arr);
+    await preserveManualLaps(keep.id,arr.map(r=>r.id));
     arr.filter(r=>String(r.id)!==String(keep.id)).forEach(r=>deleteIds.push(r.id));
   }
   for(let i=0;i<deleteIds.length;i+=100){
@@ -442,6 +488,7 @@ async function cleanupAllExactDuplicates(){
   for(const arr of groups.values()){
     if(arr.length<2)continue;
     const keep=chooseDuplicateKeeper(arr);
+    try{await preserveManualLaps(keep.id,arr.map(r=>r.id));}catch(e){alert(String(e.message||e));return;}
     arr.filter(r=>String(r.id)!==String(keep.id)).forEach(r=>{deleteIds.push(r.id);affectedPlayers.add(String(r.swimmer_id));});
   }
   if(!deleteIds.length){alert('完全一致する重複記録はありませんでした。');return;}
@@ -473,6 +520,7 @@ async function cleanupJasfDuplicates(playerId){
   for(const arr of groups.values()){
     if(arr.length<2)continue;
     arr.sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')) || String(a.id).localeCompare(String(b.id)));
+    try{await preserveManualLaps(arr[0].id,arr.slice(1).map(r=>r.id));}catch(e){alert(String(e.message||e));return;}
     deleteIds.push(...arr.slice(1).map(r=>r.id));
   }
   if(!deleteIds.length){alert('整理する重複公式記録はありませんでした。');return;}
@@ -523,6 +571,7 @@ async function cleanupAllJasfDuplicates(){
   for(const arr of groups.values()){
     if(arr.length<2)continue;
     arr.sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')) || String(a.id).localeCompare(String(b.id)));
+    try{await preserveManualLaps(arr[0].id,arr.slice(1).map(r=>r.id));}catch(e){alert(String(e.message||e));return;}
     arr.slice(1).forEach(r=>{deleteIds.push(r.id);affectedPlayers.add(String(r.swimmer_id));});
   }
 
@@ -682,20 +731,19 @@ async function fetchJasfLatest(playerId){
         r.stroke===stroke && Number(r.distance)===Number(distance) && r.course===item.course &&
         (String(r.memo||'').includes('スクリーンショット解析から登録') || String(r.meet_name||'').includes('大会速報スクリーンショット'))
       );
-      if(provisionalRows.length){
-        const ids=provisionalRows.map(r=>r.id).filter(Boolean);
-        if(ids.length){
-          const {error:delError}=await sb.from('swim_records').delete().in('id',ids);
-          if(delError)throw delError;
-        }
-        for(const pr of provisionalRows){
-          const idx=records.findIndex(r=>String(r.id)===String(pr.id));
-          if(idx>=0)records.splice(idx,1);
-        }
+      // 置換先が確定するまでは速報も手入力ラップも削除しない。
+      const replaceProvisional=async keep=>{
+        // 同日同種目の速報が複数ある場合、予選・決勝を推測で統合しない。
+        if(provisionalRows.length===1)await removeReplacedRecords(keep,provisionalRows);
+      };
+      if(duplicate){
+        const keep=records.find(r=>String(r.swimmer_id)===String(playerId)&&isJasfOfficialRecord(r)&&
+          ((incomingResultId&&jasfResultIdFromMemo(r.memo)===incomingResultId)||
+           (r.stroke===stroke&&Number(r.distance)===Number(distance)&&r.course===item.course&&
+            Number(r.time_seconds)===Number(timeSeconds)&&String(r.record_date||'')===String(recordDate))));
+        if(keep)await replaceProvisional(keep);
+        unchanged++;continue;
       }
-
-      // 公式記録が既に保存済みなら、速報だけ整理して新規追加はしない。
-      if(duplicate){unchanged++;continue;}
 
       const currentBest=best(playerId,stroke,distance,item.course);
       const isBest=currentBest==null||timeSeconds<Number(currentBest)-0.001;
@@ -714,11 +762,13 @@ async function fetchJasfLatest(playerId){
         memo:`日本水泳連盟 ID:${item.athleteId} / ${item.year}年度 / result_id:${x.result_id||'-'}`,
         is_personal_best:isBest,is_jo_qualified:jo
       };
-      const {error}=await sb.from('swim_records').insert(payload);
+      const {data:inserted,error}=await sb.from('swim_records').insert(payload).select().single();
       if(error)throw error;
+      if(!inserted?.id)throw new Error('公式記録の保存を確認できませんでした。元の記録を残しました。');
+      records.push(inserted);
+      await replaceProvisional(inserted);
       saved++;
       savedRows.push(`${item.year}年度 ${stroke} ${distance}m・${item.course} ${x.result_time}`);
-      records.push({...payload,id:`jasf-temp-${Date.now()}-${saved}`});
       if(incomingResultId)existingOfficialResultIds.add(incomingResultId);
       existingOfficialFallbackKeys.add(fallbackKey);
     }
@@ -2236,7 +2286,8 @@ const addedLaps = manualLaps
     manual_id: m.id
   }));
 
-const combinedLaps = [...officialLaps, ...addedLaps]
+const officialDistances=new Set(officialLaps.map(l=>Number(l.distance)));
+const combinedLaps = [...officialLaps, ...addedLaps.filter(l=>!officialDistances.has(Number(l.distance)))]
   .sort((a, b) => Number(a.distance) - Number(b.distance));
 // 50m種目で25m通過だけ登録されている場合、ゴールタイムを終点として後半25mを計算する
 if (Number(r.distance) === 50 && !combinedLaps.some(l => Number(l.distance) === 50)) {
@@ -3378,7 +3429,7 @@ async function saveScreenshotRows(){
   await loadCloud();
   for(const r of rows){const timeSeconds=sec(r.time); const meet=joMeetInfo(today); const st=standard(r.playerId,r.stroke,r.distance,r.course,meet?.date||null); const currentBest=best(r.playerId,r.stroke,r.distance,r.course); const isBest=currentBest==null||timeSeconds<Number(currentBest)-0.001;
     if(isBest&&currentBest!=null)await sb.from('swim_records').update({is_personal_best:false}).eq('swimmer_id',r.playerId).eq('stroke',r.stroke).eq('distance',r.distance).eq('course',r.course).eq('is_personal_best',true);
-    const payload={swimmer_id:r.playerId,stroke:r.stroke,distance:r.distance,course:r.course,time_seconds:timeSeconds,meet_name:'大会速報スクリーンショット',record_date:today,memo:'📱速報 / スクリーンショット解析から登録 / 日本水泳連盟公式記録取得時に自動置換',is_personal_best:isBest,is_jo_qualified:st!=null&&timeSeconds<=st}; const existing=records.find(x=>recordExactKey(x)===recordExactKey(payload)); if(existing){ if(recordSourcePriority(existing)>=recordSourcePriority(payload)){skippedDuplicate++;continue;} const {error:delDupErr}=await sb.from('swim_records').delete().eq('id',existing.id); if(delDupErr){alert('重複整理エラー：'+delDupErr.message);return;} records=records.filter(x=>String(x.id)!==String(existing.id)); } const {data:inserted,error}=await sb.from('swim_records').insert(payload).select('id,swimmer_id,stroke,distance,course,time_seconds').single(); if(error){alert('保存エラー：'+error.message);return;} if(!inserted?.id){alert('保存確認に失敗しました。データベースへの追加を確認できませんでした。');return;} saved++;}
+    const payload={swimmer_id:r.playerId,stroke:r.stroke,distance:r.distance,course:r.course,time_seconds:timeSeconds,meet_name:'大会速報スクリーンショット',record_date:today,memo:'📱速報 / スクリーンショット解析から登録 / 日本水泳連盟公式記録取得時に自動置換',is_personal_best:isBest,is_jo_qualified:st!=null&&timeSeconds<=st}; const existing=records.find(x=>recordExactKey(x)===recordExactKey(payload)); if(existing){ if(recordSourcePriority(existing)>=recordSourcePriority(payload)){skippedDuplicate++;continue;} } const {data:inserted,error}=await sb.from('swim_records').insert(payload).select().single(); if(error){alert('保存エラー：'+error.message);return;} if(!inserted?.id){alert('保存確認に失敗しました。データベースへの追加を確認できませんでした。');return;} records.push(inserted); if(existing){try{await removeReplacedRecords(inserted,[existing]);}catch(e){alert(String(e.message||e));await loadCloud();return;}} saved++;}
   await loadCloud();renderHome();renderPlayers();renderAnalysis();const savedPlayerIds=[...new Set(rows.map(r=>r.playerId).filter(Boolean))];if(savedPlayerIds.length===1){showPlayerDetail(savedPlayerIds[0]);}alert(`${saved}件を保存しました！${skippedDuplicate?`\n完全一致の重複 ${skippedDuplicate}件は保存しませんでした。`:''}\nデータベースへの保存確認も完了しました。`);
 }
 const analysisUiState={playerId:'',events:new Set(),screenshotOpen:false,meet:'tokyo'};
