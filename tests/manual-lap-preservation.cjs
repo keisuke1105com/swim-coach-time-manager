@@ -26,8 +26,11 @@ function setup(initial,{failInsert=false,hideSaved=false,failDelete=false}={}){
   assert.deepEqual(x.events,['copy','delete']);
   await x.c.preserveManualLaps('new',['old']);assert.equal(x.manual.length,4,'retry does not duplicate laps');
   x=setup([lap('old',25,12),lap('new',25,13)]);
-  await assert.rejects(()=>x.c.removeReplacedRecords({id:'new'},[{id:'old'}]),/異なる/);
-  assert.equal(x.manual.length,2);assert.ok(!x.events.includes('delete'),'conflict preserves both records');
+  await x.c.removeReplacedRecords({id:'new'},[{id:'old'}]);
+  assert.deepEqual(x.manual,[lap('new',25,13)],'manual conflict keeps destination and does not stop sync');
+  x=setup([lap('old',25,12),lap('old',50,29),lap('old',75,46),lap('new',50,28.2)]);
+  await x.c.removeReplacedRecords({id:'new'},[{id:'old'}]);
+  assert.deepEqual(x.manual.map(m=>[m.distance,m.cumulative_seconds]).sort((a,b)=>a[0]-b[0]),[[25,12],[50,28.2],[75,46]],'overlapping checkpoint cannot discard manual-only 25m/75m');
   x=setup([lap('old',25,12),lap('new',25,12)]);
   await x.c.removeReplacedRecords({id:'new'},[{id:'old'}]);assert.equal(x.manual.length,1,'identical checkpoint remains');
   for(const options of [{failInsert:true},{hideSaved:true},{failDelete:true}]){
@@ -72,7 +75,7 @@ function setup(initial,{failInsert=false,hideSaved=false,failDelete=false}={}){
   const start=html.indexOf('const officialLaps = laps.map');
   const end=html.indexOf('// 50m種目',start);
   const display=vm.runInNewContext(html.slice(start,end)+';combinedLaps',{
-    laps:[{distance:50,cumulative_time:'0:28.10'}],manualLaps:[lap('new',25,12),lap('new',50,29)],r:{id:'new'},fmt:String});
-  assert.deepEqual(Array.from(display,l=>[l.distance,l.lap_source]),[[25,'manual'],[50,'official']]);
+    laps:[{distance:50,cumulative_time:'0:28.10'}],manualLaps:[lap('new',25,12),lap('new',50,29),lap('new',75,46)],r:{id:'new'},fmt:String});
+  assert.deepEqual(Array.from(display,l=>[l.distance,l.lap_source]),[[25,'manual'],[50,'official'],[75,'manual']]);
   console.log('PASS: replacement/cascade, duplicate cleanup, retry, conflicts, insert/read/delete failures, official/manual display');
 })().catch(e=>{console.error(e);process.exitCode=1});

@@ -411,7 +411,7 @@ async function recalcPersonalBests(playerIds){
 }
 
 // 置換元は、全ての手入力ラップの保存先を確認してから削除する。
-// 同じ距離に異なる手入力値がある場合は、自動でどちらかを捨てない。
+// 同距離の手入力値は保存先を優先し、表示時は公式ラップを優先する。
 async function preserveManualLaps(keepId,sourceIds){
   const ids=[...new Set(sourceIds.map(String))].filter(id=>id!==String(keepId));
   if(!ids.length)return;
@@ -423,9 +423,9 @@ async function preserveManualLaps(keepId,sourceIds){
     for(const lap of source){
       const distance=Number(lap.distance),seconds=Number(lap.cumulative_seconds);
       if(byDistance.has(distance)){
-        if(Math.abs(byDistance.get(distance)-seconds)>0.000001){
-          throw new Error('同じ距離に異なる手入力ラップがあります。ラップを保護するため元の記録を残しました。');
-        }
+        // 同期を止めず、保存先にある通過タイムを維持する。
+        // 公式と重なる距離も保存は残し、画面では公式値を表示する。
+        continue;
       }else{
         byDistance.set(distance,seconds);
         additions.push({record_id:keepId,distance,cumulative_seconds:seconds});
