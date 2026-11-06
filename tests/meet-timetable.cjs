@@ -7,7 +7,7 @@ assert.throws(()=>T.parsePages([['予定時刻','1 女子 全年齢 100m 自由�
 assert.throws(()=>T.parsePages([['予定時刻','1 女子 全年齢 100m 自由形 タイム決勝 1 10:00','1 男子 全年齢 100m 自由形 タイム決勝 1 10:02']]),/重複/);
 const entry={meet_id:'m',course:'短水路',stroke:'自由形',distance:100};
 const time={...result.rows[0],meet_id:'m',race_date:'2026-11-08',course:'短水路'};
-assert.equal(T.forEntry(entry,{gender:'女子'},[time]).length,1);assert.equal(T.forEntry(entry,{gender:'男子'},[time]).length,0);assert.equal(T.forEntry({...entry,course:'長水路'},{gender:'女子'},[time]).length,0);
+assert.equal(T.forEntry(entry,{gender:'女子'},[time]).length,1);assert.equal(T.forEntry(entry,{gender:'男子'},[time])[0].scheduled_time,'10:32');assert.equal(T.forEntry({...entry,course:'長水路'},{gender:'女子'},[time]).length,0);
 assert.equal(T.forEntry({...entry,meet_id:'other'},{gender:'女子'},[time]).length,0);
 const e={...entry,timetable:[time]},program={race_date:time.race_date,program_number:1,round:'タイム決勝',heat:2,lane:5};
 assert.ok(T.timeForProgram(e,program));assert.equal(T.timeForProgram(e,{...program,program_number:2}),undefined);assert.equal(T.timeForProgram(e,{...program,round:'予選'}),undefined);assert.equal(T.timeForProgram(e,{...program,race_date:'2026-11-09'}),undefined);
@@ -17,3 +17,15 @@ assert.ok(c.window.meetProgramHtml(e).includes('10:30 競技開始予定'));
 assert.ok(!c.window.meetProgramHtml({...e,programs:[{...program,program_number:2}]}).includes('10:30'));
 assert.ok(T.html({...e,timetable:[{...time,race_date:'<script>'}]}).includes('&lt;script&gt;'));
 console.log('PASS: explicit/blank times, duplicate-number warning, invalid/duplicate times rejected, meet/course/gender/event/date/round/number matching, race vs heat labels, before/after program import, escaping');
+
+const maleTimes=T.forEntry(entry,{gender:'男子'},[time]);
+assert.equal(maleTimes[0].estimated,true);assert.equal(maleTimes[0].program_number,null);
+assert.ok(T.html({...entry,timetable:maleTimes}).includes('10:32 競技開始の目安（女子＋2分）'));
+assert.ok(c.window.meetProgramHtml({...entry,timetable:maleTimes,programs:[{...program,program_number:2}]}).includes('10:32 競技開始の目安（女子＋2分）'));
+const explicit={...time,gender:'男子',program_number:2,scheduled_time:'10:40:00'};
+assert.deepEqual(T.forEntry(entry,{gender:'男子'},[time,explicit]),[explicit]);
+assert.equal(T.forEntry(entry,{gender:'男子'},[time,{...time,program_number:3}]).length,0);
+assert.equal(T.plusTwo('10:59:00'),'11:01');assert.equal(T.plusTwo('23:59'),null);
+assert.equal(T.referenceFor({gender:'男子',stroke:'自由形',distance:100,round:'タイム決勝',heats:0},result.rows),null);
+assert.equal(T.timeForProgram({...entry,timetable:maleTimes},{...program,race_date:'2026-11-09'}),undefined);
+console.log('PASS: male estimate +2 minutes, explicit time priority, date/course/round separation, ambiguous reference rejection, midnight guard, preview and display labels');
