@@ -2,6 +2,17 @@
  'use strict';
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const time=v=>{if(v==null||!Number.isFinite(Number(v)))return '未登録';const n=Math.round(Number(v)*100),m=Math.floor(n/6000);return (m?m+':':'')+(m?String(Math.floor(n%6000/100)).padStart(2,'0'):String(Math.floor(n/100)))+'.'+String(n%100).padStart(2,'0')};
+ // Prefer the published race order; keep entries without schedule information last.
+ const raceNumber=r=>Number.isInteger(Number(r?.program_number))&&Number(r.program_number)>0?Number(r.program_number):Infinity;
+ function eventOrderKey(entry){
+  const rows=(entry.programs?.length?entry.programs:entry.timetable||[]).slice().sort((a,b)=>String(a.race_date||'9999').localeCompare(String(b.race_date||'9999'))||raceNumber(a)-raceNumber(b)||String(a.scheduled_time||'').localeCompare(String(b.scheduled_time||'')));
+  const first=rows[0];
+  return {date:first?.race_date||'9999',number:raceNumber(first),time:first?.scheduled_time||'99:99'};
+ }
+ function compareEvents(a,b){
+  const x=eventOrderKey(a),y=eventOrderKey(b);
+  return x.date.localeCompare(y.date)||(x.number===y.number?0:x.number-y.number)||x.time.localeCompare(y.time)||a.stroke.localeCompare(b.stroke,'ja')||a.distance-b.distance;
+ }
  root.renderMeetEventList=function(meet,entries,players){
   const list=entries.filter(e=>e.meet_id===meet.id);
   if(!list.length)return '<p class="small muted">出場種目は未登録です。「PDFから種目を追加」で申込一覧表を取り込めます。</p>';
@@ -18,7 +29,7 @@
   const grouped=new Map();for(const e of list){if(!grouped.has(e.swimmer_id))grouped.set(e.swimmer_id,[]);grouped.get(e.swimmer_id).push(e)}
   return '<details class="me-event-list" open><summary>出場種目（'+list.length+'件）</summary>'+[...grouped].map(([id,events])=>{
    const p=players.find(p=>p.id===id);
-   return '<div class="me-entry-player"><b>'+esc(p?.name||'未登録の選手')+'</b><div class="me-scroll"><table class="me-table"><thead><tr><th>種目</th><th>申込タイム</th><th>大会水路</th><th>クラス</th></tr></thead><tbody>'+events.sort((a,b)=>a.stroke.localeCompare(b.stroke,'ja')||a.distance-b.distance).map(e=>'<tr><td>'+esc(e.distance)+'m '+esc(e.stroke)+(root.meetProgramHtml?.(e)||'')+'</td><td>'+esc(time(e.entry_seconds))+' '+esc(e.entry_mark||'')+'</td><td>'+esc(e.course)+'</td><td>'+esc(e.entry_class||'—')+'</td></tr>').join('')+'</tbody></table></div></div>';
+   return '<div class="me-entry-player"><b>'+esc(p?.name||'未登録の選手')+'</b><div class="me-scroll"><table class="me-table"><thead><tr><th>種目</th><th>申込タイム</th><th>大会水路</th><th>クラス</th></tr></thead><tbody>'+events.slice().sort(compareEvents).map(e=>'<tr><td>'+esc(e.distance)+'m '+esc(e.stroke)+(root.meetProgramHtml?.(e)||'')+'</td><td>'+esc(time(e.entry_seconds))+' '+esc(e.entry_mark||'')+'</td><td>'+esc(e.course)+'</td><td>'+esc(e.entry_class||'—')+'</td></tr>').join('')+'</tbody></table></div></div>';
   }).join('')+'<p class="small muted">S：短水路での申込、L：長水路での申込、＊：PDF原表の記号。大会水路とは別の情報です。</p></details>';
  };
  root.showMeetPdfImport=function({meet,players,entries,client,onSaved}){
