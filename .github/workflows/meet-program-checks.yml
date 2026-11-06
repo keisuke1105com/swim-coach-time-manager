@@ -1,0 +1,26 @@
+name: Meet program checks
+on:
+  pull_request:
+    paths:
+      - index.html
+      - meet-entry-pdf.js
+      - meet-entry-import-ui.js
+      - meet-program-*.js
+      - supabase/setup/meet-program.sql
+      - tests/meet-program.cjs
+      - .github/workflows/meet-program-checks.yml
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node tests/meet-program.cjs
+      - run: node tests/meet-entry-pdf.cjs
+      - run: node tests/meet-schedules.cjs
+      - run: node tests/public-meet-schedule.cjs
+      - run: node tests/analysis-ui.cjs
