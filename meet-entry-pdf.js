@@ -70,7 +70,7 @@
   return {player:p,reason:!p.birth_date?'生年月日未登録。選手名を確認してください。':''};
  }
  let loading;
- async function readPdf(file){
+ async function readPdf(file,parser=parseLines,lineReader=linesFromItems){
   if(!file||!file.size||file.size>10*1024*1024)throw Error('10MB以下のPDFを選択してください。');
   if(!/\.pdf$/i.test(file.name))throw Error('PDFファイルを選択してください。');
   const data=new Uint8Array(await file.arrayBuffer());
@@ -85,9 +85,9 @@
    const pages=[];
    for(let i=1;i<=pdf.numPages;i++){
     const page=await pdf.getPage(i),content=await page.getTextContent();
-    pages.push(linesFromItems(content.items));page.cleanup();
+    pages.push(lineReader(content.items,page.getViewport({scale:1}).width));page.cleanup();
    }
-   return parseLines(pages);
+   return parser(pages);
   }finally{await task.destroy()}
  }
  const api={normalize,seconds,linesFromItems,parseLines,matchPlayer,readPdf};

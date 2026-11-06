@@ -8,7 +8,7 @@
   const schedule=root.MeetSchedules?.forMeet(meet);
   if(schedule){
    const rows=list.map(entry=>{const player=players.find(p=>p.id===entry.swimmer_id);return {entry,player,race:root.MeetSchedules.findRace(schedule,entry,player)}});
-   const table=items=>'<div class="me-scroll"><table class="me-table"><thead><tr><th>競技番号／種目</th><th>選手</th><th>申込タイム</th><th>クラス</th></tr></thead><tbody>'+items.map(({entry:e,player:p,race:r})=>'<tr><td>'+(r?'No.'+r.number+' '+esc(r.round)+'<br>':'')+esc(p?.gender||'')+' '+esc(e.distance)+'m '+esc(e.stroke)+'</td><td>'+esc(p?.name||'未登録の選手')+'</td><td>'+esc(time(e.entry_seconds))+' '+esc(e.entry_mark||'')+'<br><small>大会：'+esc(e.course)+'</small></td><td>'+esc(e.entry_class||'—')+'</td></tr>').join('')+'</tbody></table></div>';
+   const table=items=>'<div class="me-scroll"><table class="me-table"><thead><tr><th>競技番号／種目</th><th>選手</th><th>申込タイム</th><th>クラス</th></tr></thead><tbody>'+items.map(({entry:e,player:p,race:r})=>'<tr><td>'+(r?'No.'+r.number+' '+esc(r.round)+'<br>':'')+esc(p?.gender||'')+' '+esc(e.distance)+'m '+esc(e.stroke)+(root.meetProgramHtml?.(e)||'')+'</td><td>'+esc(p?.name||'未登録の選手')+'</td><td>'+esc(time(e.entry_seconds))+' '+esc(e.entry_mark||'')+'<br><small>大会：'+esc(e.course)+'</small></td><td>'+esc(e.entry_class||'—')+'</td></tr>').join('')+'</tbody></table></div>';
    const unknown=rows.filter(r=>!r.race);
    return '<div class="me-event-list"><h4>日別の出場種目（'+list.length+'件）</h4>'+schedule.days.map(day=>{
     const items=rows.filter(r=>r.race?.day===day.day).sort((a,b)=>a.race.number-b.race.number||String(a.player?.name||'').localeCompare(String(b.player?.name||''),'ja'));
@@ -18,7 +18,7 @@
   const grouped=new Map();for(const e of list){if(!grouped.has(e.swimmer_id))grouped.set(e.swimmer_id,[]);grouped.get(e.swimmer_id).push(e)}
   return '<details class="me-event-list" open><summary>出場種目（'+list.length+'件）</summary>'+[...grouped].map(([id,events])=>{
    const p=players.find(p=>p.id===id);
-   return '<div class="me-entry-player"><b>'+esc(p?.name||'未登録の選手')+'</b><div class="me-scroll"><table class="me-table"><thead><tr><th>種目</th><th>申込タイム</th><th>大会水路</th><th>クラス</th></tr></thead><tbody>'+events.sort((a,b)=>a.stroke.localeCompare(b.stroke,'ja')||a.distance-b.distance).map(e=>'<tr><td>'+esc(e.distance)+'m '+esc(e.stroke)+'</td><td>'+esc(time(e.entry_seconds))+' '+esc(e.entry_mark||'')+'</td><td>'+esc(e.course)+'</td><td>'+esc(e.entry_class||'—')+'</td></tr>').join('')+'</tbody></table></div></div>';
+   return '<div class="me-entry-player"><b>'+esc(p?.name||'未登録の選手')+'</b><div class="me-scroll"><table class="me-table"><thead><tr><th>種目</th><th>申込タイム</th><th>大会水路</th><th>クラス</th></tr></thead><tbody>'+events.sort((a,b)=>a.stroke.localeCompare(b.stroke,'ja')||a.distance-b.distance).map(e=>'<tr><td>'+esc(e.distance)+'m '+esc(e.stroke)+(root.meetProgramHtml?.(e)||'')+'</td><td>'+esc(time(e.entry_seconds))+' '+esc(e.entry_mark||'')+'</td><td>'+esc(e.course)+'</td><td>'+esc(e.entry_class||'—')+'</td></tr>').join('')+'</tbody></table></div></div>';
   }).join('')+'<p class="small muted">S：短水路での申込、L：長水路での申込、＊：PDF原表の記号。大会水路とは別の情報です。</p></details>';
  };
  root.showMeetPdfImport=function({meet,players,entries,client,onSaved}){
