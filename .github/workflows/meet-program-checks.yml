@@ -6,8 +6,11 @@ on:
       - meet-entry-pdf.js
       - meet-entry-import-ui.js
       - meet-program-*.js
+      - meet-timetable.js
       - supabase/setup/meet-program.sql
+      - supabase/setup/meet-timetable.sql
       - tests/meet-program.cjs
+      - tests/meet-timetable.cjs
       - .github/workflows/meet-program-checks.yml
 permissions:
   contents: read
@@ -20,6 +23,7 @@ jobs:
         with:
           node-version: '24'
       - run: node tests/meet-program.cjs
+      - run: node tests/meet-timetable.cjs
       - run: node tests/meet-entry-pdf.cjs
       - run: node tests/meet-schedules.cjs
       - run: node tests/public-meet-schedule.cjs
