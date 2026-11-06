@@ -4,7 +4,7 @@
  const label=r=>'No.'+r.program_number+' ／ '+r.round+' ／ '+r.heat+'組 ／ '+r.lane+'レーン';
  root.meetProgramHtml=function(entry){
   const rows=(entry.programs||[]).slice().sort((a,b)=>String(a.race_date).localeCompare(String(b.race_date))||a.program_number-b.program_number);
-  return rows.length?'<div class="me-program">'+rows.map(r=>{const time=root.MeetTimetable?.timeForProgram(entry,r);return '<div><b>'+esc(label(r))+'</b>'+(time?'<br><b>🕒 '+esc(time.scheduled_time.slice(0,5))+' 競技開始予定</b><br><small>各組の発走時刻ではありません</small>':'')+'<br><small>'+esc(r.race_date)+'</small></div>';}).join('')+'</div>':(root.MeetTimetable?.html(entry)||'');
+  return rows.length?'<div class="me-program">'+rows.map(r=>{const time=root.MeetTimetable?.timeForProgram(entry,r);return '<div><b>'+esc(label(r))+'</b>'+(time?'<br><b>🕒 '+esc(time.scheduled_time.slice(0,5))+' '+esc(root.MeetTimetable.timeLabel(time))+'</b><br><small>各組の発走時刻ではありません</small>':'')+'<br><small>'+esc(r.race_date)+'</small></div>';}).join('')+'</div>':(root.MeetTimetable?.html(entry)||'');
  };
  root.showMeetProgramImport=function({meet,players,entries,client,onSaved}){
   if(document.getElementById('meetProgramDialog'))return;

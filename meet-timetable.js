@@ -21,18 +21,41 @@
   const seen=new Set();for(const r of timed){if(seen.has(r.program_number))throw Error('予定時刻のある競技番号が重複しています。原表を確認してください。');seen.add(r.program_number);}
   return {rows,pages:pages.length,warnings:[...new Set(warnings)],title:lines.find(l=>l.includes('予定時刻')&&l.includes('大会'))||''};
  }
- function forEntry(entry,player,times){return times.filter(t=>t.meet_id===entry.meet_id&&t.course===entry.course&&t.gender===player?.gender&&t.stroke===entry.stroke&&Number(t.distance)===Number(entry.distance));}
+ function plusTwo(time){
+  const m=String(time||'').match(/^(\d{2}):(\d{2})(?::00)?$/);if(!m||Number(m[1])>23||Number(m[2])>59)return null;
+  const minutes=Number(m[1])*60+Number(m[2])+2;if(minutes>=1440)return null;
+  return String(Math.floor(minutes/60)).padStart(2,'0')+':'+String(minutes%60).padStart(2,'0');
+ }
+ function referenceFor(row,rows){
+  if(row.gender!=='男子'||row.scheduled_time||row.heats===0)return null;
+  const matches=rows.filter(t=>t.gender==='女子'&&t.scheduled_time&&!t.estimated&&t.stroke===row.stroke&&Number(t.distance)===Number(row.distance)&&t.round===row.round&&t.race_date===row.race_date&&t.meet_id===row.meet_id&&t.course===row.course);
+  return matches.length===1&&plusTwo(matches[0].scheduled_time)?matches[0]:null;
+ }
+ function forEntry(entry,player,times){
+  const matching=times.filter(t=>t.meet_id===entry.meet_id&&t.course===entry.course&&t.stroke===entry.stroke&&Number(t.distance)===Number(entry.distance));
+  const direct=matching.filter(t=>t.gender===player?.gender);if(player?.gender!=='男子')return direct;
+  const estimates=[];
+  for(const female of matching.filter(t=>t.gender==='女子'&&!t.estimated)){
+   if(direct.some(t=>t.race_date===female.race_date&&t.round===female.round))continue;
+   const reference=referenceFor({...female,gender:'男子',scheduled_time:null},matching);
+   if(reference!==female)continue;
+   estimates.push({...female,gender:'男子',program_number:null,scheduled_time:plusTwo(female.scheduled_time),estimated:true,reference_number:female.program_number});
+  }
+  return [...direct,...estimates];
+ }
+ function timeLabel(time){return time.estimated?'競技開始の目安（女子＋2分）':'競技開始予定';}
+
  function html(entry){
   const times=entry.timetable||[],programs=entry.programs||[];
   if(programs.length)return '';
-  return times.map(t=>'<div class="me-program-time"><b>🕒 '+esc(t.scheduled_time.slice(0,5))+' 競技開始予定</b><br><small>'+esc(t.race_date)+' ／ No.'+esc(t.program_number)+' '+esc(t.round)+'（各組の発走時刻ではありません）</small></div>').join('');
+  return times.map(t=>'<div class="me-program-time"><b>🕒 '+esc(t.scheduled_time.slice(0,5))+' '+esc(timeLabel(t))+'</b><br><small>'+esc(t.race_date)+(t.program_number==null?' ／ ':' ／ No.'+esc(t.program_number)+' ')+esc(t.round)+'（各組の発走時刻ではありません）</small></div>').join('');
  }
- function timeForProgram(entry,program){return (entry.timetable||[]).find(t=>t.race_date===program.race_date&&t.round===program.round&&Number(t.program_number)===Number(program.program_number));}
- root.MeetTimetable={parsePages,forEntry,html,timeForProgram,readPdf:file=>root.MeetEntryPdf.readPdf(file,parsePages)};
+ function timeForProgram(entry,program){return (entry.timetable||[]).find(t=>t.race_date===program.race_date&&t.round===program.round&&(t.estimated||Number(t.program_number)===Number(program.program_number)));}
+ root.MeetTimetable={parsePages,forEntry,html,timeForProgram,plusTwo,referenceFor,timeLabel,readPdf:file=>root.MeetEntryPdf.readPdf(file,parsePages)};
  root.showMeetTimetableImport=function({meet,entries=[],client,onSaved}){
   if(document.getElementById('meetTimetableDialog'))return;
   const overlay=document.createElement('div');overlay.id='meetTimetableDialog';overlay.className='me-pdf-overlay';
-  overlay.innerHTML='<form class="me-pdf-dialog" role="dialog" aria-modal="true" aria-labelledby="timetableTitle"><h3 id="timetableTitle">予定時刻PDFを取り込む</h3><p><b>'+esc(meet.name)+'</b></p><p>山梨県秋季大会の競技予定時刻表に対応。PDFは端末内で読み取ります。記載のある競技開始予定時刻だけを保存し、空欄は推測しません。</p><label>競技日<input id="timetableDate" type="date" value="'+esc(meet.meet_date)+'" required></label><label>大会の水路<select id="timetableCourse"><option>長水路</option><option>短水路</option></select></label><label>競技予定時刻PDF<input id="timetableFile" type="file" accept="application/pdf,.pdf"></label><p id="timetableStatus" role="status" aria-live="polite"></p><p id="timetableError" role="alert" class="shotBad"></p><div id="timetablePreview"></div><div class="me-actions"><button type="button" id="timetableClose" class="secondary">閉じる</button><button type="submit" id="timetableSave" disabled>予定時刻を保存</button></div></form>';
+  overlay.innerHTML='<form class="me-pdf-dialog" role="dialog" aria-modal="true" aria-labelledby="timetableTitle"><h3 id="timetableTitle">予定時刻PDFを取り込む</h3><p><b>'+esc(meet.name)+'</b></p><p>山梨県秋季大会の競技予定時刻表に対応。PDFは端末内で読み取ります。記載された予定時刻を保存します。男子の空欄は同種目の女子＋2分を目安として表示します。</p><label>競技日<input id="timetableDate" type="date" value="'+esc(meet.meet_date)+'" required></label><label>大会の水路<select id="timetableCourse"><option>長水路</option><option>短水路</option></select></label><label>競技予定時刻PDF<input id="timetableFile" type="file" accept="application/pdf,.pdf"></label><p id="timetableStatus" role="status" aria-live="polite"></p><p id="timetableError" role="alert" class="shotBad"></p><div id="timetablePreview"></div><div class="me-actions"><button type="button" id="timetableClose" class="secondary">閉じる</button><button type="submit" id="timetableSave" disabled>予定時刻を保存</button></div></form>';
   document.body.appendChild(overlay);const q=id=>overlay.querySelector('#'+id);let parsed=null,busy=false;
   const update=()=>q('timetableSave').disabled=busy||!parsed||!q('timetableConfirm')?.checked||!q('timetableDate').value;
   const lock=value=>{busy=value;for(const id of ['timetableDate','timetableCourse','timetableFile','timetableClose'])q(id).disabled=value;if(q('timetableConfirm'))q('timetableConfirm').disabled=value;update();};
@@ -43,7 +66,7 @@
    parsed=null;q('timetablePreview').innerHTML='';q('timetableError').textContent='';if(!q('timetableFile').files[0]){update();return;}lock(true);q('timetableStatus').textContent='読み取り中…';
    try{
     parsed=await root.MeetTimetable.readPdf(q('timetableFile').files[0]);const timed=parsed.rows.filter(r=>r.scheduled_time);
-    q('timetablePreview').innerHTML='<div class="notice">PDF：'+esc(parsed.title)+'<br>'+parsed.rows.length+'競技／時刻記載 '+timed.length+'競技／空欄 '+(parsed.rows.length-timed.length)+'競技。大会名・競技日・水路を確認してください。空欄は保存しません。訂正版は同じ日・水路・競技番号の時刻を更新します。<br>'+parsed.warnings.map(esc).join('<br>')+'</div><div class="me-scroll"><table class="me-table"><thead><tr><th>競技</th><th>競技開始予定</th></tr></thead><tbody>'+parsed.rows.map(r=>'<tr><td>No.'+r.program_number+' '+esc(r.gender+' '+r.distance+'m '+r.stroke+' '+r.round)+'</td><td>'+esc(r.scheduled_time||'原表に記載なし')+'</td></tr>').join('')+'</tbody></table></div><p class="small muted">各組の発走時刻ではありません。当日の競技進行により前後する場合があります。PDFで空欄になった既存の時刻は自動削除しません。</p><label class="me-pdf-confirm"><input type="checkbox" id="timetableConfirm">登録先・競技日・水路と予定時刻を確認しました</label>';
+    q('timetablePreview').innerHTML='<div class="notice">PDF：'+esc(parsed.title)+'<br>'+parsed.rows.length+'競技／時刻記載 '+timed.length+'競技／空欄 '+(parsed.rows.length-timed.length)+'競技。大会名・競技日・水路を確認してください。空欄は公式時刻として保存せず、男子は女子＋2分を目安表示します。訂正版は同じ日・水路・競技番号の時刻を更新します。<br>'+parsed.warnings.map(esc).join('<br>')+'</div><div class="me-scroll"><table class="me-table"><thead><tr><th>競技</th><th>競技開始予定</th></tr></thead><tbody>'+parsed.rows.map(r=>'<tr><td>No.'+r.program_number+' '+esc(r.gender+' '+r.distance+'m '+r.stroke+' '+r.round)+'</td><td>'+esc(r.scheduled_time||(root.MeetTimetable.referenceFor(r,parsed.rows)?root.MeetTimetable.plusTwo(root.MeetTimetable.referenceFor(r,parsed.rows).scheduled_time)+' 目安（女子＋2分）':'原表に記載なし'))+'</td></tr>').join('')+'</tbody></table></div><p class="small muted">各組の発走時刻ではありません。当日の競技進行により前後する場合があります。PDFで空欄になった既存の時刻は自動削除しません。</p><label class="me-pdf-confirm"><input type="checkbox" id="timetableConfirm">登録先・競技日・水路と予定時刻を確認しました</label>';
     q('timetableStatus').textContent='読み取りが完了しました。';
    }catch(e){q('timetableError').textContent=String(e.message||e);q('timetableStatus').textContent='';}finally{lock(false);}
   };
@@ -51,7 +74,7 @@
    ev.preventDefault();if(busy||q('timetableSave').disabled)return;lock(true);q('timetableError').textContent='';q('timetableStatus').textContent='保存中…';
    try{
     const result=await client.rpc('import_swim_meet_timetable',{p_meet_id:meet.id,p_race_date:q('timetableDate').value,p_course:q('timetableCourse').value,p_rows:parsed.rows.filter(r=>r.scheduled_time).map(({heats,...r})=>r),p_source:q('timetableFile').files[0].name});
-    if(result.error)throw result.error;await onSaved();overlay.innerHTML='<div class="me-pdf-dialog" role="dialog" aria-modal="true" aria-label="保存完了"><h3>予定時刻を保存しました</h3><p>'+Number(result.data?.saved||0)+'競技を登録しました。男子など原表で時刻が空欄の種目は予定時刻を表示しません。</p><button id="timetableDone">閉じる</button></div>';overlay.querySelector('#timetableDone').onclick=()=>overlay.remove();overlay.querySelector('#timetableDone').focus();
+    if(result.error)throw result.error;await onSaved();overlay.innerHTML='<div class="me-pdf-dialog" role="dialog" aria-modal="true" aria-label="保存完了"><h3>予定時刻を保存しました</h3><p>'+Number(result.data?.saved||0)+'競技を登録しました。男子の空欄は、同種目の女子＋2分を目安として表示します。</p><button id="timetableDone">閉じる</button></div>';overlay.querySelector('#timetableDone').onclick=()=>overlay.remove();overlay.querySelector('#timetableDone').focus();
    }catch(e){q('timetableError').textContent='保存できませんでした：'+String(e.message||e);q('timetableStatus').textContent='';lock(false);}
   };
   const courses=[...new Set(entries.filter(e=>e.meet_id===meet.id).map(e=>e.course))];if(courses.length===1)q('timetableCourse').value=courses[0];
