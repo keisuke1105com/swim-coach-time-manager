@@ -57,16 +57,47 @@ const clean=x=>JSON.parse(JSON.stringify(x));
  assert.ok(ui.window.renderPublicMeetEvents({id:'future'},{}).includes('まだ登録'));
  assert.ok(ui.window.renderPublicMeetEvents({...meet,events:[{stroke:'<script>',distance:25,course:'長水路'}]},{gender:'男子'}).includes('&lt;script&gt;'));
 
+ const detailed=structuredClone(rows);
+ detailed.swim_meet_entries=detailed.swim_meet_entries.map((r,i)=>({...r,id:'entry-'+i}));
+ detailed.swim_meet_entries.push({id:'entry-4',swimmer_id:'own',meet_id:'future',stroke:'自由形',distance:200,course:'短水路'});
+ detailed.swim_meet_programs=[
+  {entry_id:'entry-3',race_date:'2026-11-08',round:'タイム決勝',program_number:4,heat:2,lane:0,source:'private.pdf'},
+  {entry_id:'entry-4',race_date:'2026-11-08',round:'タイム決勝',program_number:32,heat:3,lane:5},
+  {entry_id:'entry-2',race_date:'2026-11-08',round:'決勝',program_number:999,heat:9,lane:9,source:'other-private.pdf'}
+ ];
+ detailed.swim_meet_timetable=[
+  {meet_id:'future',race_date:'2026-11-08',gender:'女子',course:'短水路',stroke:'平泳ぎ',distance:100,round:'タイム決勝',program_number:3,scheduled_time:'10:43:00',source:'private-times.pdf'},
+  {meet_id:'future',race_date:'2026-11-08',gender:'女子',course:'短水路',stroke:'自由形',distance:200,round:'タイム決勝',program_number:31,scheduled_time:'15:01:00'},
+ ];
+ const detailsLog=[],details=clean(await context.getPublicMeetSchedule(client(detailed,detailsLog),'own','2026-11-07','男子'));
+ const future=details[0],breast=future.events.find(e=>e.stroke==='平泳ぎ'),free=future.events.find(e=>e.stroke==='自由形');
+ assert.equal(breast.programs[0].scheduled_time,'10:45');assert.equal(breast.programs[0].time_estimated,true);assert.equal(breast.programs[0].lane,0);
+ assert.equal(free.programs[0].program_number,32);assert.equal(free.programs[0].scheduled_time,'15:03');
+ for(const forbidden of ['entry_id','swimmer_id','source','private','999','entry_seconds','entry_class'])assert.ok(!JSON.stringify(details).includes(forbidden));
+ assert.deepEqual(clean(detailsLog.find(c=>c.table==='swim_meet_programs').inFilters),[['entry_id',['entry-3','entry-4']]]);
+ const detailHtml=ui.window.renderPublicMeetEvents({...future,events:[free,breast]},{gender:'男子'});
+ assert.ok(detailHtml.indexOf('No.4｜')<detailHtml.indexOf('No.32｜'));assert.ok(detailHtml.includes('2組 ／ 0レーン'));assert.ok(detailHtml.includes('15:03 競技開始の目安（女子＋2分）'));
+ detailed.swim_meet_timetable.push({...detailed.swim_meet_timetable[0],gender:'男子',program_number:4,scheduled_time:'10:50:00'});
+ const explicit=clean(await context.getPublicMeetSchedule(client(detailed),'own','2026-11-07','男子'))[0].events.find(e=>e.stroke==='平泳ぎ').programs[0];
+ assert.equal(explicit.scheduled_time,'10:50');assert.equal(explicit.time_estimated,false);
+ const explicitHtml=ui.window.renderPublicMeetEvents({events:[{stroke:'平泳ぎ',distance:100,course:'短水路',programs:[explicit]}]},{gender:'男子'});assert.ok(explicitHtml.includes('10:50 競技開始予定'));
+ const withoutPrograms={...detailed,swim_meet_programs:[]};
+ const onlyTimes=clean(await context.getPublicMeetSchedule(client(withoutPrograms),'own','2026-11-07','男子'))[0];
+ assert.ok(ui.window.renderPublicMeetEvents(onlyTimes,{gender:'男子'}).includes('10:50 競技開始予定'));
+ const malicious=ui.window.renderPublicMeetEvents({events:[{stroke:'<script>',distance:50,course:'短水路',programs:[{race_date:'<img>',round:'<svg>',program_number:1,heat:1,lane:1,scheduled_time:'<iframe>'}]}]},{});
+ assert.ok(!malicious.includes('<script>'));assert.ok(malicious.includes('&lt;svg&gt;'));
+
  // Exercise the actual handler: disabled/unconsented/inactive tokens never reach meet queries.
  const raw=fs.readFileSync(path.join(base,'supabase/functions/swimmer-public-profile/index.ts'),'utf8');
  let handler,db;const handlerContext={Response,URL,JO_STANDARDS:[],YAMANASHI_2026_STANDARDS:[],console,
-  createClient:()=>db,mergePublicLaps:()=>[],getPublicMeetSchedule:(sb,id)=>context.getPublicMeetSchedule(sb,id,'2026-10-28'),
+  createClient:()=>db,mergePublicLaps:()=>[],getPublicMeetSchedule:(sb,id,today,gender)=>context.getPublicMeetSchedule(sb,id,'2026-10-28',gender),
   Deno:{env:{get:()=> 'test-config'},serve:fn=>handler=fn}};
  vm.runInNewContext(stripTypeScriptTypes(raw.replace(/^import .*;\n/gm,'')),handlerContext);
  const request=t=>new Request('https://example.test/profile?token='+t+'&swimmer_id=other');
  db=client(rows);let res=await handler(request(token));assert.equal(res.status,200);
  let body=await res.json();assert.equal(body.swimmer.name,'本人');assert.equal(body.meets.find(m=>m.id===tokyo).events.length,2);
  assert.ok(!JSON.stringify(body.meets).includes('swimmer_id'));
+ db=client(detailed);res=await handler(request(token));body=await res.json();assert.equal(body.meets.find(m=>m.id==='future').events.find(e=>e.stroke==='平泳ぎ').programs[0].scheduled_time,'10:50');
  for(const change of [{is_enabled:false},{consent_confirmed_at:null}]){
   const calls=[];db=client({...rows,swimmer_public_shares:[{...rows.swimmer_public_shares[0],...change}]},calls);
   res=await handler(request(token));assert.equal(res.status,404);assert.ok(!calls.some(x=>x.table==='swim_meet_entries'));
@@ -77,5 +108,5 @@ const clean=x=>JSON.parse(JSON.stringify(x));
  assert.ok(index.includes('renderPublicMeetEvents(m,swimmer)'));assert.ok(index.includes('id="share-meets"'));
  assert.ok(index.includes('meDays(m.end_date)>=0'));assert.ok(index.includes('public-meet-schedule.js'));
  for(const m of index.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))new vm.Script(m[1]);
- console.log('PASS: own events only, token/consent/active gates, no private fields/times, participant removal, five-day visibility, race order, empty/unknown events, escaped UI and profile syntax');
+ console.log('PASS: scoped program/lane/times, estimates vs official, sorted public UI, private-field removal, own events only, token/consent/active gates, no private fields/entry times, participant removal, five-day visibility, race order, empty/unknown events, escaped UI and profile syntax');
 })().catch(e=>{console.error(e);process.exitCode=1});
