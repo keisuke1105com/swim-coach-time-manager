@@ -261,7 +261,7 @@ Deno.serve(async (req) => {
     // The helper receives only the active swimmer resolved from the consented token.
     let meets: any[] = [];
     try {
-      meets = await getPublicMeetSchedule(sb, swimmer.id);
+      meets = await getPublicMeetSchedule(sb, swimmer.id, undefined, swimmer.gender);
     } catch (e) { console.warn("Public meet schedule unavailable", e); }
 
     return json({
