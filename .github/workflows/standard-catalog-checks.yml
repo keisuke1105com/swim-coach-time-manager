@@ -1,0 +1,24 @@
+name: Standard catalog checks
+on:
+  pull_request:
+    paths:
+      - index.html
+      - standard-catalog.js
+      - data.js
+      - yamanashi_2026.js
+      - tokyo_sc.js
+      - tests/standard-catalog.cjs
+      - .github/workflows/standard-catalog-checks.yml
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node tests/standard-catalog.cjs
+      - run: node tests/analysis-rankings.cjs
+      - run: node tests/analysis-ui.cjs
