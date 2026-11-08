@@ -1288,7 +1288,18 @@ async function downloadSwimBackup(){
   }catch(e){alert('バックアップ作成に失敗しました。\n'+String(e?.message||e));}
   finally{if(btn){btn.disabled=false;btn.textContent='📥 バックアップを保存';}}
 }
-function renderHome(){let today=new Date().toISOString().slice(0,10),td=records.filter(r=>r.record_date===today).length,b=records.filter(r=>r.is_personal_best).length,j=records.filter(r=>r.is_jo_qualified).length;$('#home').innerHTML=`
+function uniqueJoQualifiedRecords(items=records){
+ const qualified=new Map();
+ for(const r of items){
+  const time=Number(r.time_seconds),distance=Number(r.distance);
+  if(!r.is_jo_qualified||!r.swimmer_id||!r.stroke||!r.course||!Number.isFinite(time)||time<=0||!Number.isFinite(distance)||distance<=0)continue;
+  const key=JSON.stringify([String(r.swimmer_id),String(r.stroke).trim(),distance,String(r.course).trim()]);
+  const previous=qualified.get(key);
+  if(!previous||time<Number(previous.time_seconds)||(time===Number(previous.time_seconds)&&String(r.record_date||'')>String(previous.record_date||'')))qualified.set(key,r);
+ }
+ return [...qualified.values()].sort((a,b)=>String(b.record_date||'').localeCompare(String(a.record_date||'')));
+}
+function renderHome(){let today=new Date().toISOString().slice(0,10),td=records.filter(r=>r.record_date===today).length,b=records.filter(r=>r.is_personal_best).length,j=uniqueJoQualifiedRecords().length;$('#home').innerHTML=`
 <section class="team-hero" aria-labelledby="teamWelcome"><div class="hero-kicker">SWIM TEAM · COACH DESK</div><div class="hero-welcome"><div><h2 id="teamWelcome">Team フィッツ竜王</h2><p>選手の成長を、一つずつ記録しよう。</p></div><div class="official-team" aria-label="チームの公式キャラクター"><figure><img src="assets/characters/fitz-butterfly.jpg" width="987" height="533" alt="フィッツ君" loading="eager"></figure><figure><img src="assets/characters/relief-butterfly.jpg" width="975" height="528" alt="リリーフ君" loading="eager"></figure><figure><img src="assets/characters/kurin-butterfly.jpg" width="979" height="514" alt="クリンちゃん" loading="eager"></figure></div></div><button class="hero-input" onclick="go('input')"><span>＋ タイムを入力する</span><span aria-hidden="true">→</span></button></section>
 <div class="home-stats" aria-label="チームの集計"><div><span>登録選手</span><b>${PLAYERS.length}<small>名</small></b></div><div><span>JO突破記録</span><b>${j}<small>件</small></b></div><div><span>今日の入力</span><b>${td}<small>件</small></b></div><div><span>ベスト更新</span><b>${b}<small>件</small></b></div></div>
 ${weeklyRankingStatusHtml(true)}
@@ -3476,7 +3487,8 @@ function restoreAnalysisUi(){
 function screenshotAnalysisCard(){return `<details class="card analysis-screenshot" id="analysis-screenshot"><summary>📸 大会結果を読み込む<span class="small muted">スクショ解析を開く・閉じる</span></summary><div class="analysis-screenshot-body"><h2>大会速報スクショ解析</h2><p class="muted">スイムレコードモバイルなどの結果画面を読み取り、登録選手と照合してJO・東京SC・ゆめカップまでの差をその場で判定します。種目・距離は画面全体から判定し、不確かな場合は保存前に1か所だけ指定できます。</p><input id="screenshotFile" type="file" accept="image/*" onchange="const f=this.files?.[0];if(f){const p=$('#screenshotPreview');p.src=URL.createObjectURL(f);p.classList.remove('hidden')}"/><img id="screenshotPreview" class="shotPreview hidden" alt="スクリーンショット"><button style="width:100%;margin-top:10px" onclick="analyzeScreenshot()">🔎 スクリーンショットを解析</button><div id="screenshotStatus" style="margin-top:10px"></div><div id="screenshotResults"><p class="muted">解析結果がここに表示されます。</p></div></div></details>`;}
 
 function renderAnalysis(){
-  let jo=records.filter(r=>r.is_jo_qualified).length;
+  const joRecords=uniqueJoQualifiedRecords();
+  let jo=joRecords.length;
   let bestRecords=records.filter(r=>r.is_personal_best).length;
 
   let counts={};
@@ -4347,7 +4359,7 @@ ${lapAnalysisHtml}
   </div>
 </div>
 
-    <details class="card" id="analysis-jo-records"><summary>🏆 JO突破記録（${jo}件）</summary>${analysisRecordList(records.filter(r=>r.is_jo_qualified))}</details>
+    <details class="card" id="analysis-jo-records"><summary>🏆 JO突破記録（${jo}件）</summary><p class="muted small">同じ選手・種目・水路は1件にまとめ、最速のJO突破記録を表示します。</p>${analysisRecordList(joRecords)}</details>
     <details class="card" id="analysis-best-records"><summary>✨ ベスト更新記録（${bestRecords}件）</summary>${analysisRecordList(records.filter(r=>r.is_personal_best).sort((a,b)=>String(b.record_date||'').localeCompare(String(a.record_date||''))))}</details>
     <div class="card">
       <h3>☁️ クラウド共有</h3>
@@ -4829,7 +4841,7 @@ function editMeetEntry(id,meetId){
 }
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261107-qr-meet-program-v1';
+const APP_BUILD_VERSION='20261108-jo-unique-events-v1';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));

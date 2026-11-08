@@ -54,3 +54,16 @@ for(const [time,qualified] of [[55.09,true],[55.10,false]]){
   assert.equal(row.rate>=100,qualified,'achievement rate agrees with tenth-second qualification');
 }
 assert.equal(run([record('a','短水路',55.09)]).yamanashiRanking[0].rate,100);
+
+const uniqueJoSource=html.slice(html.indexOf('function uniqueJoQualifiedRecords('),html.indexOf('function renderHome(){'));
+const joContext=vm.createContext({});vm.runInContext(uniqueJoSource,joContext);
+const original={swimmer_id:'p',stroke:'平泳ぎ',distance:200,course:'短水路',time_seconds:153.32,is_jo_qualified:true,record_date:'2026-10-18'};
+const improved={...original,time_seconds:153.11,record_date:'2026-11-08'};
+const duplicates=[original,improved,{...improved,time_seconds:153.2,record_date:'2026-11-09'}];
+let qualified=joContext.uniqueJoQualifiedRecords(duplicates);assert.equal(qualified.length,1);assert.equal(qualified[0],improved);assert.equal(duplicates.length,3);
+assert.equal(joContext.uniqueJoQualifiedRecords([...duplicates,{...original,swimmer_id:'other'},{...original,course:'長水路'},{...original,distance:100}]).length,4);
+assert.equal(joContext.uniqueJoQualifiedRecords([{...original,is_jo_qualified:false},{...original,time_seconds:0}]).length,0);
+assert.equal(joContext.uniqueJoQualifiedRecords([original,{...original,distance:'200',record_date:'2026-11-08'}])[0].record_date,'2026-11-08');
+assert.ok(html.includes('j=uniqueJoQualifiedRecords().length'));
+assert.ok(html.includes('analysisRecordList(joRecords)'));
+console.log('PASS: JO count/list share unique swimmer/event/course records, fastest and latest tie, distinct swimmers/courses/events, invalid/unqualified exclusion, history preservation');
