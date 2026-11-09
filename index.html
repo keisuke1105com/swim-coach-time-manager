@@ -2303,10 +2303,16 @@ const addedLaps = manualLaps
 const officialDistances=new Set(officialLaps.map(l=>Number(l.distance)));
 const combinedLaps = [...officialLaps, ...addedLaps.filter(l=>!officialDistances.has(Number(l.distance)))]
   .sort((a, b) => Number(a.distance) - Number(b.distance));
-// 50m種目で25m通過だけ登録されている場合、ゴールタイムを終点として後半25mを計算する
-if (Number(r.distance) === 50 && !combinedLaps.some(l => Number(l.distance) === 50)) {
+// 50m種目だけでなく、途中の通過タイムがある種目ではゴールまでの最後の区間も表示する
+const finishMeters=Number(r.distance),finishSeconds=Number(r.time_seconds);
+const hasCheckpoint=combinedLaps.some(l=>{
+  const meters=Number(l.distance),seconds=sec(String(l.cumulative_time||''));
+  return meters>0&&meters<finishMeters&&Number.isFinite(seconds)&&seconds>0&&seconds<finishSeconds;
+});
+if (Number.isFinite(finishMeters)&&finishMeters>0&&Number.isFinite(finishSeconds)&&finishSeconds>0&&
+    (finishMeters===50||hasCheckpoint)&&!combinedLaps.some(l=>Number(l.distance)===finishMeters)) {
   combinedLaps.push({
-    distance: 50,
+    distance: finishMeters,
     cumulative_time: fmt(Number(r.time_seconds)),
     lap_source: 'finish'
   });
@@ -4841,7 +4847,7 @@ function editMeetEntry(id,meetId){
 }
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261108-jo-unique-events-v1';
+const APP_BUILD_VERSION='20261109-finish-lap-v1';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));

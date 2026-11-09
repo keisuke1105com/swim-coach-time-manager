@@ -77,5 +77,20 @@ function setup(initial,{failInsert=false,hideSaved=false,failDelete=false}={}){
   const display=vm.runInNewContext(html.slice(start,end)+';combinedLaps',{
     laps:[{distance:50,cumulative_time:'0:28.10'}],manualLaps:[lap('new',25,12),lap('new',50,29),lap('new',75,46)],r:{id:'new'},fmt:String});
   assert.deepEqual(Array.from(display,l=>[l.distance,l.lap_source]),[[25,'manual'],[50,'official'],[75,'manual']]);
+  const lapCode=html.slice(start,html.indexOf('          const lapHtml=',start));
+  const timeHelpers=html.slice(html.indexOf('function sec('),html.indexOf('function formatTimeInput('))+html.match(/^function fmt\(.*$/m)[0];
+  function calculate(r,manual=[],official=[]){
+    const context=vm.createContext({r,laps:official,manualLaps:manual});vm.runInContext(timeHelpers,context);
+    return vm.runInContext(lapCode+';({combinedLaps,fiftyMeterLaps})',context);
+  }
+  const race={id:'r',distance:100,time_seconds:59.87};
+  let result=calculate(race,[lap('r',25,12.87),lap('r',50,28.47),lap('r',75,43.81)]);
+  let final=result.combinedLaps.at(-1);assert.equal(final.distance,100);assert.equal(final.split_start,75);assert.equal(final.split_time,'16.06');assert.equal(final.lap_source,'finish');assert.equal(result.fiftyMeterLaps[1].time,'31.40');
+  result=calculate(race,[lap('r',75,43.81)],[{distance:100,cumulative_time:'59.87'}]);assert.equal(result.combinedLaps.filter(l=>l.distance===100).length,1);assert.equal(result.combinedLaps.at(-1).lap_source,'official');
+  assert.equal(calculate(race).combinedLaps.length,0,'no synthetic lap list without checkpoints');
+  assert.equal(calculate(race,[lap('r',75,60)]).combinedLaps.some(l=>l.lap_source==='finish'),false,'invalid checkpoint cannot produce a negative final split');
+  assert.equal(calculate({id:'r',distance:50,time_seconds:30},[lap('r',25,12.5)]).combinedLaps.at(-1).split_time,'17.50');
+  assert.equal(calculate({id:'r',distance:200,time_seconds:127},[lap('r',175,110)]).combinedLaps.at(-1).split_time,'17.00');
+  console.log('PASS: 100m final 75–100m split 16.06, 50m/200m finish splits, no duplicate finish, no negative split, existing 50m intervals unchanged');
   console.log('PASS: replacement/cascade, duplicate cleanup, retry, conflicts, insert/read/delete failures, official/manual display');
 })().catch(e=>{console.error(e);process.exitCode=1});
