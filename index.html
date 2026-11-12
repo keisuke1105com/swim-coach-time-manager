@@ -349,22 +349,37 @@ const JASF_EVENTS=[
   {stroke:'個人メドレー',styleCode:5,distances:[{m:200,code:4},{m:400,code:5}]}
 ];
 
+function jasfRecordRequestError(status){
+ const restricted=[401,403,429].includes(Number(status));
+ const message=restricted
+  ? `公式サイトが記録の取得を制限しています（HTTP ${status}）。競技者IDの誤りとは限りません。時間をおいて再度お試しください。`
+  : status>=500?'公式記録の取得サーバーから正常な応答を得られませんでした。時間をおいて再度お試しください。'
+  : `公式サイトが記録の検索条件を受け付けませんでした（HTTP ${status}）。`;
+ return Object.assign(new Error(message),{status:Number(status),halt:restricted||Number(status)>=500});
+}
 async function fetchJasfRecord(athleteId,year,waterwayCode,swimmingStyleCode,distanceCode){
-  const base=String(window.SUPABASE_URL||'').replace(/\/$/,'');
-  const res=await fetch(`${base}/functions/v1/jasf-test`,{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-      athlete_id:String(athleteId),
-      year:Number(year),
-      waterway_code:Number(waterwayCode),
-      swimming_style_code:Number(swimmingStyleCode),
-      distance_code:Number(distanceCode)
-    })
+ const base=String(window.SUPABASE_URL||'').replace(/\/$/,'');let res;
+ try{
+  res=await fetch(`${base}/functions/v1/jasf-test`,{
+   method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({athlete_id:String(athleteId),year:Number(year),waterway_code:Number(waterwayCode),swimming_style_code:Number(swimmingStyleCode),distance_code:Number(distanceCode)}),
+   ...(typeof AbortSignal!=='undefined'&&typeof AbortSignal.timeout==='function'?{signal:AbortSignal.timeout(30000)}:{})
   });
-  const json=await res.json();
-  if(!res.ok||!json.success)throw new Error(json?.data?.message||json.error||`HTTP ${res.status}`);
-  return json;
+ }catch(e){throw Object.assign(new Error('公式記録を取得できませんでした。通信状態を確認し、時間をおいて再度お試しください。'),{halt:true});}
+ let json;try{json=await res.json();}catch(e){throw jasfRecordRequestError(res.ok?502:res.status);}
+ if(!res.ok||!json.success){const upstream=Number(json?.status);throw jasfRecordRequestError(!res.ok?res.status:upstream>=400?upstream:502);}
+ if(!Array.isArray(json?.data?.result))throw jasfRecordRequestError(502);
+ return json;
+}
+async function runJasfRecordJobs(jobs,onProgress=()=>{}){
+ const settled=[];
+ for(let i=0;i<jobs.length;i++){
+  if(i)await new Promise(resolve=>setTimeout(resolve,1500));
+  onProgress(i+1,jobs.length);
+  try{settled.push({status:'fulfilled',value:await jobs[i].request()});}
+  catch(reason){settled.push({status:'rejected',reason});if(reason?.halt)break;}
+ }
+ return settled;
 }
 
 function jasfResultIdFromMemo(memo){
@@ -614,7 +629,9 @@ async function cleanupAllJasfDuplicates(){
   alert(`全選手の重複整理が完了しました。\n削除した重複公式記録：${deleteIds.length}件\n対象選手：${affectedPlayers.size}名\n\n手入力記録と、result_id が異なる公式記録は残しています。`);
 }
 
+let jasfRecordSyncBusy=false;
 async function fetchJasfLatest(playerId){
+  if(jasfRecordSyncBusy)return {success:false,stopped:true,message:'別の公式記録を同期中です。完了してから再度お試しください。'};
   const p=playerById(playerId);
   const athleteIds=jasfAthleteIds(p);
   const box=$('#jasfLatestBox');
@@ -624,6 +641,7 @@ async function fetchJasfLatest(playerId){
     return;
   }
 
+  jasfRecordSyncBusy=true;
   const currentYear=new Date().getFullYear();
   const years=[];
   for(let y=2024;y<=currentYear;y++)years.push(y);
@@ -644,7 +662,7 @@ async function fetchJasfLatest(playerId){
   waterwayCode,
   swimmingStyleCode:ev.styleCode,
   distanceCode:d.code,
-  promise:fetchJasfRecord(
+  request:()=>fetchJasfRecord(
     athleteId,
     currentYear,
     waterwayCode,
@@ -655,9 +673,12 @@ async function fetchJasfLatest(playerId){
       }));
     }));
 
-    const settled=await Promise.allSettled(jobs.map(j=>j.promise));
+    const settled=await runJasfRecordJobs(jobs,(current,total)=>{
+      box.innerHTML=`<div class="notice">🇯🇵 公式記録を取得中… ${current} / ${total}条件<br><span class="small">公式サイトへの負荷を抑えるため、順番に確認しています。</span></div>`;
+    });
+    const syncStopped=settled.some(r=>r.status==='rejected'&&r.reason?.halt);
+    const syncIncomplete=settled.some(r=>r.status==='rejected')||settled.length<jobs.length;
     const fetched=[];
-    const errors=[];
     settled.forEach((r,i)=>{
       const job=jobs[i];
       if(r.status==='fulfilled'){
@@ -677,14 +698,14 @@ async function fetchJasfLatest(playerId){
   distanceCode:job.distanceCode
 }));
         });
-      }else{
-        const msg=String(r.reason?.message||r.reason||'');
-        // 記録なし等は大量表示せず、通信・API異常だけ後で確認できるよう保持
-        if(!/invalid|422|記録がありません/i.test(msg))errors.push(`ID ${job.athleteId} / 2024年度以降 ${job.course} ${job.stroke}${job.distance}m: ${msg}`);
       }
     });
 
-    if(!fetched.length)throw new Error('取得できる公式記録がありませんでした。競技者IDと年度を確認してください。');
+    if(!fetched.length){
+      const failure=settled.find(r=>r.status==='rejected');if(failure)throw failure.reason;
+      box.innerHTML='<div class="notice">公式サイトへの問い合わせは完了しましたが、対象条件の公式記録はありませんでした。保存済みの記録はそのまま残しています。</div>';
+      return {success:true,empty:true};
+    }
 
     fetched.sort((a,b)=>a.year-b.year || String(a.x.result_date||'').localeCompare(String(b.x.result_date||'')));
 
@@ -783,7 +804,7 @@ let lapAlreadyExists = 0;    // すでにラップ取得済み
 let lapNotTarget = 0;        // 50mなど対象外
 let lapFailed = 0;           // 取得失敗
 
-for(const item of fetched){
+for(const item of (syncStopped?[]:fetched)){
   const x = item.x;
 
   // result_id がない記録は対象外
@@ -915,8 +936,9 @@ console.log(
     }).join('');
 
     box.innerHTML=`
-  <div class="result good">
-    <b>✅ 日本水泳連盟との同期が完了しました</b>
+  <div class="result ${syncIncomplete?'notice':'good'}">
+    <b>${syncIncomplete?'⚠️ 取得できた公式記録だけを同期しました':'✅ 日本水泳連盟との同期が完了しました'}</b>
+    ${syncIncomplete?`<p class="small">一部の取得に失敗しました。${escapeRankingError(settled.find(r=>r.status==='rejected')?.reason?.message||'')} 保存済みの記録は保持しています。${syncStopped?'追加の記録・ラップ取得は停止しました。':''}</p>`:''}
     <br>
     <span class="small">
       競技者ID：${athleteIds.join('・')}
@@ -943,10 +965,12 @@ ${lapFailed > 0
   </div>
 `;
     renderHome();
+    return {success:!syncIncomplete,stopped:syncStopped,partial:syncIncomplete,message:settled.find(r=>r.status==='rejected')?.reason?.message||''};
   }catch(e){
     await loadCloud();
-    box.innerHTML=`<div class="error">公式記録の同期に失敗しました。<br><span class="small">${String(e.message||e)}</span></div>`;
-  }
+    box.innerHTML=`<div class="error">公式記録の同期に失敗しました。<br><span class="small">${escapeRankingError(e.message||e)}</span><p class="small">保存済みの記録はそのまま残しています。</p></div>`;
+    return {success:false,stopped:!!e.halt,message:String(e.message||e)};
+  }finally{jasfRecordSyncBusy=false;}
 }
   // =====================================================
 // 🏊 全選手の日本水泳連盟公式記録＋ラップを一括更新
@@ -971,6 +995,7 @@ async function updateAllPlayersJasfLaps(){
 
   const ok=[];
   const failed=[];
+  let skipped=0;
 
   for(let i=0;i<targets.length;i++){
     const p=targets[i];
@@ -986,8 +1011,10 @@ async function updateAllPlayersJasfLaps(){
     }
 
     try{
-      await fetchJasfLatest(p.id);
-      ok.push(p.name);
+      const result=await fetchJasfLatest(p.id);
+      if(result?.success)ok.push(p.name);
+      else failed.push({name:p.name,error:result?.message||'取得できませんでした'});
+      if(result?.stopped){skipped=targets.length-i-1;break;}
     }catch(err){
       failed.push({
         name:p.name,
@@ -1009,8 +1036,10 @@ async function updateAllPlayersJasfLaps(){
 
   if(box){
     box.innerHTML=`
-      <div class="result good">
-        <b>✅ 全選手の公式記録・ラップ更新が完了しました</b><br><br>
+      <div class="result ${failed.length||skipped?'notice':'good'}">
+        <b>${failed.length||skipped?'⚠️ 全選手の公式記録更新は一部未完了です':'✅ 全選手の公式記録・ラップ更新が完了しました'}</b><br><br>
+        ${skipped?`⏸️ 未処理：${skipped}名（取得制限・通信障害で停止）<br>`:''}
+        ${failed.length?`<p class="small">${escapeRankingError(failed[0].error)}</p>`:''}
 
         🏊 対象選手：<b>${targets.length}名</b><br>
         ✅ 完了：<b>${ok.length}名</b><br>
@@ -4846,7 +4875,7 @@ function editMeetEntry(id,meetId){
 }
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261112-hide-weekly-ranking-status-v1';
+const APP_BUILD_VERSION='20261112-official-sync-errors-v1';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));

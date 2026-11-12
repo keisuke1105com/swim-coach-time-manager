@@ -1,0 +1,21 @@
+name: Official record sync checks
+on:
+  pull_request:
+    paths:
+      - index.html
+      - tests/official-sync-errors.cjs
+      - tests/manual-lap-preservation.cjs
+      - .github/workflows/official-sync-checks.yml
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node tests/official-sync-errors.cjs
+      - run: node tests/manual-lap-preservation.cjs
+      - run: node tests/analysis-ui.cjs
