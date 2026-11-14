@@ -19,4 +19,6 @@
 
 ブラウザ検証: `node tests/screenshot-browser.cjs`。Chromiumで390px/1280pxの幅を検証。CIではPlaywright 1.62.1を一時ディレクトリに導入し、ChromiumとWebKitで実行する。OCR結果・保存処理・データは合成データとモックに限定し、確認前・キャンセル・修正時の保存防止、保存失敗、読込失敗時の停止を確認する。
 
+実Tesseract（jpn+eng）で合成した大会結果画像を読み取り、今回のタイム・通過タイムの認識を確認した。OCRが挿入する「自 由 形」などの空白も種目判定で許容する。CIのChromium/WebKitの390px/1280px検証も通過した。
+
 実スクリーンショットのOCR精度、実機Safari/iPhone、本番保存は別途確認が必要。実選手のデータ更新や公式サイトへの取得は検証に使用しない。

@@ -3363,7 +3363,7 @@ function detectShotEvent(text){
   // 種目名と距離が近接している表記を最優先。画面内の別種目名の混入に引っ張られにくくする。
   for(const [stroke,names] of Object.entries(aliases)){
     for(const name of names){
-      const esc=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+      const esc=[...name].map(char=>char.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('\\s*');
       let m=t.match(new RegExp(`(50|100|200|400|800|1500)\\s*m?\\s*${esc}`,'i'));
       if(m)return {stroke,distance:Number(m[1])};
       m=t.match(new RegExp(`${esc}\\s*(50|100|200|400|800|1500)\\s*m?`,'i'));

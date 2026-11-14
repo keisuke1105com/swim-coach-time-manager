@@ -13,6 +13,14 @@ assert.equal(api.validate([draft],meta,players)[0].laps[1].split_time,'32.22');
 const parsed=api.parse('50m自由形 タイム決勝\nサンプル 選手\nクラブ（一般）\n24.57\n[24.23]\n● 50m 24.57 24.57 RT:0.57\n無関係 選手 25.18',players,{stroke:'自由形',distance:50});
 assert.equal(parsed.length,2);assert.equal(parsed[0].time,'24.57');assert.equal(parsed[0].lapText,'50m 24.57');assert.equal(parsed[0].playerId,'sample');assert.equal(parsed[1].playerId,'');assert.ok(parsed.every(r=>!r.save&&!r.verified&&r.course===''));
 const html=fs.readFileSync('index.html','utf8');
+const eventContext={normalizeOcrText:t=>String(t).replace(/\s+/g,' ').trim()};
+vm.createContext(eventContext);
+vm.runInContext(html.slice(html.indexOf('function detectShotEvent('),html.indexOf('function parseShotRows(')),eventContext);
+const syntheticOcr='100m 自 由 形 タイ ム 決 勝\nテス ト 選手 1:02.34\n[1:01.00]\n50m 30.12 30.12 RT:0.57\n100m 1:02.34 32.22';
+const syntheticEvent=eventContext.detectShotEvent(syntheticOcr);
+assert.equal(syntheticEvent.stroke,'自由形');assert.equal(syntheticEvent.distance,100);
+const syntheticRows=api.parse(syntheticOcr,[{id:'ocr',name:'テスト 選手'}],syntheticEvent);
+assert.equal(syntheticRows[0].playerId,'ocr');assert.equal(syntheticRows[0].time,'1:02.34');assert.equal(syntheticRows[0].lapText,'50m 30.12\n100m 1:02.34');
 // Production loadCloud normally reports failures in the UI. Saving a screenshot
 // must also receive that failure instead of treating it as an empty record set.
 const cloudContext={PLAYERS:players,records:[{id:'keep'}],setStatus(){},fetchAllRows:async()=>{throw Error('read failed')}};
