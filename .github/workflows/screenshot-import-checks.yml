@@ -1,0 +1,31 @@
+name: Screenshot import checks
+on:
+  pull_request:
+    paths:
+      - index.html
+      - screenshot-import.js
+      - tests/screenshot-*.cjs
+      - .github/workflows/screenshot-import-checks.yml
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node tests/screenshot-import.cjs
+      - run: node tests/manual-lap-preservation.cjs
+      - run: node tests/public-manual-laps.cjs
+      - run: node tests/analysis-ui.cjs
+      - name: Install isolated browser test tools
+        run: |
+          npm install --prefix "$RUNNER_TEMP/swim-browser" --no-save --package-lock=false playwright@1.62.1
+          node "$RUNNER_TEMP/swim-browser/node_modules/playwright/cli.js" install --with-deps chromium webkit
+      - name: Check confirmation flow on desktop and mobile widths
+        env:
+          CHROMIUM_EXECUTABLE: bundled
+          TEST_WEBKIT: '1'
+        run: NODE_PATH="$RUNNER_TEMP/swim-browser/node_modules" node tests/screenshot-browser.cjs
