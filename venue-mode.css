@@ -1,0 +1,34 @@
+/* All rules are scoped to the optional venue dialog. Existing screens are untouched. */
+.vm{position:fixed;inset:0;z-index:11000;background:#f0f5fa;color:#18334b;overflow:auto;padding:20px max(20px,env(safe-area-inset-right)) 24px max(20px,env(safe-area-inset-left));box-sizing:border-box;font-size:16px;line-height:1.5;text-align:left}
+.vm *{box-sizing:border-box}
+.vm h2{font-size:24px;margin:0 0 8px}.vm h3{font-size:18px;margin:8px 0}
+.vm p{margin:8px 0 14px}.vm button,.vm select{min-height:48px;font-size:16px;padding:10px 14px;border-radius:10px;touch-action:manipulation}
+.vm button{background:white;color:#18486b;border:1px solid #9fb7c9;cursor:pointer}
+.vm button[aria-pressed=true]{background:#dceeff;border:2px solid #1264b5;color:#143e60}
+.vm :focus-visible{outline:3px solid #913f00;outline-offset:3px}
+.vm select{display:block;width:100%;background:white;color:#18334b;border:1px solid #9fb7c9;margin:6px 0 12px}
+.vm-header{position:static;background:transparent;color:#18334b;padding:0;box-shadow:none;border:0;display:flex;align-items:start;justify-content:space-between;gap:16px}.vm-header p,.vm-note{color:#526575;font-size:14px}
+.vm-meet-label{display:block;max-width:780px}
+.vm-columns{display:grid;grid-template-columns:minmax(280px,.8fr) minmax(0,1.2fr);gap:20px;align-items:start}
+.vm-list,.vm-detail{min-width:0;background:white;border:1px solid #d5e2ec;border-radius:16px;padding:16px}
+.vm-entry{display:block;width:100%;text-align:left;margin:10px 0}.vm-entry b{font-size:18px}.vm-entry span{display:block;margin-top:6px;font-size:14px}
+.vm-results{display:grid;grid-template-columns:1fr 1fr;gap:12px}.vm-results>.vm-note{grid-column:1 / -1;margin:0}.vm-results article{background:#f0f5fa;border-radius:12px;padding:12px;min-width:0;overflow-wrap:anywhere}.vm-results strong{font-size:28px;font-variant-numeric:tabular-nums}.vm-results p{font-size:14px}
+.vm-switch{display:flex;gap:8px;flex-wrap:wrap}.vm-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:14px}.vm-legend span:first-child{color:#1264b5}.vm-legend span:last-child{color:#b64c00}
+.vm-chart-scroll,.vm-table-scroll{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}.vm-chart-scroll svg{height:320px;max-width:none;display:block}.vm-chart-scroll [data-point]{cursor:pointer}.vm-point-detail{padding:12px;background:#edf5ff;border-radius:10px;min-height:48px;overflow-wrap:anywhere}
+.vm table{border-collapse:collapse;width:100%;min-width:420px;font-size:16px;font-variant-numeric:tabular-nums}.vm caption{text-align:left;font-weight:bold;padding:8px 0}.vm th,.vm td{padding:12px 8px;border-bottom:1px solid #dce5ed;text-align:left;vertical-align:top}.vm td small{display:block;font-size:14px;color:#526575;max-width:210px}.vm tbody th{white-space:nowrap}
+@media(orientation:portrait){.vm-columns{grid-template-columns:minmax(0,1fr)}.vm-list{max-height:36vh;overflow:auto}}
+/* Comfortable reading and navigation on the venue tablet. */
+.vm{font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;font-size:18px;padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(24px,env(safe-area-inset-bottom))}
+.vm button,.vm select{font-size:18px;min-height:52px}
+.vm-header{position:sticky;top:calc(-1 * max(16px,env(safe-area-inset-top)));z-index:2;background:#f0f5fa;padding:12px 0;border-bottom:1px solid #d5e2ec;align-items:center}
+.vm-header [data-close]{flex-shrink:0}
+.vm-entry{border-left:5px solid transparent}
+.vm-entry[aria-pressed=true]{border-left:5px solid #1264b5;background:#e4f1ff}
+.vm-entry b{font-size:20px}.vm-entry span,.vm-header p,.vm-note,.vm-results p,.vm-legend{font-size:16px}
+.vm-results strong{font-size:32px}
+.vm-switch{margin:16px 0}.vm-switch button{flex:1 1 120px}
+.vm-chart-scroll,.vm-table-scroll{border:1px solid #d5e2ec;border-radius:10px;margin:12px 0}
+.vm table{font-size:18px}.vm td small{font-size:16px}
+.vm th{background:#edf5ff}.vm tbody tr:nth-child(even){background:#f7fafd}
+@media(orientation:landscape){.vm-columns{grid-template-columns:minmax(280px,.7fr) minmax(0,1.3fr);gap:16px}.vm-list{position:sticky;top:100px;max-height:calc(100dvh - 124px);overflow-y:auto;overscroll-behavior-y:contain}}
+@media(orientation:portrait){.vm-list{max-height:32dvh;overscroll-behavior-y:contain}.vm-columns{gap:16px}}
