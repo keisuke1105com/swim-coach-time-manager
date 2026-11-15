@@ -227,8 +227,8 @@ body.public-themed{background:var(--public-page-background,#eef7fc)}
 <header><div class="wrap" style="padding:0"><div class="topline"><div><h1>🏊 水泳コーチ・タイム管理 ☁️</h1><small>選手・記録をクラウド共有</small></div><button id="logoutBtn" class="secondary hidden" onclick="logout()">ログアウト</button></div></div></header>
 <main class="wrap"><div id="appUpdateNotice" hidden style="background:#e7f3fb;border:1px solid #91c9ed;border-radius:14px;padding:12px;margin-bottom:12px;color:#075985;font-weight:700">✨ 新しいバージョンがあります。入力内容を保存してから更新してください。 <button type="button" style="margin-top:8px" onclick="reloadLatestApp()">🔄 最新版に更新</button></div><div id="status"></div><section id="auth"></section><section id="publicProfile" class="hidden"></section><div id="app" class="hidden"><section id="home"></section><section id="players" class="hidden"></section><section id="input" class="hidden"></section><section id="records" class="hidden"></section><section id="analysis" class="hidden"></section><section id="meets" class="hidden"></section></div></main>
 <div id="pbCelebration" class="pb-celebration" role="dialog" aria-modal="true" aria-label="自己ベストのお祝い" hidden><div class="pb-celebration-card" id="pbCelebrationContent"></div></div><nav id="tabs" class="tabs hidden"><button data-tab="home">🏠<br>ホーム</button><button data-tab="players">👥<br>選手</button><button data-tab="input">⏱️<br>入力</button><button data-tab="records">📋<br>記録</button><button data-tab="analysis">📊<br>分析</button><button data-tab="meets">📅<br>大会</button></nav>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="screenshot-import.js?v=20261115-1"></script><script src="config.js"></script><script src="data.js"></script><script src="yamanashi_2026.js"></script><script src="tokyo_sc.js"></script><script src="standard-catalog.js?v=20261107-1"></script><script src="meet-entry-pdf.js?v=20261106-1"></script><script src="meet-schedules.js?v=20261028-1"></script><script src="public-meet-schedule.js?v=20261107-1"></script><script src="meet-program-pdf.js?v=20261106-1"></script><script src="meet-timetable.js?v=20261106-2"></script><script src="meet-program-import-ui.js?v=20261106-3"></script><script src="meet-entry-import-ui.js?v=20261106-2"></script><script src="video-analysis.js?v=20261023-2"></script><script>
-let sb=null,session=null,PLAYERS=[],records=[];let shareAdmin=false;let selectedPlayerId='',selectedStroke='自由形',selectedDistance=50,selectedCourse='長水路';
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="screenshot-import.js?v=20261115-1"></script><script src="authz-ui.js?v=20261115-1"></script><script src="config.js"></script><script src="data.js"></script><script src="yamanashi_2026.js"></script><script src="tokyo_sc.js"></script><script src="standard-catalog.js?v=20261107-1"></script><script src="meet-entry-pdf.js?v=20261106-1"></script><script src="meet-schedules.js?v=20261028-1"></script><script src="public-meet-schedule.js?v=20261107-1"></script><script src="meet-program-pdf.js?v=20261106-1"></script><script src="meet-timetable.js?v=20261106-2"></script><script src="meet-program-import-ui.js?v=20261106-3"></script><script src="meet-entry-import-ui.js?v=20261106-2"></script><script src="video-analysis.js?v=20261023-2"></script><script>
+let sb=null,session=null,PLAYERS=[],records=[];let shareAdmin=false,coachApproved=false,authorizationEpoch=0;let selectedPlayerId='',selectedStroke='自由形',selectedDistance=50,selectedCourse='長水路';
 const VIEW_STATE_KEY='swimCloudViewState';
 function saveViewState(tab,playerId=''){try{localStorage.setItem(VIEW_STATE_KEY,JSON.stringify({tab,playerId,ts:Date.now()}))}catch(e){}}
 function getViewState(){try{return JSON.parse(localStorage.getItem(VIEW_STATE_KEY)||'{}')}catch(e){return {}}}
@@ -358,10 +358,11 @@ function jasfRecordRequestError(status){
  return Object.assign(new Error(message),{status:Number(status),halt:restricted||Number(status)>=500});
 }
 async function fetchJasfRecord(athleteId,year,waterwayCode,swimmingStyleCode,distanceCode){
+ if(!session?.access_token)throw new Error('ログインし直してください。');
  const base=String(window.SUPABASE_URL||'').replace(/\/$/,'');let res;
  try{
   res=await fetch(`${base}/functions/v1/jasf-test`,{
-   method:'POST',headers:{'Content-Type':'application/json'},
+   method:'POST',headers:{'Content-Type':'application/json','apikey':window.SUPABASE_PUBLISHABLE_KEY,'Authorization':'Bearer '+session.access_token},
    body:JSON.stringify({athlete_id:String(athleteId),year:Number(year),waterway_code:Number(waterwayCode),swimming_style_code:Number(swimmingStyleCode),distance_code:Number(distanceCode)}),
    ...(typeof AbortSignal!=='undefined'&&typeof AbortSignal.timeout==='function'?{signal:AbortSignal.timeout(30000)}:{})
   });
@@ -460,7 +461,7 @@ async function preserveManualLaps(keepId,sourceIds){
   }
 }
 
-async function removeReplacedRecords(keep,rows){
+async function removeReplacedRecords(keep,rows){if(!requireSwimAdmin())return;
   if(!keep?.id)throw new Error('置換先の記録を確認できませんでした。元の記録を残しました。');
   const ids=rows.map(r=>r.id).filter(id=>id&&String(id)!==String(keep.id));
   await preserveManualLaps(keep.id,ids);
@@ -471,7 +472,7 @@ async function removeReplacedRecords(keep,rows){
   }
 }
 
-async function cleanupExactDuplicatesForPlayerSilent(playerId){
+async function cleanupExactDuplicatesForPlayerSilent(playerId){if(!requireSwimAdmin())return;
   await loadCloud();
   const mine=records.filter(r=>String(r.swimmer_id)===String(playerId));
   const groups=new Map();
@@ -495,7 +496,7 @@ async function cleanupExactDuplicatesForPlayerSilent(playerId){
   return deleteIds.length;
 }
 
-async function cleanupAllExactDuplicates(){
+async function cleanupAllExactDuplicates(){if(!requireSwimAdmin())return;
   if(!confirm('全選手の完全一致した重複記録を整理します。\n\n同じ選手・日付・種目・距離・水路・タイムがすべて同じ記録だけが対象です。\n残す優先順位は「🇯🇵公式 ＞ 📱速報 ＞ 手入力」です。よろしいですか？'))return;
   await loadCloud();
   const groups=new Map();
@@ -518,7 +519,7 @@ async function cleanupAllExactDuplicates(){
   alert(`重複整理が完了しました。\n削除：${deleteIds.length}件\n対象選手：${affectedPlayers.size}名\n\nタイムが違う同日記録は削除していません。`);
 }
 
-async function cleanupJasfDuplicates(playerId){
+async function cleanupJasfDuplicates(playerId){if(!requireSwimAdmin())return;
   const p=playerById(playerId);
   if(!p)return;
   if(!confirm(`${p.name} の日本水泳連盟から同期した重複記録を整理します。\n同じ result_id の公式記録だけを1件残し、手入力記録は削除しません。よろしいですか？`))return;
@@ -568,7 +569,7 @@ async function cleanupJasfDuplicates(playerId){
 }
 
 
-async function cleanupAllJasfDuplicates(){
+async function cleanupAllJasfDuplicates(){if(!requireSwimAdmin())return;
   if(!confirm(`全選手の日本水泳連盟から同期した重複公式記録を整理します。\n同じ選手・同じ result_id の公式記録だけを1件残します。\n手入力記録や result_id が異なる記録は削除しません。よろしいですか？`))return;
   await loadCloud();
 
@@ -630,7 +631,7 @@ async function cleanupAllJasfDuplicates(){
 }
 
 let jasfRecordSyncBusy=false;
-async function fetchJasfLatest(playerId){
+async function fetchJasfLatest(playerId){if(!requireSwimAdmin())return;
   if(jasfRecordSyncBusy)return {success:false,stopped:true,message:'別の公式記録を同期中です。完了してから再度お試しください。'};
   const p=playerById(playerId);
   const athleteIds=jasfAthleteIds(p);
@@ -975,7 +976,7 @@ ${lapFailed > 0
   // =====================================================
 // 🏊 全選手の日本水泳連盟公式記録＋ラップを一括更新
 // =====================================================
-async function updateAllPlayersJasfLaps(){
+async function updateAllPlayersJasfLaps(){if(!requireSwimAdmin())return;
   const box=$('#jasfLatestBox');
 
   const targets=PLAYERS.filter(p=>{
@@ -1057,7 +1058,7 @@ async function updateAllPlayersJasfLaps(){
   renderRecords();
   renderAnalysis();
 }
-async function importTestJasfLaps(options={}){
+async function importTestJasfLaps(options={}){if(!requireSwimAdmin())return;
   try{
     setStatus('公式結果からラップを取得しています…','notice');
 
@@ -1066,7 +1067,8 @@ async function importTestJasfLaps(options={}){
       method:'POST',
       headers:{
         'Content-Type':'application/json',
-        'apikey':window.SUPABASE_PUBLISHABLE_KEY
+        'apikey':window.SUPABASE_PUBLISHABLE_KEY,
+        'Authorization':'Bearer '+session.access_token
       },
       body:JSON.stringify(options)
     });
@@ -1257,13 +1259,26 @@ function yumeCupStandard(playerId,stroke,distance){return yumeCupInfo(playerId,s
 function standardCatalogData(){return {jo:STANDARDS,yamanashi:window.YAMANASHI_2026_STANDARDS||[],tokyo:window.TOKYO_SC_STANDARDS||[],yume:YUME_CUP_STANDARDS};}
 
 function best(playerId,stroke,distance,course){let a=records.filter(r=>r.swimmer_id===playerId&&r.stroke===stroke&&Number(r.distance)===Number(distance)&&r.course===course).map(r=>+r.time_seconds);return a.length?Math.min(...a):null}
-async function init(){if(new URLSearchParams(location.search).has('share')){await renderPublicSwimmerProfile();return}if(!configured()){renderSetupNeeded();return}sb=window.supabase.createClient(window.SUPABASE_URL,window.SUPABASE_PUBLISHABLE_KEY);let {data}=await sb.auth.getSession();session=data.session;sb.auth.onAuthStateChange((_e,s)=>{session=s;routeAuth()});routeAuth()}
+async function init(){if(new URLSearchParams(location.search).has('share')){await renderPublicSwimmerProfile();return}if(!configured()){renderSetupNeeded();return}sb=window.supabase.createClient(window.SUPABASE_URL,window.SUPABASE_PUBLISHABLE_KEY,{global:{fetch:authorizedFetch}});let {data}=await sb.auth.getSession();session=data.session;sb.auth.onAuthStateChange((_e,s)=>{session=s;setTimeout(()=>routeAuth(),0)});routeAuth()}
 function renderSetupNeeded(){setStatus('config.js に Supabase Publishable key を設定してください。','error');$('#auth').innerHTML=`<div class="card auth"><h2>☁️ セットアップ待ち</h2><p>config.js の PASTE_YOUR_PUBLISHABLE_KEY_HERE を置き換えてください。</p></div>`}
-async function routeAuth(){if(!session){$('#app').classList.add('hidden');$('#tabs').classList.add('hidden');$('#logoutBtn').classList.add('hidden');renderAuth();return}$('#auth').innerHTML='';$('#app').classList.remove('hidden');$('#tabs').classList.remove('hidden');$('#logoutBtn').classList.remove('hidden');await loadCloud();try{const {data,error}=await sb.rpc('is_swim_share_admin');shareAdmin=!error&&data===true}catch(e){shareAdmin=false}restoreViewState()}
-function renderAuth(){setStatus('');$('#auth').innerHTML=`<div class="card auth"><h2>🔐 コーチログイン</h2><div class="field"><label>メールアドレス</label><input id="email" type="email"></div><div class="field"><label>パスワード</label><input id="password" type="password"></div><div class="actions"><button onclick="login()">ログイン</button><button class="secondary" onclick="signup()">初回登録</button></div><p class="muted small">初回のみアカウント登録してください。複数コーチでも同じクラウドデータを共有できます。</p></div>`}
+async function routeAuth(){
+ const epoch=++authorizationEpoch;resetAuthorizationState();
+ $('#app').classList.add('hidden');$('#tabs').classList.add('hidden');$('#logoutBtn').classList.add('hidden');
+ if(!session){renderAuth();return;}
+ $('#auth').innerHTML='<div class="card">利用権限を確認しています…</div>';$('#logoutBtn').classList.remove('hidden');
+ const request=await sb.rpc('request_coach_access');if(epoch!==authorizationEpoch)return;
+ if(request.error){$('#auth').innerHTML='<div class="card">利用権限を確認できません。メール確認後、時間をおいてログインし直してください。</div>';return;}
+ const [approved,admin]=await Promise.all([sb.rpc('is_swim_coach_approved'),sb.rpc('is_swim_share_admin')]);
+ if(epoch!==authorizationEpoch)return;
+ if(approved.error||admin.error||approved.data!==true){$('#auth').innerHTML='<div class="card">未承認または停止中のため利用できません。管理者に確認してください。</div>';return;}
+ coachApproved=true;shareAdmin=admin.data===true;$('#auth').innerHTML='';
+ try{await loadCloud({throwOnError:true});}catch(e){if(epoch===authorizationEpoch)$('#auth').innerHTML='<div class="card">データを取得できませんでした。再読み込みしてください。</div>';return;}
+ if(epoch!==authorizationEpoch)return;$('#app').classList.remove('hidden');$('#tabs').classList.remove('hidden');restoreViewState();applyAuthorizationUi();
+}
+function renderAuth(){setStatus('');$('#auth').innerHTML=`<div class="card auth"><h2>🔐 コーチログイン</h2><div class="field"><label>メールアドレス</label><input id="email" type="email"></div><div class="field"><label>パスワード</label><input id="password" type="password"></div><div class="actions"><button onclick="login()">ログイン</button><button class="secondary" onclick="signup()">初回登録</button></div><p class="muted small">初回のみアカウント登録してください。管理者の承認後、全選手の情報を共有できます。</p></div>`}
 async function login(){let email=$('#email').value.trim(),password=$('#password').value;let {error}=await sb.auth.signInWithPassword({email,password});if(error)setStatus(error.message,'error')}
-async function signup(){let email=$('#email').value.trim(),password=$('#password').value;if(password.length<6){setStatus('パスワードは6文字以上にしてください。','error');return}let {error}=await sb.auth.signUp({email,password});setStatus(error?error.message:'登録しました。メール確認が必要な場合はメールを確認してください。',error?'error':'notice')}
-async function logout(){await sb.auth.signOut()}
+async function signup(){let email=$('#email').value.trim(),password=$('#password').value;if(password.length<6){setStatus('パスワードは6文字以上にしてください。','error');return}let {error}=await sb.auth.signUp({email,password});setStatus(error?error.message:'登録しました。メール確認後にログインし、管理者の承認をお待ちください。',error?'error':'notice')}
+async function logout(){++authorizationEpoch;resetAuthorizationState();session=null;await sb.auth.signOut();await routeAuth()}
 async function fetchAllRows(table,buildQuery,pageSize=1000){
   const all=[];
   for(let from=0;;from+=pageSize){
@@ -1277,7 +1292,7 @@ async function fetchAllRows(table,buildQuery,pageSize=1000){
   }
   return all;
 }
-async function loadCloud(options={}){
+async function loadCloud(options={}){const epoch=authorizationEpoch;
   setStatus('クラウドから読み込み中…');
   try{
     const [p,r,m]=await Promise.all([
@@ -1286,13 +1301,15 @@ async function loadCloud(options={}){
   fetchAllRows('swim_manual_laps',q=>q.order('distance'))
 ]);
 
+if(epoch!==authorizationEpoch)return;
 PLAYERS=p;
 records=r;
 manualLaps=m;
     await loadSharedGoals();
-    await loadSharedRankingBulkProgress();
+    if(shareAdmin)await loadSharedRankingBulkProgress();
     setStatus('');
   }catch(e){
+    if(epoch!==authorizationEpoch)return;
     setStatus('クラウドDBにアクセスできません。RLSポリシーを確認してください。 '+String(e?.message||e||''),'error');
     if(options.throwOnError)throw e;
     PLAYERS=[];
@@ -1301,7 +1318,7 @@ manualLaps=m;
 }
 
 // 管理者向け手動バックアップ（復元は未実装）
-async function downloadSwimBackup(){
+async function downloadSwimBackup(){if(!requireSwimAdmin())return;
   if(!session || !shareAdmin){alert('バックアップは公開管理者のみ利用できます。');return;}
   if(!confirm('氏名・生年月日を含むバックアップを保存します。\n他人と共有しないでください。\n\n開始しますか？'))return;
   const btn=document.getElementById('backupDownloadBtn');
@@ -1337,8 +1354,8 @@ function renderHome(){let today=new Date().toISOString().slice(0,10),td=records.
 <details id="homeManagement" class="management-panel"><summary><span>⚙ 管理・設定</span><span class="muted">開く</span></summary><div class="management-content">${shareAdmin?`<div class="card"><h3>🔒 管理者用バックアップ</h3><p class="muted small">選手（非表示含む）・大会記録・手動ラップ・動画分析をJSONファイルに保存します。個人情報を含むため安全に保管してください。</p><button id="backupDownloadBtn" class="secondary" style="width:100%" onclick="downloadSwimBackup()">📥 バックアップを保存</button><p class="muted small">※手動保存です。復元・自動保存は未対応です。</p></div>`:''}<div class="maintenance-actions"><h3>記録の重複整理</h3><button class="secondary" style="width:100%;margin:0 0 8px" onclick="cleanupAllExactDuplicates()">🧹 完全一致した重複記録を整理</button><div class="muted small" style="margin:-2px 0 10px">選手・日付・種目・距離・水路・タイムがすべて同じ記録だけを整理します。公式 ＞ 速報 ＞ 手入力の順で1件を残します。</div><button class="secondary" style="width:100%;margin:0 0 12px" onclick="cleanupAllJasfDuplicates()">🇯🇵 重複公式記録を result_id で整理</button><div class="muted small" style="margin:-4px 0 12px">同じ選手・同じ result_id の日本水泳連盟公式記録だけを整理します。</div></div></div></details>`}
 function renderPlayers(){ $('#players').innerHTML=`<div class="players-heading"><div><span class="section-kicker">TEAM ROSTER</span><h2>選手一覧</h2><p class="muted">記録を確認して、次の一泳へ。</p></div><div class="official-team" aria-label="チームの公式キャラクター"><figure><img src="assets/characters/fitz-butterfly.jpg" width="987" height="533" alt="フィッツ君" loading="eager"></figure><figure><img src="assets/characters/relief-butterfly.jpg" width="975" height="528" alt="リリーフ君" loading="eager"></figure><figure><img src="assets/characters/kurin-butterfly.jpg" width="979" height="514" alt="クリンちゃん" loading="eager"></figure></div></div><div class="roster-toolbar"><span>チームの選手と記録</span><button onclick="showAddPlayer()">＋ 選手追加</button></div><div class="player-search"><label for="pq">選手を探す</label><input class="search" id="pq" placeholder="選手名で検索" oninput="filterPlayers()"></div><div id="playerForm"></div><div id="plist"></div><div class="players-management"><button class="secondary" onclick="go('home');document.getElementById('homeManagement').open=true">⚙ 管理・設定を開く</button></div>`;filterPlayers()}
 function showAddPlayer(p=null){$('#playerForm').innerHTML=`<div class="result"><h3>${p?'選手編集':'新しい選手'}</h3><div class="field"><label>氏名</label><input id="pn" value="${p?.name||''}"></div><div class="field"><label>区分</label><select id="pd">${['9歳以下','10歳','11歳','12歳','13歳','14歳','15〜16歳','CS'].map(x=>`<option ${p?.age_group===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>性別</label><select id="pg"><option ${p?.gender==='男子'?'selected':''}>男子</option><option ${p?.gender==='女子'?'selected':''}>女子</option></select></div><div class="field"><label>生年月日（任意）</label><input id="pb" type="date" value="${p?.birth_date||''}"></div><div class="field"><label>チーム・メモ（任意）</label><input id="pt" value="${p?.team||''}"></div><div class="field"><label>日本水泳連盟 競技者ID（複数可）</label><input id="pj" placeholder="例：58337328, 12345678" value="${p?jasfAthleteIds(p).join(', '):''}"><div class="muted small" style="margin-top:6px">複数ある場合はカンマ区切りで入力してください。すべてのIDから記録を同期します。</div></div><div class="actions"><button onclick="savePlayer('${p?.id||''}')">保存</button><button class="secondary" onclick="$('#playerForm').innerHTML=''">キャンセル</button></div></div>`}
-async function savePlayer(id=''){let payload={name:$('#pn').value.trim(),age_group:$('#pd').value,gender:$('#pg').value,birth_date:$('#pb').value||null,team:$('#pt').value.trim()||null,athlete_id:(parseAthleteIds($('#pj')?.value)[0]||null),athlete_ids:parseAthleteIds($('#pj')?.value),active:true};if(!payload.name){alert('氏名を入力してください');return}if(!id)payload.sort_order=(PLAYERS.reduce((m,p)=>Math.max(m,p.sort_order||0),0)+1);let q=id?sb.from('swimmers').update(payload).eq('id',id):sb.from('swimmers').insert(payload);let {error}=await q;if(error){alert(error.message);return}await loadCloud();renderPlayers();renderHome()}
-async function removePlayer(id){if(!confirm('この選手を一覧から外しますか？過去記録は残ります。'))return;let {error}=await sb.from('swimmers').update({active:false}).eq('id',id);if(error)alert(error.message);else{await loadCloud();renderPlayers();renderHome()}}
+async function savePlayer(id=''){let payload={name:$('#pn').value.trim(),age_group:$('#pd').value,gender:$('#pg').value,birth_date:$('#pb').value||null,team:$('#pt').value.trim()||null,athlete_id:(parseAthleteIds($('#pj')?.value)[0]||null),athlete_ids:parseAthleteIds($('#pj')?.value),...(id?{}:{active:true})};if(!payload.name){alert('氏名を入力してください');return}if(!id)payload.sort_order=(PLAYERS.reduce((m,p)=>Math.max(m,p.sort_order||0),0)+1);let q=id?sb.from('swimmers').update(payload).eq('id',id):sb.from('swimmers').insert(payload);let {error}=await q;if(error){alert(error.message);return}await loadCloud();renderPlayers();renderHome()}
+async function removePlayer(id){if(!requireSwimAdmin())return;if(!confirm('この選手を一覧から外しますか？過去記録は残ります。'))return;let {error}=await sb.from('swimmers').update({active:false}).eq('id',id);if(error)alert(error.message);else{await loadCloud();renderPlayers();renderHome()}}
 function filterPlayers(){let q=($('#pq')?.value||'').toLowerCase();$('#plist').innerHTML=PLAYERS.filter(p=>p.name.toLowerCase().includes(q)).sort((a,b)=>{if(a.birth_date&&b.birth_date)return a.birth_date.localeCompare(b.birth_date);if(a.birth_date)return -1;if(b.birth_date)return 1;return (a.sort_order||0)-(b.sort_order||0)}).map(p=>{let n=records.filter(r=>r.swimmer_id===p.id).length,j=records.filter(r=>r.swimmer_id===p.id&&r.is_jo_qualified).length;return `<div class="row player-card"><div class="player-identity"><b>${p.name}</b><br><span class="muted">${p.age_group||'-'}・${p.gender||'-'}・${n}件</span></div><div class="player-card-actions">${j?'<span class="badge">JO突破あり</span> ':''}<button class="secondary" onclick="showPlayerDetail('${p.id}')">詳細</button><button class="secondary" onclick="selectedPlayerId='${p.id}';go('input')">入力</button><details class="player-other"><summary>その他 <span aria-hidden="true">⌄</span></summary><div class="player-other-actions"><button class="secondary" onclick='showAddPlayer(${JSON.stringify(p)})'>編集</button> <button class="danger" onclick="removePlayer('${p.id}')">外す</button></div></details></div></div>`}).join('')||'<p class="muted">選手がいません。</p>'}
 async function saveAthleteId(playerId){
   const el=$('#detailAthleteId');
@@ -1388,10 +1405,11 @@ async function loadSharedGoals(){
 }
 async function editGoalTime(id,stroke,distance,course){
  const previous=goalTimeFor(id,stroke,distance,course);
- const value=prompt(stroke+' '+distance+'m・'+course+' の目標タイムを入力（例：29.50 または 1:05.30）。空欄で削除できます。',previous==null?'':fmt(previous));
+ const value=prompt(stroke+' '+distance+'m・'+course+' の目標タイムを入力（例：29.50 または 1:05.30）。空欄での削除は管理者のみ可能です。',previous==null?'':fmt(previous));
  if(value===null)return;
  let error;
  if(!value.trim()){
+   if(!requireSwimAdmin())return;
    ({error}=await sb.from('swimmer_goals').delete().eq('swimmer_id',id).eq('stroke',stroke).eq('distance',distance).eq('course',course));
  }else{
    const n=sec(value);
@@ -2750,7 +2768,7 @@ async function editRecord(id){
   renderHome();
   alert('記録を更新しました！');
 }
-  async function delRecord(id){if(!confirm('この記録を削除しますか？'))return;let {error}=await sb.from('swim_records').delete().eq('id',id);if(error)alert(error.message);else{await loadCloud();renderRecords();renderHome()}}
+  async function delRecord(id){if(!requireSwimAdmin())return;if(!confirm('この記録を削除しますか？'))return;let {error}=await sb.from('swim_records').delete().eq('id',id);if(error)alert(error.message);else{await loadCloud();renderRecords();renderHome()}}
 // 選手別・同学年ランキング自動照合
 function jasfEventCodes(stroke,distance){
   const ev=JASF_EVENTS.find(x=>x.stroke===stroke);
@@ -4417,7 +4435,7 @@ ${lapAnalysisHtml}
   restoreAnalysisUi();
   StandardCatalog.mount(document.getElementById('analysis-standards'),standardCatalogData());
 }
-async function migrateLocalV3(){
+async function migrateLocalV3(){if(!requireSwimAdmin())return;
   let old=[];
   try{
     old=JSON.parse(localStorage.getItem('swimCoachRecordsV3')||'[]');
@@ -4761,7 +4779,7 @@ async function renderPublicSwimmerProfile(){
     updatePublicShareChart();updatePublicShareAnalysis();
   }catch(e){panel.innerHTML='<div class="card error">記録を取得できませんでした。時間をおいてお試しください。</div>'}
 }
-async function openShareManager(playerId){
+async function openShareManager(playerId){if(!requireSwimAdmin())return;
   const panel=$('#shareManagerPanel');if(!panel||!shareAdmin||!session)return;
   panel.innerHTML='<div class="notice">公開設定を確認しています…</div>';
   const {data,error}=await sb.from('swimmer_public_shares').select('id,swimmer_id,share_token,is_enabled,consent_confirmed_at').eq('swimmer_id',playerId).maybeSingle();
@@ -4778,7 +4796,7 @@ function drawShareQr(url){
   if(window.QRCode){draw();return}
   const script=document.createElement('script');script.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';script.onload=draw;script.onerror=()=>{if(node.isConnected)node.textContent='QRコードを表示できません。URLをご利用ください。'};document.head.appendChild(script);
 }
-async function saveShareSettings(playerId,enable){
+async function saveShareSettings(playerId,enable){if(!requireSwimAdmin())return;
   if(!shareAdmin||!session)return;
   const consent=$('#shareConsent')?.checked;
   if(enable&&!consent){alert('公開するには保護者の同意確認が必要です。');return}
@@ -4802,7 +4820,7 @@ function meDate(v){return new Date(v+'T00:00:00').toLocaleDateString('ja-JP',{ye
 function meCountdown(v){const d=meDays(v);return d==null?'日程未登録':d===0?'本日開催！':d>0?'あと'+d+'日':'終了'}
 async function loadMeets(){const [a,b,c]=await Promise.all([sb.from('swim_meets').select('*').order('meet_date'),sb.from('swim_meet_swimmers').select('*'),sb.from('swim_meet_entries').select('*').order('created_at')]);if(a.error)throw a.error;if(b.error)throw b.error;if(c.error)throw c.error;meetList=a.data||[];meetEntries=b.data||[];meetEventEntries=c.data||[];const [programs,timetable]=await Promise.all([fetchAllRows('swim_meet_programs',q=>q.order('id')),fetchAllRows('swim_meet_timetable',q=>q.order('id'))]);const byEntry=new Map();for(const p of programs||[]){if(!byEntry.has(p.entry_id))byEntry.set(p.entry_id,[]);byEntry.get(p.entry_id).push(p);}meetEventEntries=meetEventEntries.map(e=>({...e,programs:byEntry.get(e.id)||[],timetable:MeetTimetable.forEntry(e,PLAYERS.find(p=>p.id===e.swimmer_id),timetable)}))}
 async function refreshMeets(){try{await loadMeets();renderMeets()}catch(e){alert('大会情報を取得できませんでした：'+e.message)}}
-function handleMeetButton(ev){
+function handleMeetButton(ev){if(!requireSwimAdmin())return;
  const button=ev.target.closest('button[data-meet-action]');
  if(!button||!ev.currentTarget.contains(button))return;
  const action=button.dataset.meetAction;
@@ -4839,7 +4857,7 @@ function pickMeetDate(initial){
   field.focus();
  });
 }
-async function editMeet(id){
+async function editMeet(id){if(!requireSwimAdmin())return;
  const m=meetList.find(x=>x.id===id),name=prompt('大会名',m?.name||'');if(name===null)return;if(!name.trim())return alert('大会名は必須です');
  const date=await pickMeetDate(m?.meet_date||'');if(date===null)return;if(!validMeetDate(date))return alert('日付を確認してください');
  const venue=prompt('会場名',m?.venue||'');if(venue===null)return;
@@ -4847,7 +4865,7 @@ async function editMeet(id){
  const {error}=m?await sb.from('swim_meets').update(data).eq('id',id):await sb.from('swim_meets').insert({...data,created_by:session.user.id});
  if(error)return alert(error.message);await refreshMeets();
 }
-function editMeetEntry(id,meetId){
+function editMeetEntry(id,meetId){if(!requireSwimAdmin())return;
  const mid=meetId||meetEntries.find(e=>e.id===id)?.meet_id;
  if(!mid||!meetList.some(m=>m.id===mid)){alert('大会が見つかりません。画面を更新してください。');return}
  if(!PLAYERS.length){alert('先に選手を登録してください。');return}
@@ -4874,7 +4892,7 @@ function editMeetEntry(id,meetId){
 }
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261115-screenshot-review-v1';
+const APP_BUILD_VERSION='20261115-authz-v1';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));
@@ -4906,3 +4924,4 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 window.addEventListener('focus',()=>setTimeout(checkForAppUpdate,500));
 $$('.tabs button').forEach(b=>b.onclick=()=>go(b.dataset.tab));document.addEventListener('blur',e=>{if(e.target&&e.target.id==='itime')formatTimeInput()},true);init();setTimeout(checkForAppUpdate,1500);
 </script></body></html>
+

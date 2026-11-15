@@ -1,7 +1,7 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),{stripTypeScriptTypes}=require('node:module');
-const source=stripTypeScriptTypes(fs.readFileSync(require('node:path').join(__dirname,'../supabase/functions/jasf-ranking/index.ts'),'utf8').replace(/^import .*;\n/,''));
+const source=stripTypeScriptTypes(fs.readFileSync(require('node:path').join(__dirname,'../supabase/functions/jasf-ranking/index.ts'),'utf8').replace(/^import .*;\n/gm,''));
 let handler,upstreamCalls=0,credentialChecks=0;
-const c=vm.createContext({Response,URLSearchParams,AbortController,AbortSignal,setTimeout,clearTimeout,Deno:{env:{get:k=>({SUPABASE_URL:'https://test.supabase.co',SUPABASE_ANON_KEY:'anon',SUPABASE_SERVICE_ROLE_KEY:'runtime-server-key'}[k])},serve:fn=>{handler=fn}},createClient:()=>({auth:{getUser:async token=>({data:{user:token==='coach'?{id:'coach'}:null},error:null})}}),fetch:async(url,options)=>{
+const c=vm.createContext({Response,URLSearchParams,AbortController,AbortSignal,setTimeout,clearTimeout,Deno:{env:{get:k=>({SUPABASE_URL:'https://test.supabase.co',SUPABASE_ANON_KEY:'anon',SUPABASE_SERVICE_ROLE_KEY:'runtime-server-key'}[k])},serve:fn=>{handler=fn}},createClient:()=>({rpc:async()=>({data:true,error:null}),auth:{getUser:async token=>({data:{user:token==='coach'?{id:'coach'}:null},error:null})}}),fetch:async(url,options)=>{
  if(url.startsWith('https://test.supabase.co/rest/v1/')){
   credentialChecks++;assert.equal(options.headers.Authorization,'Bearer '+options.headers.apikey);
   const key=options.headers.apikey;
@@ -28,4 +28,5 @@ const req=(token,body=query)=>({method:'POST',headers:new Headers(token?{authori
  assert.equal(upstreamCalls,3);
  console.log('PASS: alternate server credential, runtime credential, coach session, anon/invalid/empty/wrong-row rejection, fail-closed outage, query validation');
 })().catch(e=>{console.error(e);process.exitCode=1});
+
 

@@ -23,7 +23,7 @@ const syntheticRows=api.parse(syntheticOcr,[{id:'ocr',name:'テスト 選手'}],
 assert.equal(syntheticRows[0].playerId,'ocr');assert.equal(syntheticRows[0].time,'1:02.34');assert.equal(syntheticRows[0].lapText,'50m 30.12\n100m 1:02.34');
 // Production loadCloud normally reports failures in the UI. Saving a screenshot
 // must also receive that failure instead of treating it as an empty record set.
-const cloudContext={PLAYERS:players,records:[{id:'keep'}],setStatus(){},fetchAllRows:async()=>{throw Error('read failed')}};
+const cloudContext={authorizationEpoch:0,PLAYERS:players,records:[{id:'keep'}],setStatus(){},fetchAllRows:async()=>{throw Error('read failed')}};
 vm.createContext(cloudContext);
 vm.runInContext(html.slice(html.indexOf('async function loadCloud('),html.indexOf('\nasync function ',html.indexOf('async function loadCloud(')+1)),cloudContext);
 // All inline scripts must parse, including generated event-handler strings.
@@ -49,3 +49,4 @@ function fixture({fail=false,duplicate=false}={}){
  x=fixture({fail:true});x.context.saveScreenshotRows();await x.context.commitScreenshotReview();assert.ok(!x.events.includes('best'),'failed insert never clears best flags');await x.context.commitScreenshotReview();assert.equal(x.events.filter(e=>e==='insert').length,1,'failure requires a new confirmation');
  console.log('PASS: screenshot parsing, bracket/RT exclusion, no inference, lap validation, preview/cancel/edit gates, duplicate preservation, double-save guard, failed-insert best preservation');
 })().catch(e=>{console.error(e);process.exitCode=1});
+

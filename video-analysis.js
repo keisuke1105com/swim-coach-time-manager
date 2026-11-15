@@ -44,7 +44,7 @@ async function openVideoAnalysis(playerId=''){
   catch(e){document.getElementById('videoSavedList').textContent='読み込めませんでした：'+e.message;}
 }
 
-async function readVideoBackup(input){
+async function readVideoBackup(input){if(!requireSwimAdmin())return;
   if(videoBusy)return;
   const panel=document.getElementById('videoImportPreview');
   videoImportRows=[];panel.textContent='';
@@ -123,3 +123,4 @@ async function renderPlayerVideoAnalyses(playerId){
     const retry=document.createElement('button');retry.className='secondary';retry.textContent='再読み込み';retry.onclick=()=>renderPlayerVideoAnalyses(playerId);panel.appendChild(retry);
   }
 }
+

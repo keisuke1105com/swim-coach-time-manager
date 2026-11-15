@@ -4,7 +4,7 @@ const fetchSource=html.slice(html.indexOf('function jasfRecordRequestError('),ht
 const syncSource=html.slice(html.indexOf('let jasfRecordSyncBusy='),html.indexOf('async function updateAllPlayersJasfLaps('));
 function fixture(reply){
  let calls=0,writes=0,active=0,maxActive=0;const box={innerHTML:''},records=[{swimmer_id:'p',id:'existing',time_seconds:60}];
- const c=vm.createContext({window:{SUPABASE_URL:'https://example.test'},AbortSignal,setTimeout:fn=>{fn();return 0;},Response,
+ const c=vm.createContext({session:{access_token:'synthetic-jwt'},requireSwimAdmin:()=>true,window:{SUPABASE_URL:'https://example.test'},AbortSignal,setTimeout:fn=>{fn();return 0;},Response,
   $:()=>box,playerById:()=>({id:'p'}),jasfAthleteIds:()=>['test-id'],
   JASF_EVENTS:[{stroke:'自由形',styleCode:1,distances:[{m:50,code:2},{m:100,code:3}]}],
   records,loadCloud:async()=>{},renderHome(){},renderRecords(){},renderAnalysis(){},sec:Number,jasfRecordDate:()=> '2026-11-12',isJasfOfficialRecord:()=>false,
@@ -40,3 +40,4 @@ function fixture(reply){
  for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))new vm.Script(m[1]);
  console.log('PASS: upstream 403/429/401 preserved, serial requests, stop on restriction/network/bad schema, true empty results, busy guard, partial/bulk reporting, no record writes on failed sync');
 })().catch(e=>{console.error(e);process.exitCode=1});
+

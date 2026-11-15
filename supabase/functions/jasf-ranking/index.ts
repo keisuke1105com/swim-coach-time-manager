@@ -1,3 +1,4 @@
+// Authorization rollout: preserve scheduled worker authentication.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.118.0';
 // Supabase Edge Function: jasf-ranking
 // Existing app's JASF ranking query parameters are preserved.
@@ -48,6 +49,10 @@ Deno.serve(async (req) => {
       } catch {
         return reply({ success: false, error: 'Credential validation unavailable' }, 503);
       }
+    } else {
+      const accessClient = createClient(supabaseUrl,anonKey,{auth:{persistSession:false,autoRefreshToken:false},global:{headers:{Authorization:'Bearer '+token}}});
+      const approval = await accessClient.rpc('is_swim_coach_approved');
+      if(approval.error || approval.data !== true)return reply({success:false,error:'Approved coach required'},403);
     }
   }
 
@@ -103,4 +108,5 @@ Deno.serve(async (req) => {
     return reply({ success: false, error: 'Function error', detail: String(error) }, 500);
   }
 });
+
 

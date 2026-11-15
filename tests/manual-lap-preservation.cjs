@@ -4,7 +4,7 @@ const helpers=html.slice(html.indexOf('async function preserveManualLaps('),html
 const lap=(record_id,distance,cumulative_seconds)=>({record_id,distance,cumulative_seconds});
 function setup(initial,{failInsert=false,hideSaved=false,failDelete=false}={}){
   let manual=structuredClone(initial),raceRows=[{id:'old'},{id:'new'}],events=[];
-  const c={records:raceRows,loadCloud:async()=>{},recalcPersonalBests:async()=>{},recordExactKey:()=> 'same',chooseDuplicateKeeper:()=>({id:'new'}),
+  const c={requireSwimAdmin:()=>true,records:raceRows,loadCloud:async()=>{},recalcPersonalBests:async()=>{},recordExactKey:()=> 'same',chooseDuplicateKeeper:()=>({id:'new'}),
     fetchAllRows:async(table,build)=>{
       const q={eq(k,v){this.value=v;return this},order(){return this}};build(q);
       return structuredClone(manual.filter(m=>m.record_id===q.value&&!(hideSaved&&q.value==='new')));
@@ -94,3 +94,4 @@ function setup(initial,{failInsert=false,hideSaved=false,failDelete=false}={}){
   console.log('PASS: 100m final 75–100m split 16.06, 50m/200m finish splits, no duplicate finish, no negative split, existing 50m intervals unchanged');
   console.log('PASS: replacement/cascade, duplicate cleanup, retry, conflicts, insert/read/delete failures, official/manual display');
 })().catch(e=>{console.error(e);process.exitCode=1});
+
