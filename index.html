@@ -1263,7 +1263,7 @@ function yumeCupStandard(playerId,stroke,distance){return yumeCupInfo(playerId,s
 function standardCatalogData(){return {jo:STANDARDS,yamanashi:window.YAMANASHI_2026_STANDARDS||[],tokyo:window.TOKYO_SC_STANDARDS||[],yume:YUME_CUP_STANDARDS};}
 
 function best(playerId,stroke,distance,course){let a=records.filter(r=>r.swimmer_id===playerId&&r.stroke===stroke&&Number(r.distance)===Number(distance)&&r.course===course).map(r=>+r.time_seconds);return a.length?Math.min(...a):null}
-async function init(){if(new URLSearchParams(location.search).has('share')){await renderPublicSwimmerProfile();return}if(!configured()){renderSetupNeeded();return}window.addEventListener('pagehide',()=>{authorizationEpoch++;clearPrivateView()});window.addEventListener('pageshow',e=>{if(e.persisted)location.reload()});sb=window.supabase.createClient(window.SUPABASE_URL,window.SUPABASE_PUBLISHABLE_KEY,{global:{fetch:authorizedFetch}});let {data}=await sb.auth.getSession();acceptAuthSession(data.session);sb.auth.onAuthStateChange((_e,s)=>{acceptAuthSession(s);setTimeout(()=>routeAuth(),0)});routeAuth()}
+async function init(){if(new URLSearchParams(location.search).has('share')){await renderPublicSwimmerProfile();return}if(!configured()){renderSetupNeeded();return}window.addEventListener('pagehide',()=>{authorizationEpoch++;clearPrivateView()});window.addEventListener('pageshow',e=>{if(e.persisted)resumePrivateView()});sb=window.supabase.createClient(window.SUPABASE_URL,window.SUPABASE_PUBLISHABLE_KEY,{global:{fetch:authorizedFetch}});let {data}=await sb.auth.getSession();acceptAuthSession(data.session);sb.auth.onAuthStateChange((_e,s)=>{acceptAuthSession(s);setTimeout(()=>routeAuth(),0)});routeAuth()}
 function renderSetupNeeded(){setStatus('config.js に Supabase Publishable key を設定してください。','error');$('#auth').innerHTML=`<div class="card auth"><h2>☁️ セットアップ待ち</h2><p>config.js の PASTE_YOUR_PUBLISHABLE_KEY_HERE を置き換えてください。</p></div>`}
 let authUserId=null,authExpiryTimer=null;
 function authSnapshot(){return {generation:authorizationEpoch,uid:session?.user?.id}}
@@ -1288,6 +1288,18 @@ function acceptAuthSession(next){
  const uid=next?.user?.id||null;
  if(!uid||uid!==authUserId){authorizationEpoch++;clearPrivateView()}
  authUserId=uid;session=next;
+}
+async function resumePrivateView(){
+ const epoch=++authorizationEpoch;clearPrivateView();
+ try{
+  const {data,error}=await sb.auth.getSession();
+  if(epoch!==authorizationEpoch)return;
+  acceptAuthSession(error?null:data?.session||null);
+  await routeAuth();
+ }catch{
+  if(epoch!==authorizationEpoch)return;
+  acceptAuthSession(null);await routeAuth();
+ }
 }
 async function routeAuth(){
  const epoch=++authorizationEpoch;resetAuthorizationState();
@@ -4928,7 +4940,7 @@ function editMeetEntry(id,meetId){if(!requireSwimAdmin())return;
 }
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261116-venue-v1';
+const APP_BUILD_VERSION='20261116-venue-v2';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));
