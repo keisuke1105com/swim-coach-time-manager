@@ -4907,7 +4907,7 @@ async function refreshMeets(focusMeetId){
   if(!authCurrent(mark))return;
   renderMeets();
   if(focusMeetId&&!$('#meets').classList.contains('hidden')){
-   const editButton=$('#meets [data-meet-action="edit-meet"]').find(button=>button.dataset.meetId===String(focusMeetId));
+   const editButton=$$('#meets [data-meet-action="edit-meet"]').find(button=>button.dataset.meetId===String(focusMeetId));
    editButton?.closest('.me-card')?.scrollIntoView({block:'start'});
   }
  }catch(e){if(authCurrent(mark))alert('大会情報を取得できませんでした：'+e.message)}
@@ -4986,7 +4986,7 @@ function editMeetEntry(id,meetId){if(!requireSwimAdmin())return;
 }
 function go(tab,remember=true,focusMeetId){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets(focusMeetId)}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261118-venue-next-meet-v1';
+const APP_BUILD_VERSION='20261118-venue-next-meet-v2';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));
