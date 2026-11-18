@@ -117,7 +117,6 @@ header h1{font-size:17px}header small{font-size:12px;color:#536D7E}
 .section-kicker{font-size:10px;letter-spacing:.14em;font-weight:800;color:#087CB5}
 .section-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
 #home .section-heading h3{margin:2px 0 0;font-size:20px}.section-heading button{font-size:13px;min-height:44px;padding:8px 12px;flex-shrink:0}
-.recent-record{display:flex;gap:10px;align-items:center;padding:15px 0;border-bottom:1px solid #E6EFF5}.recent-record:last-child{border:0;padding-bottom:0}
 .record-mark{display:grid;place-items:center;flex:0 0 34px;height:34px;border-radius:11px;background:#E8F6FD;color:#087CB5;font-size:24px}
 .record-info{flex:1;min-width:0;overflow-wrap:anywhere}.record-info b{font-size:15px}.record-info span,.record-info small{display:block;font-size:12px;color:#536D7E;line-height:1.6}
 .record-info small{font-size:11px;color:#60798A}.record-time{font-size:22px;white-space:nowrap;font-variant-numeric:tabular-nums;letter-spacing:-.03em}
@@ -138,7 +137,7 @@ header h1{font-size:17px}header small{font-size:12px;color:#536D7E}
 .player-other-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:4px 0 0}
 #plist .player-other-actions button.secondary{background:#E8F4FA;color:#075C87;border-color:#C9E3F0}
 .players-management{margin:24px 0 8px}.players-management button{width:100%}
-@media(max-width:374px){.team-hero{padding:20px 16px}.team-hero h2{font-size:26px}.mascot-space{flex-basis:48px}.home-stats span{font-size:10px}.home-stats b{font-size:22px}.record-mark{display:none}}
+@media(max-width:374px){.team-hero{padding:20px 16px}.team-hero h2{font-size:26px}.mascot-space{flex-basis:48px}.home-stats span{font-size:10px}.home-stats b{font-size:22px}}
 /* 正式画像は原本のまま配置。切り抜き・色変更・反転なし。 */
 header{background:#12324A;color:#FFFFFF;border:0}
 header small{color:#C5E7F5}
@@ -151,7 +150,12 @@ header small{color:#C5E7F5}
 .mascot-space figcaption{color:#12324A;font-size:10px;text-align:center;font-weight:700;margin-top:5px}
 .team-hero .hero-input{min-height:60px;background:#FFFFFF;color:#075C87;border-bottom:4px solid #7DD3FC;border-radius:16px}
 .home-stats{margin-top:16px;box-shadow:0 5px 18px #12324A08}
-.recent-records{border-top:4px solid #7DD3FC}
+.next-meet{border-top:4px solid #7DD3FC}
+.next-meet-summary{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:10px 0}
+.next-meet-summary strong{overflow-wrap:anywhere}
+.next-meet-summary .me-count{flex-shrink:0}
+.next-meet-meta{margin:0 0 12px;overflow-wrap:anywhere}
+.me-card{scroll-margin-top:16px}
 .players-heading{padding:20px;margin:-18px -12px 0;background:linear-gradient(135deg,#12324A,#075C87);color:white;border-radius:0 0 26px 26px;min-height:158px;align-items:center}
 .players-heading h2{color:white;font-size:30px}.players-heading .section-kicker{color:#7DD3FC}.players-heading .muted{color:#D8EFFA;max-width:210px}
 .roster-mascot{flex-shrink:0;width:74px;height:auto;padding:6px;background:white;border-radius:40px 40px 14px 14px;object-fit:contain}
@@ -1390,12 +1394,43 @@ function uniqueJoQualifiedRecords(items=records){
  }
  return [...qualified.values()].sort((a,b)=>String(b.record_date||'').localeCompare(String(a.record_date||'')));
 }
+async function renderNextMeet(content){
+ const mark=authSnapshot();
+ const isCurrent=()=>content.isConnected&&authCurrent(mark)&&coachApproved;
+ try{
+  const parts=new Intl.DateTimeFormat('en',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts();
+  const dateParts=Object.fromEntries(parts.map(({type,value})=>[type,value]));
+  const today=[dateParts.year,dateParts.month,dateParts.day].join('-');
+  const {data:meet,error}=await sb.from('swim_meets').select('id,name,meet_date,venue')
+   .gte('meet_date',today).order('meet_date').order('id').limit(1).maybeSingle();
+  if(!isCurrent())return;
+  if(error)throw error;
+  if(!meet){
+   content.innerHTML='<p class="muted">次の大会は未登録です。</p>';
+   return;
+  }
+  const {data:swimmers,error:swimmerError}=await sb.from('swim_meet_swimmers').select('swimmer_id').eq('meet_id',meet.id);
+  if(!isCurrent())return;
+  if(swimmerError)throw swimmerError;
+  const count=new Set(swimmers.map(row=>row.swimmer_id)).size;
+  const days=(Date.parse(meet.meet_date)-Date.parse(today))/86400000;
+  content.innerHTML=`<div class="next-meet-summary"><strong>${meEsc(meet.name)}</strong><b class="me-count">${days===0?'本日開催':'あと'+days+'日'}</b></div>
+   <p class="muted next-meet-meta">${meEsc(meDate(meet.meet_date))} ／ ${meEsc(meet.venue||'会場未登録')}<br>フィッツ竜王から${count}名出場</p>
+   <button class="secondary" type="button">出場選手・種目を見る</button>`;
+  content.querySelector('button').onclick=()=>go('meets',true,meet.id);
+ }catch(error){
+  if(isCurrent())content.innerHTML='<p class="muted">大会予定を取得できませんでした。</p>';
+ }
+}
+
 function renderHome(){let today=new Date().toISOString().slice(0,10),td=records.filter(r=>r.record_date===today).length,b=records.filter(r=>r.is_personal_best).length,j=uniqueJoQualifiedRecords().length;$('#home').innerHTML=`
 <section class="team-hero" aria-labelledby="teamWelcome"><div class="hero-kicker">SWIM TEAM · COACH DESK</div><div class="hero-welcome"><div><h2 id="teamWelcome">Team フィッツ竜王</h2><p>選手の成長を、一つずつ記録しよう。</p></div><div class="official-team" aria-label="チームの公式キャラクター"><figure><img src="assets/characters/fitz-butterfly.jpg" width="987" height="533" alt="フィッツ君" loading="eager"></figure><figure><img src="assets/characters/relief-butterfly.jpg" width="975" height="528" alt="リリーフ君" loading="eager"></figure><figure><img src="assets/characters/kurin-butterfly.jpg" width="979" height="514" alt="クリンちゃん" loading="eager"></figure></div></div><button class="hero-input" onclick="go('input')"><span>＋ タイムを入力する</span><span aria-hidden="true">→</span></button></section>
 <div class="home-stats" aria-label="チームの集計"><div><span>登録選手</span><b>${PLAYERS.length}<small>名</small></b></div><div><span>JO突破記録</span><b>${j}<small>件</small></b></div><div><span>今日の入力</span><b>${td}<small>件</small></b></div><div><span>ベスト更新</span><b>${b}<small>件</small></b></div></div>
-<section class="card recent-records"><div class="section-heading"><div><span class="section-kicker">RECENT ACTIVITY</span><h3>最近の記録</h3></div><button class="secondary" onclick="go('records')">履歴を見る</button></div><div class="recent-list">${records.slice(-5).reverse().map(r=>{let p=playerById(r.swimmer_id);return `<div class="recent-record"><div class="record-mark" aria-hidden="true">≈</div><div class="record-info"><b>${p?.name||'選手'}</b><span>${r.stroke} ${r.distance}m・${r.course}</span><small>${r.record_date||''}</small></div><b class="record-time">${fmt(r.time_seconds)}</b></div>`}).join('')||'<p class="muted">まだ記録がありません。</p>'}</div></section>
+<article class="card next-meet" aria-labelledby="nextMeetHeading"><h3 id="nextMeetHeading">次の大会</h3><div id="nextMeetContent" aria-live="polite"><p class="muted">大会予定を読み込み中…</p></div></article>
 <div class="card"><h3>🎥 動画からの泳速分析</h3><p class="muted">動画分析の区間泳速・ストローク・テンポを選手別に管理します。</p><button class="secondary" onclick="openVideoAnalysis()">動画分析を開く</button></div><div id="videoAnalysisPanel"></div>
-<details id="homeManagement" class="management-panel"><summary><span>⚙ 管理・設定</span><span class="muted">開く</span></summary><div class="management-content">${shareAdmin?`<div class="card"><h3>🔒 管理者用バックアップ</h3><p class="muted small">選手（非表示含む）・大会記録・手動ラップ・動画分析をJSONファイルに保存します。個人情報を含むため安全に保管してください。</p><button id="backupDownloadBtn" class="secondary" style="width:100%" onclick="downloadSwimBackup()">📥 バックアップを保存</button><p class="muted small">※手動保存です。復元・自動保存は未対応です。</p></div>`:''}<div class="maintenance-actions"><h3>記録の重複整理</h3><button class="secondary" style="width:100%;margin:0 0 8px" onclick="cleanupAllExactDuplicates()">🧹 完全一致した重複記録を整理</button><div class="muted small" style="margin:-2px 0 10px">選手・日付・種目・距離・水路・タイムがすべて同じ記録だけを整理します。公式 ＞ 速報 ＞ 手入力の順で1件を残します。</div><button class="secondary" style="width:100%;margin:0 0 12px" onclick="cleanupAllJasfDuplicates()">🇯🇵 重複公式記録を result_id で整理</button><div class="muted small" style="margin:-4px 0 12px">同じ選手・同じ result_id の日本水泳連盟公式記録だけを整理します。</div></div></div></details>`}
+<details id="homeManagement" class="management-panel"><summary><span>⚙ 管理・設定</span><span class="muted">開く</span></summary><div class="management-content">${shareAdmin?`<div class="card"><h3>🔒 管理者用バックアップ</h3><p class="muted small">選手（非表示含む）・大会記録・手動ラップ・動画分析をJSONファイルに保存します。個人情報を含むため安全に保管してください。</p><button id="backupDownloadBtn" class="secondary" style="width:100%" onclick="downloadSwimBackup()">📥 バックアップを保存</button><p class="muted small">※手動保存です。復元・自動保存は未対応です。</p></div>`:''}<div class="maintenance-actions"><h3>記録の重複整理</h3><button class="secondary" style="width:100%;margin:0 0 8px" onclick="cleanupAllExactDuplicates()">🧹 完全一致した重複記録を整理</button><div class="muted small" style="margin:-2px 0 10px">選手・日付・種目・距離・水路・タイムがすべて同じ記録だけを整理します。公式 ＞ 速報 ＞ 手入力の順で1件を残します。</div><button class="secondary" style="width:100%;margin:0 0 12px" onclick="cleanupAllJasfDuplicates()">🇯🇵 重複公式記録を result_id で整理</button><div class="muted small" style="margin:-4px 0 12px">同じ選手・同じ result_id の日本水泳連盟公式記録だけを整理します。</div></div></div></details>`
+renderNextMeet($('#nextMeetContent'));
+}
 function renderPlayers(){ $('#players').innerHTML=`<div class="players-heading"><div><span class="section-kicker">TEAM ROSTER</span><h2>選手一覧</h2><p class="muted">記録を確認して、次の一泳へ。</p></div><div class="official-team" aria-label="チームの公式キャラクター"><figure><img src="assets/characters/fitz-butterfly.jpg" width="987" height="533" alt="フィッツ君" loading="eager"></figure><figure><img src="assets/characters/relief-butterfly.jpg" width="975" height="528" alt="リリーフ君" loading="eager"></figure><figure><img src="assets/characters/kurin-butterfly.jpg" width="979" height="514" alt="クリンちゃん" loading="eager"></figure></div></div><div class="roster-toolbar"><span>チームの選手と記録</span><button onclick="showAddPlayer()">＋ 選手追加</button></div><div class="player-search"><label for="pq">選手を探す</label><input class="search" id="pq" placeholder="選手名で検索" oninput="filterPlayers()"></div><div id="playerForm"></div><div id="plist"></div><div class="players-management"><button class="secondary" onclick="go('home');document.getElementById('homeManagement').open=true">⚙ 管理・設定を開く</button></div>`;filterPlayers()}
 function showAddPlayer(p=null){$('#playerForm').innerHTML=`<div class="result"><h3>${p?'選手編集':'新しい選手'}</h3><div class="field"><label>氏名</label><input id="pn" value="${p?.name||''}"></div><div class="field"><label>区分</label><select id="pd">${['9歳以下','10歳','11歳','12歳','13歳','14歳','15〜16歳','CS'].map(x=>`<option ${p?.age_group===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>性別</label><select id="pg"><option ${p?.gender==='男子'?'selected':''}>男子</option><option ${p?.gender==='女子'?'selected':''}>女子</option></select></div><div class="field"><label>生年月日（任意）</label><input id="pb" type="date" value="${p?.birth_date||''}"></div><div class="field"><label>チーム・メモ（任意）</label><input id="pt" value="${p?.team||''}"></div><div class="field"><label>日本水泳連盟 競技者ID（複数可）</label><input id="pj" placeholder="競技者IDをカンマ区切りで入力" value="${p?jasfAthleteIds(p).join(', '):''}"><div class="muted small" style="margin-top:6px">複数ある場合はカンマ区切りで入力してください。すべてのIDから記録を同期します。</div></div><div class="actions"><button onclick="savePlayer('${p?.id||''}')">保存</button><button class="secondary" onclick="$('#playerForm').innerHTML=''">キャンセル</button></div></div>`}
 async function savePlayer(id=''){let payload={name:$('#pn').value.trim(),age_group:$('#pd').value,gender:$('#pg').value,birth_date:$('#pb').value||null,team:$('#pt').value.trim()||null,athlete_id:(parseAthleteIds($('#pj')?.value)[0]||null),athlete_ids:parseAthleteIds($('#pj')?.value),...(id?{}:{active:true})};if(!payload.name){alert('氏名を入力してください');return}if(!id)payload.sort_order=(PLAYERS.reduce((m,p)=>Math.max(m,p.sort_order||0),0)+1);let q=id?sb.from('swimmers').update(payload).eq('id',id):sb.from('swimmers').insert(payload);let {error}=await q;if(error){alert(error.message);return}await loadCloud();renderPlayers();renderHome()}
@@ -4865,7 +4900,18 @@ function meDays(v){const d=new Date(String(v)+'T00:00:00'),t=new Date();if(!Numb
 function meDate(v){return new Date(v+'T00:00:00').toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'short'})}
 function meCountdown(v){const d=meDays(v);return d==null?'日程未登録':d===0?'本日開催！':d>0?'あと'+d+'日':'終了'}
 async function loadMeets(){const mark=authSnapshot();const [a,b,c]=await Promise.all([sb.from('swim_meets').select('*').order('meet_date'),sb.from('swim_meet_swimmers').select('*'),sb.from('swim_meet_entries').select('*').order('created_at')]);if(!authCurrent(mark))return false;if(a.error)throw a.error;if(b.error)throw b.error;if(c.error)throw c.error;meetList=a.data||[];meetEntries=b.data||[];meetEventEntries=c.data||[];const [programs,timetable]=await Promise.all([fetchAllRows('swim_meet_programs',q=>q.order('id')),fetchAllRows('swim_meet_timetable',q=>q.order('id'))]);if(!authCurrent(mark))return false;const byEntry=new Map();for(const p of programs||[]){if(!byEntry.has(p.entry_id))byEntry.set(p.entry_id,[]);byEntry.get(p.entry_id).push(p);}meetEventEntries=meetEventEntries.map(e=>({...e,programs:byEntry.get(e.id)||[],timetable:MeetTimetable.forEntry(e,PLAYERS.find(p=>p.id===e.swimmer_id),timetable)}))}
-async function refreshMeets(){const mark=authSnapshot();try{await loadMeets();if(authCurrent(mark))renderMeets()}catch(e){if(authCurrent(mark))alert('大会情報を取得できませんでした：'+e.message)}}
+async function refreshMeets(focusMeetId){
+ const mark=authSnapshot();
+ try{
+  await loadMeets();
+  if(!authCurrent(mark))return;
+  renderMeets();
+  if(focusMeetId&&!$('#meets').classList.contains('hidden')){
+   const editButton=$('#meets [data-meet-action="edit-meet"]').find(button=>button.dataset.meetId===String(focusMeetId));
+   editButton?.closest('.me-card')?.scrollIntoView({block:'start'});
+  }
+ }catch(e){if(authCurrent(mark))alert('大会情報を取得できませんでした：'+e.message)}
+}
 function handleMeetButton(ev){
  const button=ev.target.closest('button[data-meet-action]');
  if(!button||!ev.currentTarget.contains(button))return;
@@ -4938,9 +4984,9 @@ function editMeetEntry(id,meetId){if(!requireSwimAdmin())return;
   }catch(e){error.textContent='保存できませんでした：'+String(e?.message||e);save.disabled=false;await loadMeets()}
  };
 }
-function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets()}
+function go(tab,remember=true,focusMeetId){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets(focusMeetId)}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261116-venue-v2';
+const APP_BUILD_VERSION='20261118-venue-next-meet-v1';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));
