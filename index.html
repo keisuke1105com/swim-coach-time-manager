@@ -228,7 +228,8 @@ body.public-themed{background:var(--public-page-background,#eef7fc)}
 <main class="wrap"><div id="appUpdateNotice" hidden style="background:#e7f3fb;border:1px solid #91c9ed;border-radius:14px;padding:12px;margin-bottom:12px;color:#075985;font-weight:700">✨ 新しいバージョンがあります。入力内容を保存してから更新してください。 <button type="button" style="margin-top:8px" onclick="reloadLatestApp()">🔄 最新版に更新</button></div><div id="status"></div><section id="auth"></section><section id="publicProfile" class="hidden"></section><div id="app" class="hidden"><section id="home"></section><section id="players" class="hidden"></section><section id="input" class="hidden"></section><section id="records" class="hidden"></section><section id="analysis" class="hidden"></section><section id="meets" class="hidden"></section></div></main>
 <div id="pbCelebration" class="pb-celebration" role="dialog" aria-modal="true" aria-label="自己ベストのお祝い" hidden><div class="pb-celebration-card" id="pbCelebrationContent"></div></div><nav id="tabs" class="tabs hidden"><button data-tab="home">🏠<br>ホーム</button><button data-tab="players">👥<br>選手</button><button data-tab="input">⏱️<br>入力</button><button data-tab="records">📋<br>記録</button><button data-tab="analysis">📊<br>分析</button><button data-tab="meets">📅<br>大会</button></nav>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="screenshot-import.js?v=20261115-1"></script><script src="authz-ui.js?v=20261115-1"></script><script src="config.js"></script><script src="data.js"></script><script src="yamanashi_2026.js"></script><script src="tokyo_sc.js"></script><script src="standard-catalog.js?v=20261107-1"></script><script src="meet-entry-pdf.js?v=20261106-1"></script><script src="meet-schedules.js?v=20261028-1"></script><script src="public-meet-schedule.js?v=20261107-1"></script><script src="meet-program-pdf.js?v=20261106-1"></script><script src="meet-timetable.js?v=20261106-2"></script><script src="meet-program-import-ui.js?v=20261106-3"></script><script src="meet-entry-import-ui.js?v=20261106-2"></script><script src="video-analysis.js?v=20261023-2"></script><script>
-let sb=null,session=null,PLAYERS=[],records=[];let shareAdmin=false,coachApproved=false,authorizationEpoch=0;let selectedPlayerId='',selectedStroke='自由形',selectedDistance=50,selectedCourse='長水路';
+let sb=null,session=null,PLAYERS=[],records=[];let shareAdmin=false,coachApproved=false,authorizationEpoch=0;
+let jasfMatchingConfig=null;let selectedPlayerId='',selectedStroke='自由形',selectedDistance=50,selectedCourse='長水路';
 const VIEW_STATE_KEY='swimCloudViewState';
 function saveViewState(tab,playerId=''){try{localStorage.setItem(VIEW_STATE_KEY,JSON.stringify({tab,playerId,ts:Date.now()}))}catch(e){}}
 function getViewState(){try{return JSON.parse(localStorage.getItem(VIEW_STATE_KEY)||'{}')}catch(e){return {}}}
@@ -292,19 +293,7 @@ function formatTimeInput(){
 function fmt(v){if(v==null||isNaN(v))return '-';let m=Math.floor(v/60),s=v-m*60;return (m?m+':':'')+s.toFixed(2).padStart(m?5:0,'0')}
 function playerById(id){return PLAYERS.find(x=>x.id===id)}
 // 日本水泳連盟「Results of Japan Swimming」選手ページとの紐づけ
-const JASF_ATHLETE_IDS={
-  '龍田小春':'58337328'
-};
 // 選手ページIDと順位APIの swimmer_code は別番号の場合がある。
-const JASF_PROFILE_TO_RANKING_CODES={
-  '58366356':['9455451'], // 大森結月: Results of Japan Swimming の順位APIで確認済み
-  // 深澤真有: クラブ登録と高校登録で選手ページID・順位APIコードが異なる。
-  // 複数候補が返る種目では、順位が速い高校登録（9534201）を先に採用する。
-  '56399091':['8799696'],
-  '58602606':['9534201'],
-  '57355971':['9118656'], // 飯野舞美・クラブ登録: 取得済み公式順位の競技者コード
-  '58640127':['9546708']  // 飯野舞美・学校登録: 公式選手情報APIで確認（2026-10-17）
-};
 function jasfAthleteIds(player){
   if(!player)return [];
   const ids=[];
@@ -315,9 +304,9 @@ function jasfAthleteIds(player){
   if(Array.isArray(player.athlete_ids))player.athlete_ids.forEach(add);
   add(player.athlete_id||player.jasf_athlete_id);
   const key=String(player.name||'').replace(/[ 　]/g,'').trim();
-  add(JASF_ATHLETE_IDS[key]);
+  add(jasfMatchingConfig?.JASF_ATHLETE_IDS?.[key]);
   // プロフィールIDはURL生成にも使うので先に保持し、順位照合用IDを追加する。
-  [...ids].forEach(id=>(JASF_PROFILE_TO_RANKING_CODES[id]||[]).forEach(add));
+  [...ids].forEach(id=>(jasfMatchingConfig?.JASF_PROFILE_TO_RANKING_CODES?.[id]||[]).forEach(add));
   return ids;
 }
 function jasfAthleteId(player){return jasfAthleteIds(player)[0]||'';}
@@ -1262,7 +1251,7 @@ function best(playerId,stroke,distance,course){let a=records.filter(r=>r.swimmer
 async function init(){if(new URLSearchParams(location.search).has('share')){await renderPublicSwimmerProfile();return}if(!configured()){renderSetupNeeded();return}sb=window.supabase.createClient(window.SUPABASE_URL,window.SUPABASE_PUBLISHABLE_KEY,{global:{fetch:authorizedFetch}});let {data}=await sb.auth.getSession();session=data.session;sb.auth.onAuthStateChange((_e,s)=>{session=s;setTimeout(()=>routeAuth(),0)});routeAuth()}
 function renderSetupNeeded(){setStatus('config.js に Supabase Publishable key を設定してください。','error');$('#auth').innerHTML=`<div class="card auth"><h2>☁️ セットアップ待ち</h2><p>config.js の PASTE_YOUR_PUBLISHABLE_KEY_HERE を置き換えてください。</p></div>`}
 async function routeAuth(){
- const epoch=++authorizationEpoch;resetAuthorizationState();
+ const epoch=++authorizationEpoch;resetAuthorizationState();jasfMatchingConfig=null;
  $('#app').classList.add('hidden');$('#tabs').classList.add('hidden');$('#logoutBtn').classList.add('hidden');
  if(!session){renderAuth();return;}
  $('#auth').innerHTML='<div class="card">利用権限を確認しています…</div>';$('#logoutBtn').classList.remove('hidden');
@@ -1278,7 +1267,7 @@ async function routeAuth(){
 function renderAuth(){setStatus('');$('#auth').innerHTML=`<div class="card auth"><h2>🔐 コーチログイン</h2><div class="field"><label>メールアドレス</label><input id="email" type="email"></div><div class="field"><label>パスワード</label><input id="password" type="password"></div><div class="actions"><button onclick="login()">ログイン</button><button class="secondary" onclick="signup()">初回登録</button></div><p class="muted small">初回のみアカウント登録してください。管理者の承認後、全選手の情報を共有できます。</p></div>`}
 async function login(){let email=$('#email').value.trim(),password=$('#password').value;let {error}=await sb.auth.signInWithPassword({email,password});if(error)setStatus(error.message,'error')}
 async function signup(){let email=$('#email').value.trim(),password=$('#password').value;if(password.length<6){setStatus('パスワードは6文字以上にしてください。','error');return}let {error}=await sb.auth.signUp({email,password});setStatus(error?error.message:'登録しました。メール確認後にログインし、管理者の承認をお待ちください。',error?'error':'notice')}
-async function logout(){++authorizationEpoch;resetAuthorizationState();session=null;await sb.auth.signOut();await routeAuth()}
+async function logout(){++authorizationEpoch;resetAuthorizationState();jasfMatchingConfig=null;session=null;await sb.auth.signOut();await routeAuth()}
 async function fetchAllRows(table,buildQuery,pageSize=1000){
   const all=[];
   for(let from=0;;from+=pageSize){
@@ -1295,13 +1284,16 @@ async function fetchAllRows(table,buildQuery,pageSize=1000){
 async function loadCloud(options={}){const epoch=authorizationEpoch;
   setStatus('クラウドから読み込み中…');
   try{
-    const [p,r,m]=await Promise.all([
+    const [p,r,m,matching]=await Promise.all([
   fetchAllRows('swimmers',q=>q.eq('active',true).order('sort_order')),
   fetchAllRows('swim_records',q=>q.order('created_at')),
-  fetchAllRows('swim_manual_laps',q=>q.order('distance'))
+  fetchAllRows('swim_manual_laps',q=>q.order('distance')),
+  sb.from('swim_jasf_matching_config').select('config').eq('id',1).single()
 ]);
 
 if(epoch!==authorizationEpoch)return;
+if(matching.error)throw matching.error;
+jasfMatchingConfig=matching.data.config;
 PLAYERS=p;
 records=r;
 manualLaps=m;
@@ -1353,7 +1345,7 @@ function renderHome(){let today=new Date().toISOString().slice(0,10),td=records.
 <div class="card"><h3>🎥 動画からの泳速分析</h3><p class="muted">動画分析の区間泳速・ストローク・テンポを選手別に管理します。</p><button class="secondary" onclick="openVideoAnalysis()">動画分析を開く</button></div><div id="videoAnalysisPanel"></div>
 <details id="homeManagement" class="management-panel"><summary><span>⚙ 管理・設定</span><span class="muted">開く</span></summary><div class="management-content">${shareAdmin?`<div class="card"><h3>🔒 管理者用バックアップ</h3><p class="muted small">選手（非表示含む）・大会記録・手動ラップ・動画分析をJSONファイルに保存します。個人情報を含むため安全に保管してください。</p><button id="backupDownloadBtn" class="secondary" style="width:100%" onclick="downloadSwimBackup()">📥 バックアップを保存</button><p class="muted small">※手動保存です。復元・自動保存は未対応です。</p></div>`:''}<div class="maintenance-actions"><h3>記録の重複整理</h3><button class="secondary" style="width:100%;margin:0 0 8px" onclick="cleanupAllExactDuplicates()">🧹 完全一致した重複記録を整理</button><div class="muted small" style="margin:-2px 0 10px">選手・日付・種目・距離・水路・タイムがすべて同じ記録だけを整理します。公式 ＞ 速報 ＞ 手入力の順で1件を残します。</div><button class="secondary" style="width:100%;margin:0 0 12px" onclick="cleanupAllJasfDuplicates()">🇯🇵 重複公式記録を result_id で整理</button><div class="muted small" style="margin:-4px 0 12px">同じ選手・同じ result_id の日本水泳連盟公式記録だけを整理します。</div></div></div></details>`}
 function renderPlayers(){ $('#players').innerHTML=`<div class="players-heading"><div><span class="section-kicker">TEAM ROSTER</span><h2>選手一覧</h2><p class="muted">記録を確認して、次の一泳へ。</p></div><div class="official-team" aria-label="チームの公式キャラクター"><figure><img src="assets/characters/fitz-butterfly.jpg" width="987" height="533" alt="フィッツ君" loading="eager"></figure><figure><img src="assets/characters/relief-butterfly.jpg" width="975" height="528" alt="リリーフ君" loading="eager"></figure><figure><img src="assets/characters/kurin-butterfly.jpg" width="979" height="514" alt="クリンちゃん" loading="eager"></figure></div></div><div class="roster-toolbar"><span>チームの選手と記録</span><button onclick="showAddPlayer()">＋ 選手追加</button></div><div class="player-search"><label for="pq">選手を探す</label><input class="search" id="pq" placeholder="選手名で検索" oninput="filterPlayers()"></div><div id="playerForm"></div><div id="plist"></div><div class="players-management"><button class="secondary" onclick="go('home');document.getElementById('homeManagement').open=true">⚙ 管理・設定を開く</button></div>`;filterPlayers()}
-function showAddPlayer(p=null){$('#playerForm').innerHTML=`<div class="result"><h3>${p?'選手編集':'新しい選手'}</h3><div class="field"><label>氏名</label><input id="pn" value="${p?.name||''}"></div><div class="field"><label>区分</label><select id="pd">${['9歳以下','10歳','11歳','12歳','13歳','14歳','15〜16歳','CS'].map(x=>`<option ${p?.age_group===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>性別</label><select id="pg"><option ${p?.gender==='男子'?'selected':''}>男子</option><option ${p?.gender==='女子'?'selected':''}>女子</option></select></div><div class="field"><label>生年月日（任意）</label><input id="pb" type="date" value="${p?.birth_date||''}"></div><div class="field"><label>チーム・メモ（任意）</label><input id="pt" value="${p?.team||''}"></div><div class="field"><label>日本水泳連盟 競技者ID（複数可）</label><input id="pj" placeholder="例：58337328, 12345678" value="${p?jasfAthleteIds(p).join(', '):''}"><div class="muted small" style="margin-top:6px">複数ある場合はカンマ区切りで入力してください。すべてのIDから記録を同期します。</div></div><div class="actions"><button onclick="savePlayer('${p?.id||''}')">保存</button><button class="secondary" onclick="$('#playerForm').innerHTML=''">キャンセル</button></div></div>`}
+function showAddPlayer(p=null){$('#playerForm').innerHTML=`<div class="result"><h3>${p?'選手編集':'新しい選手'}</h3><div class="field"><label>氏名</label><input id="pn" value="${p?.name||''}"></div><div class="field"><label>区分</label><select id="pd">${['9歳以下','10歳','11歳','12歳','13歳','14歳','15〜16歳','CS'].map(x=>`<option ${p?.age_group===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>性別</label><select id="pg"><option ${p?.gender==='男子'?'selected':''}>男子</option><option ${p?.gender==='女子'?'selected':''}>女子</option></select></div><div class="field"><label>生年月日（任意）</label><input id="pb" type="date" value="${p?.birth_date||''}"></div><div class="field"><label>チーム・メモ（任意）</label><input id="pt" value="${p?.team||''}"></div><div class="field"><label>日本水泳連盟 競技者ID（複数可）</label><input id="pj" placeholder="競技者番号をカンマ区切りで入力" value="${p?jasfAthleteIds(p).join(', '):''}"><div class="muted small" style="margin-top:6px">複数ある場合はカンマ区切りで入力してください。すべてのIDから記録を同期します。</div></div><div class="actions"><button onclick="savePlayer('${p?.id||''}')">保存</button><button class="secondary" onclick="$('#playerForm').innerHTML=''">キャンセル</button></div></div>`}
 async function savePlayer(id=''){let payload={name:$('#pn').value.trim(),age_group:$('#pd').value,gender:$('#pg').value,birth_date:$('#pb').value||null,team:$('#pt').value.trim()||null,athlete_id:(parseAthleteIds($('#pj')?.value)[0]||null),athlete_ids:parseAthleteIds($('#pj')?.value),...(id?{}:{active:true})};if(!payload.name){alert('氏名を入力してください');return}if(!id)payload.sort_order=(PLAYERS.reduce((m,p)=>Math.max(m,p.sort_order||0),0)+1);let q=id?sb.from('swimmers').update(payload).eq('id',id):sb.from('swimmers').insert(payload);let {error}=await q;if(error){alert(error.message);return}await loadCloud();renderPlayers();renderHome()}
 async function removePlayer(id){if(!requireSwimAdmin())return;if(!confirm('この選手を一覧から外しますか？過去記録は残ります。'))return;let {error}=await sb.from('swimmers').update({active:false}).eq('id',id);if(error)alert(error.message);else{await loadCloud();renderPlayers();renderHome()}}
 function filterPlayers(){let q=($('#pq')?.value||'').toLowerCase();$('#plist').innerHTML=PLAYERS.filter(p=>p.name.toLowerCase().includes(q)).sort((a,b)=>{if(a.birth_date&&b.birth_date)return a.birth_date.localeCompare(b.birth_date);if(a.birth_date)return -1;if(b.birth_date)return 1;return (a.sort_order||0)-(b.sort_order||0)}).map(p=>{let n=records.filter(r=>r.swimmer_id===p.id).length,j=records.filter(r=>r.swimmer_id===p.id&&r.is_jo_qualified).length;return `<div class="row player-card"><div class="player-identity"><b>${p.name}</b><br><span class="muted">${p.age_group||'-'}・${p.gender||'-'}・${n}件</span></div><div class="player-card-actions">${j?'<span class="badge">JO突破あり</span> ':''}<button class="secondary" onclick="showPlayerDetail('${p.id}')">詳細</button><button class="secondary" onclick="selectedPlayerId='${p.id}';go('input')">入力</button><details class="player-other"><summary>その他 <span aria-hidden="true">⌄</span></summary><div class="player-other-actions"><button class="secondary" onclick='showAddPlayer(${JSON.stringify(p)})'>編集</button> <button class="danger" onclick="removePlayer('${p.id}')">外す</button></div></details></div></div>`}).join('')||'<p class="muted">選手がいません。</p>'}
@@ -1601,7 +1593,7 @@ let trendOptions=trendKeys.map(key=>{
       <div class="result" style="margin-bottom:16px">
         <b>🇯🇵 日本水泳連盟 競技者ID（複数可）</b>
         <div class="field" style="margin-bottom:8px">
-          <input id="detailAthleteId" placeholder="例：58337328, 12345678" value="${jasfAthleteIds(p).join(', ')}">
+          <input id="detailAthleteId" placeholder="競技者番号をカンマ区切りで入力" value="${jasfAthleteIds(p).join(', ')}">
         </div>
         <div class="actions">
           <button onclick="saveAthleteId('${p.id}')">競技者IDを保存</button>
@@ -2845,15 +2837,11 @@ function jasfSameSwimmer(row,player,athleteIds=[]){
 // 1件だけで、かつ公式名が完全一致するときに限って本人として扱う。
 // 同姓同名の公式選手が確認できた場合は、登録済みの競技者番号に都道府県を対応付ける。
 // ランキングAPIが競技者番号を返さない場合でも、別県の同姓同名を選ばないために使う。
-const JASF_ATHLETE_IDENTITIES={
-  // 同姓同名の選手がいるため、JASFで確認した競技者番号と所属・都道府県を照合に使う。
-  '58366356':{prefecture:'山梨',teamTokens:['フィッツ','竜王']}
-};
 function jasfNormalizedText(value){
   return String(value||'').normalize('NFKC').replace(/[\\s　・.．,，、()（）［］【】【：:・]/g,'');
 }
 function jasfExpectedIdentity(athleteIds=[]){
-  return (athleteIds||[]).map(id=>JASF_ATHLETE_IDENTITIES[String(id||'').replace(/\\D/g,'')]).find(Boolean)||null;
+  return (athleteIds||[]).map(id=>jasfMatchingConfig?.JASF_ATHLETE_IDENTITIES?.[String(id||'').replace(/\\D/g,'')]).find(Boolean)||null;
 }
 function jasfRowSearchText(row){
   // APIの所属欄は応答ごとに階層が異なるため、行内の文字列をまとめて照合する。
@@ -4892,7 +4880,7 @@ function editMeetEntry(id,meetId){if(!requireSwimAdmin())return;
 }
 function go(tab,remember=true){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets()}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261115-authz-v1';
+const APP_BUILD_VERSION='20261118-private-jasf-v1';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));
