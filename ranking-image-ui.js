@@ -6,7 +6,7 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
   const dialog = document.createElement('dialog');
   dialog.id = 'rankingImageDialog';
   dialog.setAttribute('aria-label', 'ランキング画像取込・履歴');
-  dialog.style.cssText = 'width:min(90vw,640px);max-height:85vh;overflow:auto;border:0;border-radius:16px;padding:20px';
+  dialog.style.cssText = 'width:min(92vw,640px);max-height:85vh;overflow:auto;border:0;border-radius:16px;padding:20px;color:#123';
   const form = document.createElement('form');
   const status = document.createElement('p');
   status.setAttribute('role', 'status');
@@ -34,22 +34,25 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
   const choices = values => Object.fromEntries(values.map(value => [value, value]));
   const eventChoices = values => ({ '': '選択してください', ...choices(values) });
   element('h3', player.name + 'のランキング画像取込');
-  const format = field('画像形式', '', { individual: '個人種目別成績', list: 'ランキング一覧' }, 'individual');
+  const file = field('画像を選ぶ', 'file');
+  file.accept = 'image/*';
+  form.append(status);
+  status.textContent = 'スクリーンショットを選ぶと、自動で読み取ります。';
+  const format = field('画像形式', '', { auto: '自動判定できませんでした', individual: '個人種目別成績', list: 'ランキング一覧' }, 'auto');
   const listScope = field('一覧の絞り込み区分', '', {
     '': '選択してください', prefect_grade: api.labels.prefect_grade, national_grade: api.labels.national_grade,
     prefect_school: api.labels.prefect_school, national_school: api.labels.national_school, japan: api.labels.japan,
   });
   listScope.parentElement.hidden = true;
-  const file = field('画像', 'file');
-  file.accept = 'image/*';
-  const read = element('button', '画像を読み取る');
+  const read = element('button', '読み取りをやり直す');
   read.type = 'button';
-  const preview = element('img', '');
+  read.hidden = true;
+  const rawDetails = element('details', '');
+  element('summary', '元画像と読み取りテキストを見る', rawDetails);
+  const preview = element('img', '', rawDetails);
   preview.alt = '確認用のランキング画像';
   preview.style.cssText = 'max-width:100%;max-height:260px;object-fit:contain';
   preview.hidden = true;
-  const rawDetails = element('details', '');
-  element('summary', '読み取りテキスト', rawDetails);
   const raw = element('pre', '', rawDetails);
   raw.style.whiteSpace = 'pre-wrap';
   const imageName = field('画像の選手名', 'text');
@@ -65,14 +68,29 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
     key, { value: field(label, 'number'), entrants: key === 'aqua' ? null : field(label + 'の対象人数', 'number') },
   ]));
   const confirmed = field('画像と登録先・種目・区分・数値を照合しました', 'checkbox');
+  confirmed.style.cssText = 'width:auto;margin-inline-start:8px';
   const save = element('button', '確認した項目を保存');
   const close = element('button', '閉じる');
   close.type = 'button';
   close.className = 'secondary';
   close.onclick = () => dialog.close();
-  dialog.append(form, status, history);
+  const review = element('div', '');
+  review.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:8px 12px';
+  form.insertBefore(review, confirmed.parentElement);
+  for (const input of [imageName, year, event, length, pool, school, grade, observedOn,
+    ...Object.values(fields).flatMap(row => [row.value, row.entrants]).filter(Boolean)]) {
+    review.append(input.parentElement);
+  }
+  const reviewNodes = [format.parentElement, rawDetails, review, confirmed.parentElement, save];
+  function showReview(show) {
+    for (const node of reviewNodes) node.hidden = !show;
+    review.style.display = show ? 'grid' : 'none';
+    listScope.parentElement.hidden = !show || format.value !== 'list';
+  }
+  showReview(false);
+  dialog.append(form, history);
   document.body.append(dialog);
-  let previewUrl = '';
+  let previewUrl = '', ocr = null, request = 0, mappedListRank = null;
   function clearPreview() {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     previewUrl = '';
@@ -95,14 +113,50 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
     year.value = '';
     school.value = '';
     grade.value = '';
-    observedOn.value = '';
+    observedOn.value = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
     event.value = stroke;
     length.value = distance;
     pool.value = course;
   }
-  format.onchange = () => { listScope.parentElement.hidden = format.value !== 'list'; resetImage(); };
-  listScope.onchange = clearDraft;
-  file.onchange = resetImage;
+  function applyListScope() {
+    if (mappedListRank && fields[mappedListRank.key].value.value === String(mappedListRank.value)) {
+      fields[mappedListRank.key].value.value = '';
+    }
+    mappedListRank = null;
+    if (!ocr || format.value !== 'list' || !listScope.value || listScope.value === 'japan') return;
+    const value = api.parse(ocr, player.name, 'list').listRank;
+    if (value && !fields[listScope.value].value.value) {
+      fields[listScope.value].value.value = value;
+      mappedListRank = { key: listScope.value, value };
+    }
+  }
+
+  function applyFormat() {
+    listScope.parentElement.hidden = format.value !== 'list';
+    for (const inputs of Object.values(fields)) {
+      inputs.value.value = '';
+      if (inputs.entrants) inputs.entrants.value = '';
+    }
+    mappedListRank = null;
+    if (!ocr || format.value === 'auto') return;
+    const draft = api.parse(ocr, player.name, format.value);
+    if (draft.imageName) imageName.value = draft.imageName;
+    for (const [key, item] of Object.entries(draft.values)) {
+      fields[key].value.value = item.value;
+      if (fields[key].entrants) fields[key].entrants.value = item.entrants;
+    }
+    applyListScope();
+    status.textContent = format.value === 'list' && !listScope.value
+      ? 'ランキング一覧を読み取りました。公式画面で選んだ区分を指定してください。'
+      : '選手名と数値を元画像で確認し、必要なところだけ直してください。';
+  }
+
+  format.onchange = applyFormat;
+  listScope.onchange = () => {
+    applyListScope();
+    if (listScope.value) status.textContent = '選手名と数値を元画像で確認してください。';
+  };
+  file.onchange = () => readImage();
   async function loadHistory() {
     let query = sb.from('swimmer_ranking_observations').select('season,stroke,distance,course,metric,category,value,entrants,observed_on')
       .eq('swimmer_id', player.id);
@@ -129,14 +183,20 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
     data.forEach(row => show(row, list));
   }
 
-  read.onclick = async () => {
+  async function readImage() {
+    const generation = ++request;
     const image = file.files[0];
-    if (!image || !image.type.startsWith('image/')) { status.textContent = '画像ファイルを選択してください。'; return; }
-    if (format.value === 'list' && !listScope.value) { status.textContent = '一覧の絞り込み区分を選択してください。'; return; }
-    const selectedFormat = format.value;
-    const scope = listScope.value;
-    clearDraft();
+    resetImage();
+    ocr = null;
+    format.value = 'auto';
+    listScope.value = '';
+    showReview(false);
+    read.hidden = true;
     confirmed.checked = false;
+    if (!image || (image.type && !image.type.startsWith('image/'))) {
+      status.textContent = '画像ファイルを選んでください。';
+      return;
+    }
     previewUrl = URL.createObjectURL(image);
     preview.src = previewUrl;
     preview.hidden = false;
@@ -144,17 +204,19 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
     status.textContent = '端末で文字を読み取っています…';
     try {
       await ensureTesseract();
-      if (!isActive()) return;
+      if (!isActive() || generation !== request) return;
       const { data } = await Tesseract.recognize(image, 'jpn+eng');
-      if (!isActive() || image !== file.files[0] || selectedFormat !== format.value || scope !== listScope.value) return;
+      if (!isActive() || generation !== request) return;
+      ocr = data;
       raw.textContent = data.text;
-      const draft = api.parse(data, player.name, selectedFormat);
-      imageName.value = draft.imageName;
-      if (draft.listRank && scope !== 'japan') draft.values[scope] = { value: draft.listRank, entrants: '' };
-      for (const [key, item] of Object.entries(draft.values)) {
-        fields[key].value.value = item.value;
-        if (fields[key].entrants) fields[key].entrants.value = item.entrants;
+      const compact = data.text.normalize('NFKC').replace(/\s/g, '');
+      if (/順位全体タイム/.test(compact)) format.value = 'list';
+      else if (/種目別成績|年度自己ベスト/.test(compact) || Object.keys(api.parse(data, player.name, 'individual').values).length) {
+        format.value = 'individual';
       }
+      showReview(true);
+      applyFormat();
+      if (format.value === 'auto') status.textContent = '画像形式を判定できませんでした。形式を選んで確認してください。';
       const detected = detectShotEvent(data.text);
       if (!event.value && detected.stroke) event.value = detected.stroke;
       if (!length.value && detected.distance) length.value = detected.distance;
@@ -169,16 +231,23 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
       if (!school.value && schools.length === 1) school.value = schools[0];
       const pools = api.courses.filter(course => data.text.replace(/\s/g, '').includes(course));
       if (!pool.value && pools.length === 1) pool.value = pools[0];
-      status.textContent = '元画像と見比べ、空欄や誤読を修正してください。';
     } catch {
-      if (isActive()) status.textContent = '画像を読み取れませんでした。画像を見ながら入力できます。';
-    } finally { if (isActive()) read.disabled = save.disabled = false; }
-  };
+      if (isActive() && generation === request) {
+        showReview(true);
+        read.hidden = false;
+        status.textContent = '読み取れませんでした。再試行するか、元画像を見ながら入力してください。';
+      }
+    } finally {
+      if (isActive() && generation === request) read.disabled = save.disabled = false;
+    }
+  }
+  read.onclick = readImage;
 
   form.onsubmit = async e => {
     e.preventDefault();
     if (!isActive() || save.disabled) return;
     try {
+      if (format.value === 'list' && !listScope.value) throw Error('一覧の絞り込み区分を選んでください。');
       const draft = {
         imageName: imageName.value, year: year.value, stroke: event.value, distance: length.value,
         course: pool.value, observedOn: observedOn.value, school: school.value.trim(), grade: grade.value.trim(),
@@ -191,7 +260,7 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
       if (stroke && (draft.stroke !== stroke || Number(draft.distance) !== Number(distance) || draft.course !== course)) {
         throw Error('種目別ベストの対象種目と一致する内容を入力してください。');
       }
-      save.disabled = read.disabled = true;
+      save.disabled = read.disabled = file.disabled = format.disabled = listScope.disabled = true;
       const { error } = await sb.from('swimmer_ranking_observations').upsert(rows, {
         onConflict: 'swimmer_id,season,stroke,distance,course,metric,category,observed_on,value,entrants',
         ignoreDuplicates: true,
@@ -204,7 +273,7 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
       try { await loadHistory(); }
       catch { if (isActive()) status.textContent = '保存しました。履歴を表示できませんでした。'; }
     } catch (error) { if (isActive()) status.textContent = error.message; }
-    finally { if (isActive()) save.disabled = read.disabled = false; }
+    finally { if (isActive()) save.disabled = read.disabled = file.disabled = format.disabled = listScope.disabled = false; }
   };
   dialog.showModal();
   loadHistory().catch(() => { if (isActive()) history.textContent = '順位履歴を取得できませんでした。'; });
