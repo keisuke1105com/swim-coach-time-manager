@@ -9,6 +9,15 @@
   const courses = ['長水路', '短水路'];
   const normalize = text => String(text || '').normalize('NFKC');
   const nameKey = text => normalize(text).replace(/\s/g, '');
+  const athleteKey = text => nameKey(text).replace(/[\p{Cf}\uFE00-\uFE0F\u{E0100}-\u{E01EF}・]/gu, '');
+  function matchesProfileName(text, athleteName) {
+    const expected = athleteKey(athleteName);
+    return Boolean(expected) && String(text || '').split(/\r?\n/).some(line => {
+      const normalized = athleteKey(line);
+      return (normalized.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー]+/gu) || [])
+        .some(part => part === expected) || normalized === expected;
+    });
+  }
   const integer = text => Number(String(text).replace(/,/g, ''));
 
   const individualLabels = {
@@ -79,9 +88,8 @@
     const lines = normalize(ocr.text).split(/\r?\n/).map(line => line.trim()).filter(Boolean);
     const result = { imageName: '', values: {} };
     const knownName = nameKey(athleteName);
-    const matching = lines.filter(line => nameKey(line).includes(knownName));
     if (format === 'individual') {
-      result.imageName = matching.length ? athleteName : '';
+      result.imageName = matchesProfileName(ocr.text, athleteName) || matchesProfileName(ocr.profileNameText, athleteName) ? athleteName : '';
       result.values = readIndividualPositions(ocr.words || []);
       for (const [key, pattern] of Object.entries(individualLabels)) {
         if (result.values[key]) continue;
@@ -163,7 +171,7 @@
     });
   }
 
-  const api = { labels, strokes, distances, courses, parse, observations, latest };
+  const api = { labels, strokes, distances, courses, parse, observations, latest, matchesProfileName };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.RankingImageImport = api;
 })(globalThis);

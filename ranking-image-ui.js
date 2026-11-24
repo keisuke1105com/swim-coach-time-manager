@@ -95,7 +95,10 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
   }
   const reviewNodes = [format.parentElement, rawDetails, nameStatus, review, optional, confirmed.parentElement, save];
   function showReview(show) {
-    for (const node of reviewNodes) node.hidden = !show;
+    for (const node of reviewNodes) {
+      node.hidden = !show;
+      if (node.tagName === 'LABEL') node.style.display = show ? 'block' : 'none';
+    }
     review.style.display = show ? 'grid' : 'none';
     showListScope(show && format.value === 'list');
   }
@@ -199,6 +202,39 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
     data.forEach(row => show(row, list));
   }
 
+  async function readProfileName(url, data, generation) {
+    const source = new Image();
+    source.src = url;
+    await source.decode();
+    const width = source.naturalWidth, height = source.naturalHeight;
+    const crops = [[0.12, 0.10, 0.56, 0.35], [0.02, 0.04, 0.98, 0.42]];
+    const label = (data.words || []).find(word =>
+      word.bbox?.y0 < height * 0.45 && word.bbox.x0 > width * 0.28 &&
+      /競技|所属/.test(String(word.text).replace(/\s/g, '')));
+    if (label) {
+      const { x0, y0, y1 } = label.bbox;
+      const pad = Math.max((y1 - y0) * 4, height * 0.045);
+      crops.unshift([0.07, Math.max(0, y0 - pad) / height, x0 / width, Math.min(height, y1 + pad * 1.5) / height]);
+    }
+    const canvas = document.createElement('canvas');
+    try {
+      for (const [left, top, right, bottom] of crops) {
+        if (!isActive() || generation !== request) return '';
+        const cropWidth = (right - left) * width, cropHeight = (bottom - top) * height;
+        const scale = Math.min(2, 1800 / cropWidth);
+        canvas.width = Math.ceil(cropWidth * scale);
+        canvas.height = Math.ceil(cropHeight * scale);
+        canvas.getContext('2d').drawImage(source, left * width, top * height, cropWidth, cropHeight,
+          0, 0, canvas.width, canvas.height);
+        const { data: candidate } = await Tesseract.recognize(canvas, 'jpn');
+        if (api.matchesProfileName(candidate.text, player.name)) return candidate.text;
+      }
+      return '';
+    } finally {
+      canvas.width = canvas.height = 0;
+    }
+  }
+
   async function readImage() {
     const generation = ++request;
     const image = file.files[0];
@@ -229,6 +265,12 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
       if (/順位全体タイム/.test(compact)) format.value = 'list';
       else if (/種目別成績|年度自己ベスト/.test(compact) || Object.keys(api.parse(data, player.name, 'individual').values).length) {
         format.value = 'individual';
+      }
+      if (format.value === 'individual' && !api.matchesProfileName(data.text, player.name)) {
+        status.textContent = '画像の上部を拡大して選手名を確認しています…';
+        try { data.profileNameText = await readProfileName(previewUrl, data, generation); }
+        catch { /* The original recognition result is still usable. */ }
+        if (!isActive() || generation !== request) return;
       }
       showReview(true);
       applyFormat();
