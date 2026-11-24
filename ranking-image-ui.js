@@ -55,7 +55,12 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
   preview.hidden = true;
   const raw = element('pre', '', rawDetails);
   raw.style.whiteSpace = 'pre-wrap';
-  const imageName = field('画像の選手名', 'text');
+  function showListScope(show) {
+    listScope.parentElement.hidden = !show;
+    listScope.parentElement.style.display = show ? 'block' : 'none';
+  }
+  const nameStatus = element('p', '');
+  nameStatus.hidden = true;
   const year = field('年度', 'number');
   const event = field('泳法', '', eventChoices(api.strokes), stroke);
   const length = field('距離 (m)', '', eventChoices(api.distances), distance);
@@ -65,9 +70,9 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
   school.maxLength = grade.maxLength = 24;
   const observedOn = field('順位の確認日', 'date');
   const fields = Object.fromEntries(Object.entries(api.labels).map(([key, label]) => [
-    key, { value: field(label, 'number'), entrants: key === 'aqua' ? null : field(label + 'の対象人数', 'number') },
+    key, { value: field(label, 'number'), entrants: key === 'aqua' ? null : field(label + 'の対象人数（任意）', 'number') },
   ]));
-  const confirmed = field('画像と登録先・種目・区分・数値を照合しました', 'checkbox');
+  const confirmed = field('画像が ' + player.name + ' のもので、種目と数値も確認しました', 'checkbox');
   confirmed.style.cssText = 'width:auto;margin-inline-start:8px';
   const save = element('button', '確認した項目を保存');
   const close = element('button', '閉じる');
@@ -77,15 +82,22 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
   const review = element('div', '');
   review.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:8px 12px';
   form.insertBefore(review, confirmed.parentElement);
-  for (const input of [imageName, year, event, length, pool, school, grade, observedOn,
-    ...Object.values(fields).flatMap(row => [row.value, row.entrants]).filter(Boolean)]) {
+  for (const input of [year, event, length, pool, school, grade, observedOn,
+    ...Object.values(fields).map(row => row.value)]) {
     review.append(input.parentElement);
   }
-  const reviewNodes = [format.parentElement, rawDetails, review, confirmed.parentElement, save];
+  const optional = element('details', '');
+  form.insertBefore(optional, confirmed.parentElement);
+  element('summary', '対象人数を入力（任意）', optional);
+  element('p', '人数が分からない場合は、順位だけで保存できます。', optional);
+  for (const { entrants } of Object.values(fields)) {
+    if (entrants) optional.append(entrants.parentElement);
+  }
+  const reviewNodes = [format.parentElement, rawDetails, nameStatus, review, optional, confirmed.parentElement, save];
   function showReview(show) {
     for (const node of reviewNodes) node.hidden = !show;
     review.style.display = show ? 'grid' : 'none';
-    listScope.parentElement.hidden = !show || format.value !== 'list';
+    showListScope(show && format.value === 'list');
   }
   showReview(false);
   dialog.append(form, history);
@@ -102,7 +114,8 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
   form.addEventListener('input', e => { if (e.target !== confirmed) confirmed.checked = false; });
   function clearDraft() {
     clearPreview();
-    imageName.value = '';
+    nameStatus.textContent = '';
+    optional.open = false;
     for (const inputs of Object.values(fields)) {
       inputs.value.value = '';
       if (inputs.entrants) inputs.entrants.value = '';
@@ -132,7 +145,7 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
   }
 
   function applyFormat() {
-    listScope.parentElement.hidden = format.value !== 'list';
+    showListScope(format.value === 'list');
     for (const inputs of Object.values(fields)) {
       inputs.value.value = '';
       if (inputs.entrants) inputs.entrants.value = '';
@@ -140,7 +153,8 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
     mappedListRank = null;
     if (!ocr || format.value === 'auto') return;
     const draft = api.parse(ocr, player.name, format.value);
-    if (draft.imageName) imageName.value = draft.imageName;
+    nameStatus.textContent = draft.imageName ? ''
+      : '画像から選手名を確認できませんでした。元画像が ' + player.name + ' のものか確認してください。';
     for (const [key, item] of Object.entries(draft.values)) {
       fields[key].value.value = item.value;
       if (fields[key].entrants) fields[key].entrants.value = item.entrants;
@@ -148,13 +162,15 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
     applyListScope();
     status.textContent = format.value === 'list' && !listScope.value
       ? 'ランキング一覧を読み取りました。公式画面で選んだ区分を指定してください。'
-      : '選手名と数値を元画像で確認し、必要なところだけ直してください。';
+      : Object.keys(draft.values).length || draft.listRank
+        ? '読み取った順位を元画像と見比べてください。'
+        : '順位を読み取れませんでした。元画像で確認できる順位だけ入力してください。';
   }
 
   format.onchange = applyFormat;
   listScope.onchange = () => {
     applyListScope();
-    if (listScope.value) status.textContent = '選手名と数値を元画像で確認してください。';
+    if (listScope.value) status.textContent = '入力した順位を元画像と見比べてください。';
   };
   file.onchange = () => readImage();
   async function loadHistory() {
@@ -249,7 +265,7 @@ function openRankingImageImport(playerId, stroke = '', distance = '', course = '
     try {
       if (format.value === 'list' && !listScope.value) throw Error('一覧の絞り込み区分を選んでください。');
       const draft = {
-        imageName: imageName.value, year: year.value, stroke: event.value, distance: length.value,
+        imageName: player.name, year: year.value, stroke: event.value, distance: length.value,
         course: pool.value, observedOn: observedOn.value, school: school.value.trim(), grade: grade.value.trim(),
         confirmed: confirmed.checked,
         values: Object.fromEntries(Object.entries(fields).map(([key, inputs]) => [
