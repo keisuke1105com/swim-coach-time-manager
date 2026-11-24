@@ -3,6 +3,7 @@ function resetAuthorizationState(){
  window.VenueMode?.dismiss();
  JASF_ATHLETE_IDS={};JASF_PROFILE_TO_RANKING_CODES={};JASF_ATHLETE_IDENTITIES={};
  document.getElementById('coachApprovalManager')?.remove();
+ document.getElementById('rankingImageDialog')?.close();
  shareAdmin=false;coachApproved=false;PLAYERS=[];records=[];manualLaps=[];sharedGoals=[];
  selectedPlayerId='';meetList=[];meetEntries=[];meetEventEntries=[];
  screenshotGeneration++;screenshotRows=[];screenshotReview=null;

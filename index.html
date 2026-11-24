@@ -231,7 +231,7 @@ body.public-themed{background:var(--public-page-background,#eef7fc)}
 <header><div class="wrap" style="padding:0"><div class="topline"><div><h1>🏊 水泳コーチ・タイム管理 ☁️</h1><small>選手・記録をクラウド共有</small></div><button id="logoutBtn" class="secondary hidden" onclick="logout()">ログアウト</button></div></div></header>
 <main class="wrap"><div id="appUpdateNotice" hidden style="background:#e7f3fb;border:1px solid #91c9ed;border-radius:14px;padding:12px;margin-bottom:12px;color:#075985;font-weight:700">✨ 新しいバージョンがあります。入力内容を保存してから更新してください。 <button type="button" style="margin-top:8px" onclick="reloadLatestApp()">🔄 最新版に更新</button></div><div id="status"></div><section id="auth"></section><section id="publicProfile" class="hidden"></section><div id="app" class="hidden"><section id="home"></section><section id="players" class="hidden"></section><section id="input" class="hidden"></section><section id="records" class="hidden"></section><section id="analysis" class="hidden"></section><section id="meets" class="hidden"></section></div></main>
 <div id="pbCelebration" class="pb-celebration" role="dialog" aria-modal="true" aria-label="自己ベストのお祝い" hidden><div class="pb-celebration-card" id="pbCelebrationContent"></div></div><nav id="tabs" class="tabs hidden"><button data-tab="home">🏠<br>ホーム</button><button data-tab="players">👥<br>選手</button><button data-tab="input">⏱️<br>入力</button><button data-tab="records">📋<br>記録</button><button data-tab="analysis">📊<br>分析</button><button data-tab="meets">📅<br>大会</button></nav>
-<link rel="stylesheet" href="venue-mode.css?v=20261116-1"><script src="lap-comparison.js?v=20261116-1"></script><script src="venue-mode.js?v=20261116-1"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="screenshot-import.js?v=20261115-1"></script><script src="authz-ui.js?v=20261116-venue-1"></script><script src="config.js"></script><script src="data.js"></script><script src="yamanashi_2026.js"></script><script src="tokyo_sc.js"></script><script src="standard-catalog.js?v=20261107-1"></script><script src="meet-entry-pdf.js?v=20261106-1"></script><script src="meet-schedules.js?v=20261028-1"></script><script src="public-meet-schedule.js?v=20261107-1"></script><script src="meet-program-pdf.js?v=20261106-1"></script><script src="meet-timetable.js?v=20261106-2"></script><script src="meet-program-import-ui.js?v=20261106-3"></script><script src="meet-entry-import-ui.js?v=20261106-2"></script><script src="video-analysis.js?v=20261023-2"></script><script>
+<link rel="stylesheet" href="venue-mode.css?v=20261116-1"><script src="lap-comparison.js?v=20261116-1"></script><script src="venue-mode.js?v=20261116-1"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="ranking-image-import.js?v=20261124-1"></script><script src="ranking-image-ui.js?v=20261124-1"></script><script src="screenshot-import.js?v=20261115-1"></script><script src="authz-ui.js?v=20261124-1"></script><script src="config.js"></script><script src="data.js"></script><script src="yamanashi_2026.js"></script><script src="tokyo_sc.js"></script><script src="standard-catalog.js?v=20261107-1"></script><script src="meet-entry-pdf.js?v=20261106-1"></script><script src="meet-schedules.js?v=20261028-1"></script><script src="public-meet-schedule.js?v=20261107-1"></script><script src="meet-program-pdf.js?v=20261106-1"></script><script src="meet-timetable.js?v=20261106-2"></script><script src="meet-program-import-ui.js?v=20261106-3"></script><script src="meet-entry-import-ui.js?v=20261106-2"></script><script src="video-analysis.js?v=20261023-2"></script><script>
 let sb=null,session=null,PLAYERS=[],records=[];let shareAdmin=false,coachApproved=false,authorizationEpoch=0;let selectedPlayerId='',selectedStroke='自由形',selectedDistance=50,selectedCourse='長水路';
 const VIEW_STATE_KEY='swimCloudViewState';
 function saveViewState(tab,playerId=''){try{localStorage.setItem(VIEW_STATE_KEY,JSON.stringify({tab,playerId,ts:Date.now()}))}catch(e){}}
@@ -365,7 +365,10 @@ function jasfRecordRequestError(status){
   : `公式サイトが記録の検索条件を受け付けませんでした（HTTP ${status}）。`;
  return Object.assign(new Error(message),{status:Number(status),halt:restricted||Number(status)>=500});
 }
-async function fetchJasfRecord(athleteId,year,waterwayCode,swimmingStyleCode,distanceCode){
+function officialImportPaused() {
+  throw Object.assign(new Error('公式サイトからの自動取得は停止中です。'), { halt: true, status: 410 });
+}
+async function fetchJasfRecord(athleteId,year,waterwayCode,swimmingStyleCode,distanceCode){officialImportPaused();
  if(!session?.access_token)throw new Error('ログインし直してください。');
  const base=String(window.SUPABASE_URL||'').replace(/\/$/,'');let res;
  try{
@@ -639,7 +642,7 @@ async function cleanupAllJasfDuplicates(){if(!requireSwimAdmin())return;
 }
 
 let jasfRecordSyncBusy=false;
-async function fetchJasfLatest(playerId){if(!requireSwimAdmin())return;
+async function fetchJasfLatest(playerId){officialImportPaused();if(!requireSwimAdmin())return;
   if(jasfRecordSyncBusy)return {success:false,stopped:true,message:'別の公式記録を同期中です。完了してから再度お試しください。'};
   const p=playerById(playerId);
   const athleteIds=jasfAthleteIds(p);
@@ -984,7 +987,7 @@ ${lapFailed > 0
   // =====================================================
 // 🏊 全選手の日本水泳連盟公式記録＋ラップを一括更新
 // =====================================================
-async function updateAllPlayersJasfLaps(){if(!requireSwimAdmin())return;
+async function updateAllPlayersJasfLaps(){officialImportPaused();if(!requireSwimAdmin())return;
   const box=$('#jasfLatestBox');
 
   const targets=PLAYERS.filter(p=>{
@@ -1066,7 +1069,7 @@ async function updateAllPlayersJasfLaps(){if(!requireSwimAdmin())return;
   renderRecords();
   renderAnalysis();
 }
-async function importTestJasfLaps(options={}){if(!requireSwimAdmin())return;
+async function importTestJasfLaps(options={}){officialImportPaused();if(!requireSwimAdmin())return;
   try{
     setStatus('公式結果からラップを取得しています…','notice');
 
@@ -1591,9 +1594,9 @@ if(st!=null){
           <div><b>${r.stroke} ${r.distance}m</b><br>
           <span class="muted">${r.course}</span><br>
           <span class="muted">${joText}</span><br>
-          <span id="${rankBadgeId(id,r.stroke,r.distance,r.course)}" class="${nr&&nr.found?'badge':'muted'}">${nrText}</span>
+          <span id="${rankBadgeId(id,r.stroke,r.distance,r.course)}" data-ranking-player="${videoEscape(id)}" data-stroke="${r.stroke}" data-distance="${r.distance}" data-course="${r.course}" class="${nr&&nr.found?'badge':'muted'}">${nrText}</span>
           ${goalProgressMarkup(id,r.stroke,r.distance,r.course,s)}
-          <button type="button" class="small" style="margin-top:6px" onclick='refreshOneRanking(${JSON.stringify(id)},${JSON.stringify(r.stroke)},${Number(r.distance)},${JSON.stringify(r.course)})'>🔄 この種目の順位を取得</button>
+          ${coachApproved?`<button type="button" class="small" style="margin-top:6px" onclick='openRankingImageImport(${JSON.stringify(id)},${JSON.stringify(r.stroke)},${Number(r.distance)},${JSON.stringify(r.course)})'>ランキング画像取込・履歴</button>` : ''}
           </div>
         </div>
         <div style="text-align:right">
@@ -1713,15 +1716,12 @@ let trendOptions=trendKeys.map(key=>{
       <button class="secondary" style="margin-bottom:12px" onclick="openVideoAnalysis('${p.id}')">🎥 この選手の動画分析</button>
       <div class="player-main-actions">
         <button onclick="selectedPlayerId='${p.id}';go('input')">＋ タイム入力</button>
-        ${jasfAthleteUrl(p)?`<button onclick="fetchJasfLatest('${p.id}')">🔄 公式記録を同期</button>`:''}
       </div>
       ${jasfAthleteUrl(p)?`
       <details class="player-more-actions">
-        <summary>⚙️ その他の操作・ランキング更新</summary>
+        <summary>⚙️ その他の操作</summary>
         <div class="player-extra-buttons">
           <button class="secondary" onclick="window.open('${jasfAthleteUrl(p)}','_blank','noopener')">🇯🇵 公式記録を見る</button>
-          <button class="secondary" onclick="testPlayerJasfRanking('${p.id}')">🏆 同学年ランキングを更新</button>
-          <button class="secondary" onclick="updateAllPlayersJasfLaps()">🏊 全選手のラップを更新</button>
           <button class="secondary" onclick="cleanupJasfDuplicates('${p.id}')">🧹 重複した公式記録を整理</button>
         </div>
       </details>`:''}
@@ -1729,6 +1729,7 @@ let trendOptions=trendKeys.map(key=>{
       <div id="jasfLatestBox"></div>
       <div id="playerJasfRankingBox" style="margin-bottom:12px"></div>
 
+      ${coachApproved?`<button class="secondary" onclick='openRankingImageImport(${JSON.stringify(p.id)})'>ランキング画像取込</button>`:''}
       <h3>🏆 種目別ベスト</h3>
 
       ${
@@ -1778,6 +1779,7 @@ let trendOptions=trendKeys.map(key=>{
   renderTrendChart(id);
   renderPlayerLapAnalysis(id);
   renderPlayerVideoAnalyses(id);
+  renderImportedRankingBadges(p);
 }, 0);
 }
  
@@ -2858,7 +2860,7 @@ function jasfEventCodes(stroke,distance){
 }
 function jasfGenderCode(player){return String(player?.gender||'').includes('女')?2:1;}
 function normalizeJasfName(v){return String(v||'').normalize('NFKC').replace(/[\s　]/g,'').trim();}
-async function fetchJasfRankingPage(player,stroke,distance,course,year=2026,schoolClassCode='99',schoolGrade='99',swimmerName='',page=1){
+async function fetchJasfRankingPage(player,stroke,distance,course,year=2026,schoolClassCode='99',schoolGrade='99',swimmerName='',page=1){officialImportPaused();
   const codes=jasfEventCodes(stroke,distance);
   if(!codes)throw new Error(`${stroke}${distance}m はランキングAPIのコード対応がありません。`);
   const {data:{session:activeSession},error:sessionError}=await sb.auth.getSession();
@@ -3154,7 +3156,7 @@ async function updatePlayerSameGradeRankings(playerId,{skipCached=false,silent=f
   return {ok:true,found,total:bests.length,processed,skipped};
 }
 const rankingRefreshInProgress=new Set();
-async function refreshOneRanking(playerId,stroke,distance,course){
+async function refreshOneRanking(playerId,stroke,distance,course){officialImportPaused();
   const eventKey=`${stroke}|${Number(distance)}|${course}`;
   const lock=`${playerId}|${eventKey}`;
   if(rankingRefreshInProgress.has(lock))return;
@@ -3171,7 +3173,7 @@ async function refreshOneRanking(playerId,stroke,distance,course){
     if(badge){badge.textContent=rankingStatusText(latest);badge.className=latest?.found?'badge':'muted';}
   }
 }
-async function testPlayerJasfRanking(playerId){
+async function testPlayerJasfRanking(playerId){officialImportPaused();
   const result=await updatePlayerSameGradeRankings(playerId,{skipCached:false,silent:false});
   // ページ全体を再描画すると更新結果の表示が消えるため、ランキング表示だけ更新する。
   const mine=records.filter(r=>String(r.swimmer_id)===String(playerId));
@@ -3358,7 +3360,7 @@ async function retryOneRankingEvent(item,year=2026){
   }
 }
 
-async function updateAllPlayersSameGradeRankings(){
+async function updateAllPlayersSameGradeRankings(){officialImportPaused();
   const box=$('#allPlayersRankingUpdateBox');
   const allTargets=PLAYERS.filter(p=>jasfAthleteIds(p).length>0);
   if(!allTargets.length){
@@ -3445,7 +3447,7 @@ let screenshotOcrReady=false, screenshotRows=[], screenshotEvent={stroke:'',dist
 async function ensureTesseract(){
   if(window.Tesseract){screenshotOcrReady=true;return;}
   const box=$('#screenshotStatus'); if(box)box.innerHTML='<div class="notice">文字認識機能を読み込み中…</div>';
-  await new Promise((resolve,reject)=>{const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';sc.onload=resolve;sc.onerror=reject;document.head.appendChild(sc);});
+  await new Promise((resolve,reject)=>{const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';sc.onload=resolve;sc.onerror=reject;document.head.appendChild(sc);});
   screenshotOcrReady=true;
 }
 function normalizeOcrText(t){return String(t||'').replace(/[：]/g,':').replace(/[。]/g,'.').replace(/\s+/g,' ').trim();}
@@ -4986,7 +4988,7 @@ function editMeetEntry(id,meetId){if(!requireSwimAdmin())return;
 }
 function go(tab,remember=true,focusMeetId){if(remember)saveViewState(tab,'');$$('#app section').forEach(s=>s.classList.add('hidden'));$('#'+tab).classList.remove('hidden');$$('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='home')renderHome();if(tab==='players')renderPlayers();if(tab==='input')renderInput();if(tab==='records')renderRecords();if(tab==='analysis')renderAnalysis();if(tab==='meets')refreshMeets(focusMeetId)}
 // iPhone/PWAでも最新版を検知して自動更新する仕組み
-const APP_BUILD_VERSION='20261118-venue-next-meet-v2';
+const APP_BUILD_VERSION='20261124-ranking-ocr-v1';
 function reloadLatestApp(version){
   const u=new URL(location.href);
   u.searchParams.set('v',version||String(Date.now()));
